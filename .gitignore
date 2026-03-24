@@ -1,0 +1,10 @@
+/target/
+**/target/
+
+/Cargo.lock
+
+*~
+*.swp
+*.tmp
+
+**/config.yaml
