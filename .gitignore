@@ -1,10 +1,15 @@
-/target/
-**/target/
-
-/Cargo.lock
-
 *~
 *.swp
 *.tmp
 
+/target/
+**/target/
+
+/Cargo.lock
+**/Cargo.lock
+
+
+/config.toml
+**/config.toml
+/config.yaml
 **/config.yaml

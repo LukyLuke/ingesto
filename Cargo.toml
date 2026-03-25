@@ -1,3 +1,12 @@
 [workspace]
 resolver = "3"
 members = ["exporter/*","receiver/*", "shared"]
+
+[workspace.dependencies]
+anyhow = { version = "1" }
+clap = { version = "4" }
+serde = { version = "1", features = ["derive"] }
+thiserror = { version = "2" }
+tracing = { version = "0" }
+tracing-subscriber = { version = "0", features = ["json", "env-filter"] }
+serde_json = { version = "1" }
