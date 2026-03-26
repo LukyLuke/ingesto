@@ -13,7 +13,7 @@ fn main() {
 	init_logging();
 
 	let conf_file = match usage() {
-		Ok(f) => f,
+		Ok(file) => file,
 		Err(e) => {
 			error!(%e);
 			return
@@ -70,7 +70,6 @@ fn start_udp_listener(conf: config::Server, queue: &shared::queue::MessageQueue<
 		let (b_recv, src_addr) = socket.recv_from(&mut buffer)?;
 		let data = String::from_utf8_lossy(&buffer[..b_recv]);
 		debug!(message="data received", src_addr=%src_addr, size=b_recv, data=%data);
-
 		queue.push(data.into_owned());
 	}
 }
@@ -99,7 +98,6 @@ fn start_tcp_listener(conf: config::Server, queue: &shared::queue::MessageQueue<
 				};
 				let data = String::from_utf8_lossy(&buffer[..b_recv]);
 				debug!(message="data received", src_addr=%src_addr, size=b_recv, data=%data);
-
 				queue.push(data.into_owned());
 			},
 			Err(e) => error!("failed to establish a connection: {}", e)
