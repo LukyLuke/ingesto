@@ -1,13 +1,12 @@
 pub mod config;
 
 use std::{
-	fs::{self, File, metadata}, io::{BufRead, BufReader, Seek, SeekFrom}, path::PathBuf, sync::{Arc, mpsc}, time::Duration
+	fs::{self, File, metadata}, io::{BufRead, BufReader, Seek, SeekFrom}, sync::{Arc, mpsc}, time::Duration
 };
 use notify::{self, RecursiveMode, Watcher, Event, Result};
 
 use anyhow::{Context};
-use clap::{Arg, Command, builder::{PathBufValueParser}};
-use shared::{self, init_logging, parser::MessageParser, queue::MessageQueue};
+use shared::{self, init_logging, usage, parser::MessageParser, queue::MessageQueue};
 use tracing::{debug, error, info};
 
 fn main() {
@@ -44,21 +43,6 @@ fn main() {
 		},
 		Ok(_) => {}
 	}
-}
-
-fn usage() -> anyhow::Result<PathBuf> {
-	let matches = Command::new("File Log Parser")
-		.about("Opens a file and sends each line to the LogParser. Optionally it let's the file open and streams new incomming lines to the LogParser.")
-		.arg(Arg::new("config_file")
-			.default_value("config.toml")
-			.value_parser(PathBufValueParser::default())
-			.short('c')
-			.long("config")
-			.help("Configuration file to use"))
-		.get_matches();
-
-	let f: &PathBuf = matches.get_one("config_file").unwrap();
-	return Ok(f.to_path_buf())
 }
 
 fn start_follow_listener(conf: config::File, queue: &shared::queue::MessageQueue<String>) -> anyhow::Result<()> {

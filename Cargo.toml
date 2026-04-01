@@ -5,6 +5,7 @@ members = ["exporter/*","receiver/*", "shared"]
 [workspace.dependencies]
 anyhow = { version = "1" }
 clap = { version = "4" }
+notify = { version = "8" }
 serde = { version = "1", features = ["derive"] }
 thiserror = { version = "2" }
 tracing = { version = "0" }

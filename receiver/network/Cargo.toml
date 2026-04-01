@@ -7,7 +7,6 @@ edition = "2024"
 shared = { path = "../../shared" }
 
 anyhow = { workspace = true }
-clap = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }

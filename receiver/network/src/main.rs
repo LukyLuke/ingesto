@@ -1,10 +1,9 @@
 pub mod config;
 
-use std::{io::Read, net::{Ipv4Addr, SocketAddrV4, TcpListener, UdpSocket}, path::PathBuf, sync::Arc};
+use std::{io::Read, net::{Ipv4Addr, SocketAddrV4, TcpListener, UdpSocket}, sync::Arc};
 
 use anyhow::{Context, anyhow};
-use clap::{Arg, Command, builder::{PathBufValueParser}};
-use shared::{self, init_logging, parser::MessageParser, queue::MessageQueue};
+use shared::{self, init_logging, usage, parser::MessageParser, queue::MessageQueue};
 use tracing::{debug, error, info};
 
 const MAX_PACKET_SIZE: usize = 67 * 1024;
@@ -44,21 +43,6 @@ fn main() {
 		},
 		Ok(_) => {}
 	}
-}
-
-fn usage() -> anyhow::Result<PathBuf> {
-	let matches = Command::new("Network LogStream Parser")
-		.about("Listens on UDP or TCP for incomming packages, parses the data absed on the configuration and forwards it as structured data.")
-		.arg(Arg::new("config_file")
-			.default_value("config.toml")
-			.value_parser(PathBufValueParser::default())
-			.short('c')
-			.long("config")
-			.help("Configuration file to use"))
-		.get_matches();
-
-	let f: &PathBuf = matches.get_one("config_file").unwrap();
-	return Ok(f.to_path_buf())
 }
 
 fn start_udp_listener(conf: config::Server, queue: &shared::queue::MessageQueue<String>) -> anyhow::Result<()> {

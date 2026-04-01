@@ -6,10 +6,8 @@ edition = "2024"
 [dependencies]
 shared = { path = "../../shared" }
 
-notify = { version = "8" }
-
+notify = { workspace = true }
 anyhow = { workspace = true }
-clap = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
