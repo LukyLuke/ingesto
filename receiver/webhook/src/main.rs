@@ -19,7 +19,7 @@ fn main() {
 
 	let r_conf: anyhow::Result<config::Config> = shared::load_config(conf_file);
 	let conf = match r_conf {
-		Ok(c) => c.webhook,
+		Ok(c) => Arc::new(c.webhook),
 		Err(e) => {
 			error!("{:#?}", e);
 			return;
@@ -28,11 +28,9 @@ fn main() {
 
 	info!(message="starting", name=%conf.name);
 	let queue = Arc::new(MessageQueue::<String>::new());
-	MessageParser::<String>::new(Arc::clone(&queue)).run();
+	MessageParser::<String>::new(queue.clone(), conf.queue).run();
 
-	let c = Arc::new(conf);
-	let q = queue.clone();
-	let res = webhook_listener(c, q);
+	let res = webhook_listener(conf.clone(), queue.clone());
 	match res {
 		Err(e) => {
 			error!("{:#?}", e);

@@ -22,7 +22,7 @@ fn main() {
 
 	let r_conf: anyhow::Result<config::Config> = shared::load_config(conf_file);
 	let conf = match r_conf {
-		Ok(c) => c.reader,
+		Ok(c) => Arc::new(c.reader),
 		Err(e) => {
 			error!("{:#?}", e);
 			return;
@@ -31,11 +31,12 @@ fn main() {
 
 	info!(message="starting", name=%conf.name);
 	let queue = Arc::new(MessageQueue::<String>::new());
-	MessageParser::<String>::new(Arc::clone(&queue)).run();
+	MessageParser::<String>::new(queue.clone(), conf.queue).run();
 
+	let conf_file = &conf.file;
 	let res = match conf.file.follow {
-		true => start_follow_listener(conf.file, &queue),
-		false => start_full_listener(conf.file, &queue),
+		true => start_follow_listener(conf_file, queue.clone()),
+		false => start_full_listener(conf_file, queue.clone()),
 	};
 	match res {
 		Err(e) => {
@@ -45,7 +46,7 @@ fn main() {
 	}
 }
 
-fn start_follow_listener(conf: config::File, queue: &shared::queue::MessageQueue<String>) -> anyhow::Result<()> {
+fn start_follow_listener(conf: &config::File, queue: Arc<shared::queue::MessageQueue<String>>) -> anyhow::Result<()> {
 	// open the file and set the position to the end of the file
 	let mut file = File::open(&conf.path)?;
 	let mut pos = metadata(&conf.path)?.len();
@@ -82,7 +83,7 @@ fn start_follow_listener(conf: config::File, queue: &shared::queue::MessageQueue
 	Ok(())
 }
 
-fn start_full_listener(conf: config::File, queue: &shared::queue::MessageQueue<String>) -> anyhow::Result<()> {
+fn start_full_listener(conf: &config::File, queue: Arc<shared::queue::MessageQueue<String>>) -> anyhow::Result<()> {
 	let interval = Duration::from_secs_f32(conf.interval);
 	info!(message="listener started", file=conf.path.to_str(), interval=%conf.interval);
 	loop {

@@ -21,7 +21,7 @@ fn main() {
 
 	let r_conf: anyhow::Result<config::Config> = shared::load_config(conf_file);
 	let conf = match r_conf {
-		Ok(c) => c.receiver,
+		Ok(c) => Arc::new(c.receiver),
 		Err(e) => {
 			error!("{:#?}", e);
 			return;
@@ -30,12 +30,13 @@ fn main() {
 
 	info!(message="starting", name=%conf.name);
 	let queue = Arc::new(MessageQueue::<String>::new());
-	MessageParser::<String>::new(Arc::clone(&queue)).run();
+	MessageParser::<String>::new(queue.clone(), conf.queue).run();
 
-	let res = match conf.listen.kind.as_str() {
-		"udp"|"UDP" => start_udp_listener(conf.listen, &queue),
-		"tcp"|"TCP" => start_tcp_listener(conf.listen, &queue),
-		_ => Err(anyhow!("Invalid listener kind: {}; Must be udp, UDP, tcp, TCP", conf.listen.kind.as_str()))
+	let conf_recv = &conf.listen;
+	let res = match conf_recv.kind.as_str() {
+		"udp"|"UDP" => start_udp_listener(conf_recv, queue.clone()),
+		"tcp"|"TCP" => start_tcp_listener(conf_recv, queue.clone()),
+		_ => Err(anyhow!("Invalid listener kind: {}; Must be udp, UDP, tcp, TCP", conf_recv.kind.as_str()))
 	};
 	match res {
 		Err(e) => {
@@ -45,7 +46,7 @@ fn main() {
 	}
 }
 
-fn start_udp_listener(conf: config::Server, queue: &shared::queue::MessageQueue<String>) -> anyhow::Result<()> {
+fn start_udp_listener(conf: &config::Server, queue: Arc<shared::queue::MessageQueue<String>>) -> anyhow::Result<()> {
 	let socket = UdpSocket::bind(conf.get_address()).with_context(|| format!("binding to {}", conf.get_address()))?;
 	let mut buffer: [u8; MAX_PACKET_SIZE] = [0; MAX_PACKET_SIZE];
 	info!(message="listener started", prococol="UDP", address=%conf.address, port=%conf.port);
@@ -58,7 +59,7 @@ fn start_udp_listener(conf: config::Server, queue: &shared::queue::MessageQueue<
 	}
 }
 
-fn start_tcp_listener(conf: config::Server, queue: &shared::queue::MessageQueue<String>) -> anyhow::Result<()> {
+fn start_tcp_listener(conf: &config::Server, queue: Arc<shared::queue::MessageQueue<String>>) -> anyhow::Result<()> {
 	let socket = TcpListener::bind(conf.get_address()).with_context(|| format!("binding to {}", conf.get_address()))?;
 	let mut buffer: [u8; MAX_PACKET_SIZE] = [0; MAX_PACKET_SIZE];
 	info!(message="listener started", prococol="TCP", address=%conf.address, port=%conf.port);

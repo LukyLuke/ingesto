@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use shared::queue::Queue;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Config {
@@ -28,18 +29,6 @@ impl Server {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-pub struct Queue {
-	#[serde(default = "u16_default_100")]
-	pub max_messages: u16,
-
-	#[serde(default = "u16_default_100")]
-	pub max_seconds: u16,
-
-	#[serde(default = "u32_default_100")]
-	pub max_size: u32,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
 pub struct Route {
 	#[serde(default = "default_path")]
 	pub path: String,
@@ -52,5 +41,3 @@ pub struct Route {
 fn default_path() -> String { "/".to_string() }
 fn default_kind() -> String { "POST".to_string() }
 fn default_port() -> u16 { 8080 }
-fn u16_default_100() -> u16 { 100 }
-fn u32_default_100() -> u32 { 100 }

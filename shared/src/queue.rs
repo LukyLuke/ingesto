@@ -1,5 +1,24 @@
 use std::sync::{Condvar, Mutex};
 use std::collections::VecDeque;
+use std::time::Duration;
+
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Copy, Clone, Deserialize, Serialize)]
+pub struct Queue {
+	#[serde(default = "default_messages")]
+	pub max_messages: u16,
+
+	#[serde(default = "default_time")]
+	pub max_seconds: u16,
+
+	#[serde(default = "default_size")]
+	pub max_size: usize,
+}
+fn default_messages() -> u16 { 1024 }
+fn default_size() -> usize { 65535 }
+fn default_time() -> u16 { 60 }
+
 
 pub struct MessageQueue<T> {
 	m: Mutex<VecDeque<T>>,
@@ -20,9 +39,17 @@ impl<T: Into<String>> MessageQueue<T> {
 		self.cv.notify_one();
 	}
 
-	pub fn pull(&self) -> Option<T> {
-		let mut guard = self.cv.wait_while(
-				self.m.lock().unwrap(), |queue| queue.is_empty()
+	pub fn push_front(&self, val: T) {
+		let mut guard = self.m.lock().unwrap();
+		guard.push_front(val);
+		self.cv.notify_one();
+	}
+
+	pub fn pull(&self, timeout: Duration) -> Option<T> {
+		let (mut guard, _res) = self.cv.wait_timeout_while(
+				self.m.lock().unwrap(),
+				timeout,
+				|queue| queue.is_empty()
 			).unwrap();
 		guard.pop_front()
 	}
