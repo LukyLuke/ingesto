@@ -30,6 +30,8 @@ pub struct Parser {
 
 	#[serde(default = "default_parser_setting")]
 	pub settings: ParserSettings,
+
+	pub mapping: Vec<FieldMapping>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -53,7 +55,7 @@ impl fmt::Display for ParserKind {
 pub enum ParserSettings {
 	Nothing,
 	Regex(String),
-	Json(String),
+	Jpath(String),
 }
 fn default_parser_setting() ->ParserSettings { ParserSettings::Nothing }
 impl fmt::Display for ParserSettings {
@@ -62,3 +64,16 @@ impl fmt::Display for ParserSettings {
 	}
 }
 
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct FieldMapping {
+	pub name: String,
+
+	#[serde(default)]
+	pub source: String,
+
+	#[serde(default)]
+	pub index: usize,
+
+	#[serde(default)]
+	pub parser: String,
+}

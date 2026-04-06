@@ -1,9 +1,10 @@
 use std::{collections::HashMap, sync::Arc, thread::{self}, time::{Duration, Instant}};
 use regex::Regex;
+use serde_json::Value;
 use serde_json_path::JsonPath;
 use tracing::{debug, info, error};
 
-use crate::queue;
+use crate::{queue, types::FieldMapping};
 use crate::types;
 
 pub struct MessageParser<T> {
@@ -34,7 +35,10 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 		for p in parser {
 			// Precompile the matcher Regex
 			let re = match Regex::new(&p.matcher) {
-				Ok(re) => re,
+				Ok(re) => {
+					info!(message="regex compile", regex=%p.matcher);
+					re
+				},
 				Err(e) => {
 					error!(message="regex compile", regex=%p.matcher, error=%e);
 					Regex::new("^$").unwrap()
@@ -46,7 +50,10 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 			match p.settings.clone() {
 				types::ParserSettings::Regex(setting) => {
 					let re = match Regex::new(&setting) {
-						Ok(re) => re,
+						Ok(re) => {
+							info!(message="regex compile", regex=%setting);
+							re
+						},
 						Err(e) => {
 							error!(message="regex compile", regex=%setting, error=%e);
 							Regex::new("^$").unwrap()
@@ -64,15 +71,18 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 		let mut jsonpath: HashMap<String, JsonPath> = HashMap::new();
 		for p in parser {
 			match p.settings.clone() {
-				types::ParserSettings::Json(setting) => {
-					let re = match JsonPath::parse(&setting) {
-						Ok(re) => re,
+				types::ParserSettings::Jpath(setting) => {
+					let jpath = match JsonPath::parse(&setting) {
+						Ok(jpath) => {
+							info!(message="json path compile", jsonpath=%setting);
+							jpath
+						},
 						Err(e) => {
 							error!(message="json path compile", jsonpath=%setting, error=%e);
-							JsonPath::parse("$..*").unwrap()
+							JsonPath::parse("$").unwrap()
 						}
 					};
-					jsonpath.insert(setting.to_owned(), re);
+					jsonpath.insert(setting.to_owned(), jpath);
 				},
 				_ => {},
 			};
@@ -160,16 +170,16 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 							types::ParserSettings::Regex(s) => self.regexes.get(&s),
 							_ => None
 						};
-						re.and_then(|re| Some(self.parse_regex_string(raw, re)))
+						re.and_then(|re| Some(self.parse_regex_string(&parser.mapping, raw, re)))
 							.unwrap_or_else(|| raw.to_owned())
 					},
 
 					types::ParserKind::JSON => {
 						let jpath = match parser.settings.clone() {
-							types::ParserSettings::Json(s) => self.jsonpath.get(&s),
+							types::ParserSettings::Jpath(s) => self.jsonpath.get(&s),
 							_ => None
 						};
-						jpath.and_then(|jpath| Some(self.parse_json_string(raw, &jpath)))
+						jpath.and_then(|jpath| Some(self.parse_json_string(&parser.mapping, raw, &jpath)))
 							.unwrap_or_else(|| raw.to_owned())
 					},
 
@@ -206,15 +216,52 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 		}
 	}
 
-	fn parse_regex_string(&self, raw: &String, re: &Regex) -> String {
+	fn parse_regex_string(&self, mapping: &Vec<FieldMapping>, raw: &String, re: &Regex) -> String {
 		// See https://docs.rs/regex/latest/regex/
-		raw.to_owned()
+		let mut results: HashMap<String, String> = HashMap::new();
+		for capture in re.captures_iter(raw) {
+			for fld in mapping {
+				let mut val: String = String::new();
+				if !fld.source.is_empty() {
+					val = capture.name(&fld.source).map_or("", |v| v.as_str()).to_owned();
+				}
+				if val.is_empty() && fld.index > 0 {
+					val = capture.get(fld.index).map_or("", |v| v.as_str()).to_owned();
+				}
+
+				if !fld.parser.is_empty() {
+					// TODO
+				}
+				results.insert(fld.name.clone(), val);
+			}
+		}
+		serde_json::to_string(&results).map_or(String::new(), |s| s)
 	}
 
-	fn parse_json_string(&self, raw: &String, jpath: &JsonPath) -> String {
+	fn parse_json_string(&self, mapping: &Vec<FieldMapping>, raw: &String, jpath: &JsonPath) -> String {
 		// See https://docs.rs/serde_json_path/latest/serde_json_path/
 		// Test: https://serdejsonpath.live/
-		raw.to_owned()
+		let mut results: HashMap<String, String> = HashMap::new();
+		let json: Value = serde_json::from_str(raw.as_str()).map_or_else(|e|{
+			error!(message="json parsing error", json=%raw, error=%e);
+			Value::Null
+		}, |v| v);
+
+		for obj in jpath.query(&json).iter() {
+			for fld in mapping {
+				let mut val: String = String::new();
+				if !fld.source.is_empty() {
+					val = obj[&fld.source].as_str().map_or("", |s| s).to_string();
+				}
+
+				if !fld.parser.is_empty() {
+					// TODO
+				}
+				results.insert(fld.name.clone(), val);
+			}
+		}
+
+		serde_json::to_string(&results).map_or(String::new(), |s| s)
 	}
 
 }

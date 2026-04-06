@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 toml = { version = "1" }
 regex = { version = "1" }
+serde_json = { version = "1" }
 serde_json_path = { version = "0" }
 
 anyhow = { workspace = true }
