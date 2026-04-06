@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use shared::queue::Queue;
+use shared::{parser::Parser, queue::Queue};
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Config {
@@ -12,6 +12,7 @@ pub struct Webhook {
 	pub listen: Server,
 	pub routes: Vec<Route>,
 	pub queue: Queue,
+	pub parser: Vec<Parser>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]

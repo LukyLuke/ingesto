@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 toml = { version = "1" }
+regex = { version = "1" }
 
 anyhow = { workspace = true }
 clap = { workspace = true }

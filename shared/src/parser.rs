@@ -1,24 +1,79 @@
-use std::{sync::Arc, thread::{self}, time::{Duration, Instant}};
+use core::fmt;
+use std::{collections::HashMap, sync::Arc, thread::{self}, time::{Duration, Instant}};
 
-use tracing::{debug, info};
+use regex::Regex;
+use serde::{Deserialize, Serialize};
+use tracing::{debug, info, error};
 
 use crate::queue;
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct Parser {
+	#[serde(default)]
+	pub name: String,
+
+	#[serde(default)]
+	pub matcher: String,
+
+	#[serde(default = "default_parser_kind")]
+	pub kind: ParserKind,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub enum ParserKind {
+	RAW,
+	REGEX,
+	JSON,
+	CSV,
+	CEF,
+	LEEF,
+	STRUCTURED,
+}
+fn default_parser_kind() ->ParserKind { ParserKind::RAW }
+impl fmt::Display for ParserKind {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		write!(f, "{:?}", self)
+	}
+}
 
 pub struct MessageParser<T> {
 	queue: Arc<queue::MessageQueue<T>>,
 	conf: queue::Queue,
+	parser: Vec<Parser>,
+	regexes: HashMap<String, Regex>,
 }
 
 impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
-	pub fn new(queue: Arc<queue::MessageQueue<T>>, conf: queue::Queue) ->Self {
+	pub fn new(queue: Arc<queue::MessageQueue<T>>, conf: queue::Queue, parser: Vec<Parser>) -> Self {
+		// Precompile Regex
+		let regexes = Self::precompile_regex(&parser);
+
 		Self {
 			queue,
 			conf,
+			parser,
+			regexes,
 		}
 	}
 
-	pub fn run(&self) {
-		let queue = Arc::clone(&self.queue);
+	fn precompile_regex(parser: &Vec<Parser>) -> HashMap<String, Regex> {
+		let errkey = "error".to_string();
+		let mut regexes: HashMap<String, Regex> = HashMap::new();
+		for p in parser {
+			let (k, re) = match Regex::new(&p.matcher) {
+				Ok(re) => (&p.matcher, re),
+				Err(e) => {
+					error!(message="regex compile", regex=%p.matcher, error=%e);
+					(&errkey, Regex::new("^$").unwrap())
+				}
+			};
+			regexes.insert(k.to_owned(), re);
+		}
+		regexes
+	}
+
+	pub fn run(self: Arc<Self>) {
+		let me = Arc::clone(&self);
 		let max_size = self.conf.max_size - 2; // -2 for the [] around the messages
 		let max_msg = self.conf.max_messages;
 		let max_time = Duration::from_secs_f32(self.conf.max_seconds as f32);
@@ -35,7 +90,7 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 				while chars < max_size {
 					let elapsed = start.elapsed();
 					let remaining = max_time - elapsed;
-					let q_msg = match queue.pull(remaining) {
+					let q_msg = match me.queue.pull(remaining) {
 						Some(m) => m.into().trim().to_string(),
 						None => {
 							info!(message="queue empty", waited=%remaining.as_secs_f32());
@@ -43,13 +98,13 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 						}
 					};
 
-					// TODO: Parse and Structure
-					let p_msg = &q_msg;
+					// Parse and return Structured JSON-String
+					let p_msg = me.parse_message(&q_msg);
 
 					// If the final message would be too long, close the old message and push the current one back to the front
 					// But if this is the first message and that one is already too long, add it and anyways
 					if (count > 0) && (chars + p_msg.chars().count() > max_size) {
-						queue.push_front(q_msg.into());
+						me.queue.push_front(q_msg.into());
 						break;
 					}
 
@@ -68,8 +123,57 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 
 				// TODO: Send the message out
 				info!(message="messages processed", count=%count, size=%chars);
-				debug!(message=%msg);
+				debug!(message="messages", processed=%msg);
 			}
 		});
 	}
+
+	fn parse_message(&self, raw: &String) -> String {
+		// First find the right parser
+		let mut parser: Option<&Parser> = None;
+		for p in &self.parser {
+			let re = match self.regexes.get(&p.matcher) {
+				Some(re) => re,
+				None => continue
+			};
+			if re.is_match(raw) {
+				parser = Some(&p);
+			}
+		}
+
+		// Parse the Message if possible
+		match parser {
+			Some(parser) => {
+				match parser.kind {
+					ParserKind::REGEX => {
+						raw.to_owned()
+					},
+					ParserKind::JSON => {
+						raw.to_owned()
+					},
+					ParserKind::CSV => {
+						raw.to_owned()
+					},
+					ParserKind::LEEF => {
+						raw.to_owned()
+					},
+					ParserKind::CEF => {
+						raw.to_owned()
+					},
+					ParserKind::STRUCTURED => {
+						raw.to_owned()
+					},
+					ParserKind::RAW => {
+						raw.to_owned()
+					},
+					//_ => {
+					//	error!(message="not implemented parser", parser=%parser.kind.to_string());
+					//	raw.to_owned()
+					//}
+				}
+			},
+			None => raw.to_owned()
+		}
+	}
+
 }

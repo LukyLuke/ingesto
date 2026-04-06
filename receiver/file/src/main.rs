@@ -31,7 +31,8 @@ fn main() {
 
 	info!(message="starting", name=%conf.name);
 	let queue = Arc::new(MessageQueue::<String>::new());
-	MessageParser::<String>::new(queue.clone(), conf.queue).run();
+	let parser = Arc::new(MessageParser::<String>::new(queue.clone(), conf.queue, conf.parser.clone()));
+	parser.run();
 
 	let conf_file = &conf.file;
 	let res = match conf.file.follow {

@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use shared::queue::Queue;
+use shared::{parser::Parser, queue::Queue};
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Config {
@@ -11,6 +11,7 @@ pub struct Receiver {
 	pub name: String,
 	pub listen: Server,
 	pub queue: Queue,
+	pub parser: Vec<Parser>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]

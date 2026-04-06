@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
-use shared::queue::Queue;
+use shared::{parser::Parser, queue::Queue};
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Config {
@@ -11,8 +11,9 @@ pub struct Config {
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Reader {
 	pub name: String,
-	pub queue: Queue,
 	pub file: File,
+	pub queue: Queue,
+	pub parser: Vec<Parser>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]

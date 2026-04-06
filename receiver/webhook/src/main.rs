@@ -28,7 +28,8 @@ fn main() {
 
 	info!(message="starting", name=%conf.name);
 	let queue = Arc::new(MessageQueue::<String>::new());
-	MessageParser::<String>::new(queue.clone(), conf.queue).run();
+	let parser = Arc::new(MessageParser::<String>::new(queue.clone(), conf.queue, conf.parser.clone()));
+	parser.run();
 
 	let res = webhook_listener(conf.clone(), queue.clone());
 	match res {
