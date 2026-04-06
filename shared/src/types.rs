@@ -27,6 +27,9 @@ pub struct Parser {
 
 	#[serde(default = "default_parser_kind")]
 	pub kind: ParserKind,
+
+	#[serde(default = "default_parser_setting")]
+	pub settings: ParserSettings,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -45,3 +48,17 @@ impl fmt::Display for ParserKind {
 		write!(f, "{:?}", self)
 	}
 }
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub enum ParserSettings {
+	Nothing,
+	Regex(String),
+	Json(String),
+}
+fn default_parser_setting() ->ParserSettings { ParserSettings::Nothing }
+impl fmt::Display for ParserSettings {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		write!(f, "{:?}", self)
+	}
+}
+

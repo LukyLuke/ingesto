@@ -1,5 +1,6 @@
 use std::{collections::HashMap, sync::Arc, thread::{self}, time::{Duration, Instant}};
 use regex::Regex;
+use serde_json_path::JsonPath;
 use tracing::{debug, info, error};
 
 use crate::queue;
@@ -10,35 +11,73 @@ pub struct MessageParser<T> {
 	conf: types::Queue,
 	parser: Vec<types::Parser>,
 	regexes: HashMap<String, Regex>,
+	jsonpath: HashMap<String, JsonPath>,
 }
 
 impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 	pub fn new(queue: Arc<queue::MessageQueue<T>>, conf: types::Queue, parser: Vec<types::Parser>) -> Self {
-		// Precompile Regex
+		// Precompile
 		let regexes = Self::precompile_regex(&parser);
+		let jsonpath = Self::precompile_jsonpath(&parser);
 
 		Self {
 			queue,
 			conf,
 			parser,
 			regexes,
+			jsonpath,
 		}
 	}
 
 	fn precompile_regex(parser: &Vec<types::Parser>) -> HashMap<String, Regex> {
-		let errkey = "error".to_string();
 		let mut regexes: HashMap<String, Regex> = HashMap::new();
 		for p in parser {
-			let (k, re) = match Regex::new(&p.matcher) {
-				Ok(re) => (&p.matcher, re),
+			// Precompile the matcher Regex
+			let re = match Regex::new(&p.matcher) {
+				Ok(re) => re,
 				Err(e) => {
 					error!(message="regex compile", regex=%p.matcher, error=%e);
-					(&errkey, Regex::new("^$").unwrap())
+					Regex::new("^$").unwrap()
 				}
 			};
-			regexes.insert(k.to_owned(), re);
+			regexes.insert(p.matcher.to_owned(), re);
+
+			// Precompile the Parser-Regex
+			match p.settings.clone() {
+				types::ParserSettings::Regex(setting) => {
+					let re = match Regex::new(&setting) {
+						Ok(re) => re,
+						Err(e) => {
+							error!(message="regex compile", regex=%setting, error=%e);
+							Regex::new("^$").unwrap()
+						}
+					};
+					regexes.insert(setting.to_owned(), re);
+				},
+				_ => {},
+			};
 		}
 		regexes
+	}
+
+	fn precompile_jsonpath(parser: &Vec<types::Parser>) -> HashMap<String, JsonPath> {
+		let mut jsonpath: HashMap<String, JsonPath> = HashMap::new();
+		for p in parser {
+			match p.settings.clone() {
+				types::ParserSettings::Json(setting) => {
+					let re = match JsonPath::parse(&setting) {
+						Ok(re) => re,
+						Err(e) => {
+							error!(message="json path compile", jsonpath=%setting, error=%e);
+							JsonPath::parse("$..*").unwrap()
+						}
+					};
+					jsonpath.insert(setting.to_owned(), re);
+				},
+				_ => {},
+			};
+		}
+		jsonpath
 	}
 
 	pub fn run(self: Arc<Self>) {
@@ -113,36 +152,69 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 		// Parse the Message if possible
 		match parser {
 			Some(parser) => {
+				debug!(message="parser", parser=%parser.name, matcher=%parser.matcher, kind=%parser.kind, settings=%parser.settings);
+
 				match parser.kind {
 					types::ParserKind::REGEX => {
-						raw.to_owned()
+						let re = match parser.settings.clone() {
+							types::ParserSettings::Regex(s) => self.regexes.get(&s),
+							_ => None
+						};
+						re.and_then(|re| Some(self.parse_regex_string(raw, re)))
+							.unwrap_or_else(|| raw.to_owned())
 					},
+
 					types::ParserKind::JSON => {
-						raw.to_owned()
+						let jpath = match parser.settings.clone() {
+							types::ParserSettings::Json(s) => self.jsonpath.get(&s),
+							_ => None
+						};
+						jpath.and_then(|jpath| Some(self.parse_json_string(raw, &jpath)))
+							.unwrap_or_else(|| raw.to_owned())
 					},
+
 					types::ParserKind::CSV => {
 						raw.to_owned()
 					},
+
 					types::ParserKind::LEEF => {
 						raw.to_owned()
 					},
+
 					types::ParserKind::CEF => {
 						raw.to_owned()
 					},
+
 					types::ParserKind::STRUCTURED => {
 						raw.to_owned()
 					},
+
 					types::ParserKind::RAW => {
 						raw.to_owned()
 					},
+
 					//_ => {
 					//	error!(message="not implemented parser", parser=%parser.kind.to_string());
 					//	raw.to_owned()
 					//}
 				}
 			},
-			None => raw.to_owned()
+			None => {
+				debug!(message="no parser found");
+				raw.to_owned()
+			}
 		}
+	}
+
+	fn parse_regex_string(&self, raw: &String, re: &Regex) -> String {
+		// See https://docs.rs/regex/latest/regex/
+		raw.to_owned()
+	}
+
+	fn parse_json_string(&self, raw: &String, jpath: &JsonPath) -> String {
+		// See https://docs.rs/serde_json_path/latest/serde_json_path/
+		// Test: https://serdejsonpath.live/
+		raw.to_owned()
 	}
 
 }
