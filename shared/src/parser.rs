@@ -1,50 +1,19 @@
-use core::fmt;
 use std::{collections::HashMap, sync::Arc, thread::{self}, time::{Duration, Instant}};
-
 use regex::Regex;
-use serde::{Deserialize, Serialize};
 use tracing::{debug, info, error};
 
 use crate::queue;
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct Parser {
-	#[serde(default)]
-	pub name: String,
-
-	#[serde(default)]
-	pub matcher: String,
-
-	#[serde(default = "default_parser_kind")]
-	pub kind: ParserKind,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub enum ParserKind {
-	RAW,
-	REGEX,
-	JSON,
-	CSV,
-	CEF,
-	LEEF,
-	STRUCTURED,
-}
-fn default_parser_kind() ->ParserKind { ParserKind::RAW }
-impl fmt::Display for ParserKind {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		write!(f, "{:?}", self)
-	}
-}
+use crate::types;
 
 pub struct MessageParser<T> {
 	queue: Arc<queue::MessageQueue<T>>,
-	conf: queue::Queue,
-	parser: Vec<Parser>,
+	conf: types::Queue,
+	parser: Vec<types::Parser>,
 	regexes: HashMap<String, Regex>,
 }
 
 impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
-	pub fn new(queue: Arc<queue::MessageQueue<T>>, conf: queue::Queue, parser: Vec<Parser>) -> Self {
+	pub fn new(queue: Arc<queue::MessageQueue<T>>, conf: types::Queue, parser: Vec<types::Parser>) -> Self {
 		// Precompile Regex
 		let regexes = Self::precompile_regex(&parser);
 
@@ -56,7 +25,7 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 		}
 	}
 
-	fn precompile_regex(parser: &Vec<Parser>) -> HashMap<String, Regex> {
+	fn precompile_regex(parser: &Vec<types::Parser>) -> HashMap<String, Regex> {
 		let errkey = "error".to_string();
 		let mut regexes: HashMap<String, Regex> = HashMap::new();
 		for p in parser {
@@ -130,7 +99,7 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 
 	fn parse_message(&self, raw: &String) -> String {
 		// First find the right parser
-		let mut parser: Option<&Parser> = None;
+		let mut parser: Option<&types::Parser> = None;
 		for p in &self.parser {
 			let re = match self.regexes.get(&p.matcher) {
 				Some(re) => re,
@@ -145,25 +114,25 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 		match parser {
 			Some(parser) => {
 				match parser.kind {
-					ParserKind::REGEX => {
+					types::ParserKind::REGEX => {
 						raw.to_owned()
 					},
-					ParserKind::JSON => {
+					types::ParserKind::JSON => {
 						raw.to_owned()
 					},
-					ParserKind::CSV => {
+					types::ParserKind::CSV => {
 						raw.to_owned()
 					},
-					ParserKind::LEEF => {
+					types::ParserKind::LEEF => {
 						raw.to_owned()
 					},
-					ParserKind::CEF => {
+					types::ParserKind::CEF => {
 						raw.to_owned()
 					},
-					ParserKind::STRUCTURED => {
+					types::ParserKind::STRUCTURED => {
 						raw.to_owned()
 					},
-					ParserKind::RAW => {
+					types::ParserKind::RAW => {
 						raw.to_owned()
 					},
 					//_ => {

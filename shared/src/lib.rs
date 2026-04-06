@@ -1,6 +1,7 @@
 pub mod errors;
 pub mod parser;
 pub mod queue;
+pub mod types;
 
 use serde::de::DeserializeOwned;
 use tracing_subscriber::EnvFilter;

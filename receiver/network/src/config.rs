@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use shared::{parser::Parser, queue::Queue};
+use shared::types::{Parser, Queue};
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Config {
