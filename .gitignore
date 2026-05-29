@@ -10,7 +10,7 @@
 **/Cargo.lock
 
 
-/config.toml
-**/config.toml
-/config.yaml
-**/config.yaml
+/*config.toml
+**/*config.toml
+/*config.yaml
+**/*config.yaml

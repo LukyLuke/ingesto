@@ -16,6 +16,15 @@ fn default_messages() -> u16 { 1024 }
 fn default_size() -> usize { 65535 }
 fn default_time() -> u16 { 60 }
 
+impl Default for Queue {
+	fn default() -> Self {
+		Self {
+			max_messages: default_messages(),
+			max_seconds: default_time(),
+			max_size: default_size(),
+		}
+	}
+}
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Parser {
@@ -31,6 +40,7 @@ pub struct Parser {
 	#[serde(default = "default_parser_setting")]
 	pub settings: ParserSettings,
 
+	#[serde(default)]
 	pub mapping: Vec<FieldMapping>,
 }
 
@@ -48,6 +58,17 @@ fn default_parser_kind() ->ParserKind { ParserKind::RAW }
 impl fmt::Display for ParserKind {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		write!(f, "{:?}", self)
+	}
+}
+impl Default for Parser {
+	fn default() -> Self {
+		Self {
+			name: String::new(),
+			matcher: String::new(),
+			kind: default_parser_kind(),
+			settings: default_parser_setting(),
+			mapping: vec![]
+		}
 	}
 }
 

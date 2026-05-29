@@ -32,8 +32,8 @@ pub fn load_config<T: DeserializeOwned, P: AsRef<Path>>(path: P) -> anyhow::Resu
 }
 
 pub fn usage() -> anyhow::Result<PathBuf> {
-	let matches = Command::new("Network LogStream Parser")
-		.about("Listens on UDP or TCP for incomming packages, parses the data absed on the configuration and forwards it as structured data.")
+	let matches = Command::new("Ingesto")
+		.about("Log-Ingestion from various sources into various destinations in various formats.")
 		.arg(Arg::new("config_file")
 			.default_value("config.toml")
 			.value_parser(PathBufValueParser::default())
