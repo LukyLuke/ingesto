@@ -15,10 +15,19 @@ impl<T: Into<String>> MessageQueue<T> {
 		}
 	}
 
-	pub fn push(&self, val: T) {
-		let mut guard = self.m.lock().unwrap();
-		guard.push_back(val);
-		self.cv.notify_one();
+	pub fn push(&self, val: T)
+	where
+		T: Clone + TryInto<String>,
+	{
+		match val.clone().try_into() {
+			Ok(s) if !s.is_empty() => {
+				let mut guard = self.m.lock().unwrap();
+				guard.push_back(val);
+				self.cv.notify_one();
+			},
+			// empty values or not strings
+			_ => {}
+		}
 	}
 
 	pub fn push_front(&self, val: T) {
