@@ -6,7 +6,7 @@ edition = "2024"
 [dependencies]
 shared = { path = "../../shared" }
 
-reqwest = { version = "0.13" }
+reqwest = { version = "0.13", features = [ "blocking" ] }
 cron = { version = "0.16" }
 chrono = { version = "0.4" }
 

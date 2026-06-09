@@ -7,6 +7,7 @@ use std::{
 
 use chrono::{Duration, Utc};
 use cron::Schedule;
+use reqwest::StatusCode;
 use shared::{self, init_logging, parser::MessageParser, queue::MessageQueue, usage};
 use tracing::{debug, error, info};
 
@@ -59,7 +60,9 @@ fn run_scheduler(conf: Arc<config::Endpoint>, cron_expr: &str, queue: Arc<shared
 
 				let conf_t = Arc::clone(&conf);
 				let queue_t = Arc::clone(&queue);
-				thread::spawn(move || call_api(conf_t, queue_t));
+				thread::spawn(move || {
+					let _ = call_api(conf_t, queue_t);
+				});
 			}
 		}
 
@@ -68,8 +71,8 @@ fn run_scheduler(conf: Arc<config::Endpoint>, cron_expr: &str, queue: Arc<shared
 	}
 }
 
-fn call_api(conf: Arc<config::Endpoint>, queue: Arc<shared::queue::MessageQueue<String>>) {
-	let client = reqwest::Client::new();
+fn call_api(conf: Arc<config::Endpoint>, queue: Arc<shared::queue::MessageQueue<String>>) -> anyhow::Result<()> {
+	let client = reqwest::blocking::Client::new();
 	let mut req = match conf.method {
 		Method::GET => client.get(conf.uri.as_str()),
 		Method::POST => client.post(conf.uri.as_str()),
@@ -77,23 +80,30 @@ fn call_api(conf: Arc<config::Endpoint>, queue: Arc<shared::queue::MessageQueue<
 		_ => client.get(conf.uri.as_str()),
 	};
 
-	req = match conf.auth {
-		Some(Authentication::Basic { user: user, pass: pass }) => req,
-		Some(Authentication::Bearer(token)) => req,
-		Some(Authentication::Header(param)) => req.header(param.name, param.value),
+	// Authentication
+	req = match &conf.auth {
+		Some(Authentication::Basic { user, pass }) => req.basic_auth(user, Some(pass)),
+		Some(Authentication::Bearer(token)) => req.bearer_auth(token),
+		Some(Authentication::Header(param)) => req.header(&param.name, &param.value),
 		_ => req,
-	}
+	};
 
+	// Additional Headers
 	req = req.header("User-Agent", "ingesto-polling/1.0");
-	for header in conf.header {
-		req = req.header(header.name, header.value);
+	for header in &conf.header {
+		req = req.header(header.name.to_string(), header.value.to_string());
 	}
 
-
-	// TODO: Add Authentication
-
-	let resp = req.send();
-	//let data = resp?.text();
-	//debug!(message="data received", data=%data);
+	let resp = req.send()?;
+	match resp.status() {
+		StatusCode::OK => {},
+		_ => {
+			error!(message="calling api", status=%resp.status().as_u16(), error=%resp.clone().text().unwrap_or_default());
+		}
+	}
+	let data = resp.text();
+	debug!(message="data received", data=?data);
 	//queue.push(data.to_owned());
+
+	Ok(())
 }
