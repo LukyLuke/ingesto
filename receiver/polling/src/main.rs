@@ -7,6 +7,7 @@ use std::{
 
 use chrono::{Duration, Utc};
 use cron::Schedule;
+use reqwest::StatusCode;
 use shared::{self, init_logging, parser::MessageParser, queue::MessageQueue, usage};
 use tracing::{debug, error, info};
 
@@ -59,7 +60,9 @@ fn run_scheduler(conf: Arc<config::Endpoint>, cron_expr: &str, queue: Arc<shared
 
 				let conf_t = Arc::clone(&conf);
 				let queue_t = Arc::clone(&queue);
-				thread::spawn(move || call_api(conf_t, queue_t));
+				thread::spawn(move || {
+					let _ = call_api(conf_t, queue_t);
+				});
 			}
 		}
 
@@ -68,8 +71,8 @@ fn run_scheduler(conf: Arc<config::Endpoint>, cron_expr: &str, queue: Arc<shared
 	}
 }
 
-fn call_api(conf: Arc<config::Endpoint>, queue: Arc<shared::queue::MessageQueue<String>>) {
-	let client = reqwest::Client::new();
+fn call_api(conf: Arc<config::Endpoint>, queue: Arc<shared::queue::MessageQueue<String>>) -> anyhow::Result<()> {
+	let client = reqwest::blocking::Client::new();
 	let mut req = match conf.method {
 		Method::GET => client.get(conf.uri.as_str()),
 		Method::POST => client.post(conf.uri.as_str()),
@@ -77,6 +80,7 @@ fn call_api(conf: Arc<config::Endpoint>, queue: Arc<shared::queue::MessageQueue<
 		_ => client.get(conf.uri.as_str()),
 	};
 
+	// Authentication
 	req = match &conf.auth {
 		Some(Authentication::Header(param)) => req.header(&param.name, &param.value),
 		Some(Authentication::Basic { user, pass }) => req.basic_auth(user, Some(pass)),
@@ -90,14 +94,21 @@ fn call_api(conf: Arc<config::Endpoint>, queue: Arc<shared::queue::MessageQueue<
 		_ => req,
 	};
 
+	// Additional Headers
 	req = req.header("User-Agent", "ingesto-polling/1.0");
 	for header in &conf.header {
-		req = req.header(&header.name, &header.value);
+		req = req.header(header.name.to_string(), header.value.to_string());
 	}
 
+	let resp = req.send()?;
+	let status = resp.status();
+	let body = resp.text().unwrap_or_default();
+	if status != StatusCode::OK {
+		error!(message="calling api", status=%status.as_u16(), error=body.to_owned());
+	}
 
-	let resp = req.send();
-	//let data = resp?.text();
-	//debug!(message="data received", data=%data);
-	//queue.push(data.to_owned());
+	debug!(message="data received", data=body.to_owned());
+	queue.push(body.to_owned());
+
+	Ok(())
 }
