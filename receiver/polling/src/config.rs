@@ -87,4 +87,4 @@ impl fmt::Display for Param {
 
 // Default-Wrapper Functions for Serde::Deserialize
 fn default_method() -> Method { Method::GET }
-fn default_cron_timer() -> String { String::from("*/5 * * * *") }
+fn default_cron_timer() -> String { String::from("* */5 * * * *") }

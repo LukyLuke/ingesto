@@ -77,20 +77,24 @@ fn call_api(conf: Arc<config::Endpoint>, queue: Arc<shared::queue::MessageQueue<
 		_ => client.get(conf.uri.as_str()),
 	};
 
-	req = match conf.auth {
-		Some(Authentication::Basic { user: user, pass: pass }) => req,
-		Some(Authentication::Bearer(token)) => req,
-		Some(Authentication::Header(param)) => req.header(param.name, param.value),
+	req = match &conf.auth {
+		Some(Authentication::Header(param)) => req.header(&param.name, &param.value),
+		Some(Authentication::Basic { user, pass }) => req.basic_auth(user, Some(pass)),
+		Some(Authentication::Bearer(token)) => {
+			if token.starts_with("Bearer") {
+				req.bearer_auth(token.get(7..).unwrap_or_default())
+			} else {
+				req.bearer_auth(token)
+			}
+		},
 		_ => req,
-	}
+	};
 
 	req = req.header("User-Agent", "ingesto-polling/1.0");
-	for header in conf.header {
-		req = req.header(header.name, header.value);
+	for header in &conf.header {
+		req = req.header(&header.name, &header.value);
 	}
 
-
-	// TODO: Add Authentication
 
 	let resp = req.send();
 	//let data = resp?.text();
