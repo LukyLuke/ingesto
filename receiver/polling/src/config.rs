@@ -41,6 +41,9 @@ pub struct Endpoint {
 
 	#[serde(default)]
 	pub header: Vec<Param>,
+
+	#[serde(default)]
+	pub paging: Option<PagingReguest>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -83,6 +86,20 @@ impl fmt::Display for Param {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		write!(f, "[{:?}]='{:?}'", self.name, self.value)
 	}
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct PagingReguest {
+	pub param: Param,
+	pub until: PagingReguestUntil,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub enum PagingReguestUntil {
+	EmptyResponse,
+	StatusCode(u8),
+	EmptyValue(String),
+	Equals(String, String),
 }
 
 // Default-Wrapper Functions for Serde::Deserialize

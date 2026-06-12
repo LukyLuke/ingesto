@@ -9,9 +9,10 @@ use chrono::{Duration, Utc};
 use cron::Schedule;
 use reqwest::StatusCode;
 use shared::{self, init_logging, parser::MessageParser, queue::MessageQueue, usage};
+use serde_json::{Value, json};
 use tracing::{debug, error, info};
 
-use crate::config::{Authentication, Method};
+use crate::config::{Authentication, Method, Param};
 
 fn main() {
 	init_logging();
@@ -72,17 +73,29 @@ fn run_scheduler(conf: Arc<config::Endpoint>, cron_expr: &str, queue: Arc<shared
 }
 
 fn call_api(conf: Arc<config::Endpoint>, queue: Arc<shared::queue::MessageQueue<String>>) -> anyhow::Result<()> {
+	let response = Arc::new(
+		json!({ "paging":{"cursor":"xxx","pages":77}, "data":[ {"foo":"bar"}, {"foo":"bar"}, {"foo":"bar"} ] })
+	);
+
+
+	// Parse URI and Body
+	let mut uri = String::from(&conf.uri);
+	let mut send_body = String::from(conf.body.as_deref().unwrap_or_default());
+	replace_params(&conf.params, &mut uri, Arc::clone(&response));
+	replace_params(&conf.params, &mut send_body, Arc::clone(&response));
+
+	// Create the Request
 	let client = reqwest::blocking::Client::new();
 	let mut req = match conf.method {
-		Method::GET => client.get(conf.uri.as_str()),
-		Method::POST => client.post(conf.uri.as_str()),
-		Method::HEAD => client.head(conf.uri.as_str()),
-		_ => client.get(conf.uri.as_str()),
+		Method::GET => client.get(uri),
+		Method::POST => client.post(uri).body(send_body),
+		Method::HEAD => client.head(uri),
+		_ => client.get(uri),
 	};
 
 	// Authentication
 	req = match &conf.auth {
-		Some(Authentication::Header(param)) => req.header(&param.name, &param.value),
+		Some(Authentication::Header(param)) => req.header(&param.name, parse_param_value(&param.value, Arc::clone(&response))),
 		Some(Authentication::Basic { user, pass }) => req.basic_auth(user, Some(pass)),
 		Some(Authentication::Bearer(token)) => {
 			if token.starts_with("Bearer") {
@@ -97,7 +110,7 @@ fn call_api(conf: Arc<config::Endpoint>, queue: Arc<shared::queue::MessageQueue<
 	// Additional Headers
 	req = req.header("User-Agent", "ingesto-polling/1.0");
 	for header in &conf.header {
-		req = req.header(header.name.to_string(), header.value.to_string());
+		req = req.header(header.name.to_string(), parse_param_value(&header.value, Arc::clone(&response)));
 	}
 
 	let resp = req.send()?;
@@ -111,4 +124,16 @@ fn call_api(conf: Arc<config::Endpoint>, queue: Arc<shared::queue::MessageQueue<
 	queue.push(body.to_owned());
 
 	Ok(())
+}
+
+fn replace_params(params: &[Param], value: &mut String, response: Arc<Value>) {
+	for param in params {
+		let repl = parse_param_value(&param.value, response.clone());
+		*value = value.replace(&param.name, &repl);
+	};
+}
+
+fn parse_param_value(param: &String, response: Arc<Value>) -> String {
+	// TODO
+	String::from(param)
 }
