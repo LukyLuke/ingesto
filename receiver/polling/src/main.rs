@@ -1,18 +1,25 @@
 pub mod config;
+pub mod template;
 
 use core::time;
 use std::{
-	str::FromStr, sync::Arc, thread
+	collections::HashMap, str::FromStr, sync::Arc, thread
 };
 
 use chrono::{Duration, Utc};
 use cron::Schedule;
+use dashmap::DashMap;
+use once_cell::sync::Lazy;
 use reqwest::StatusCode;
 use shared::{self, init_logging, parser::MessageParser, queue::MessageQueue, usage};
 use serde_json::{Value, json};
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 
-use crate::config::{Authentication, Method, Param};
+use crate::{config::{Authentication, Method, Param}, template::Template};
+
+static TEMPLATE_CACHE: Lazy<DashMap<String, Template>> = Lazy::new(|| DashMap::new());
+static TEMPLATE_URI_KEY: &str = "uri";
+static TEMPLATE_BODY_KEY: &str = "body";
 
 fn main() {
 	init_logging();
@@ -52,6 +59,10 @@ fn run_scheduler(conf: Arc<config::Endpoint>, cron_expr: &str, queue: Arc<shared
 	let schedule = Schedule::from_str(cron_expr)?;
 	info!(message="scheduler started", cron=%cron_expr);
 
+	// Prepare Body and Url Template-Cache
+	TEMPLATE_CACHE.insert(String::from(TEMPLATE_URI_KEY),  Template::parse(&conf.uri));
+	TEMPLATE_CACHE.insert(String::from(TEMPLATE_BODY_KEY), Template::parse(&conf.body.as_deref().unwrap_or_default()));
+
 	loop {
 		// Run if the next schedule would be in the past already on the next run
 		let now = Utc::now();
@@ -77,12 +88,9 @@ fn call_api(conf: Arc<config::Endpoint>, queue: Arc<shared::queue::MessageQueue<
 		json!({ "paging":{"cursor":"xxx","pages":77}, "data":[ {"foo":"bar"}, {"foo":"bar"}, {"foo":"bar"} ] })
 	);
 
-
 	// Parse URI and Body
-	let mut uri = String::from(&conf.uri);
-	let mut send_body = String::from(conf.body.as_deref().unwrap_or_default());
-	replace_params(&conf.params, &mut uri, Arc::clone(&response));
-	replace_params(&conf.params, &mut send_body, Arc::clone(&response));
+	let uri = cached_params(&conf.params, TEMPLATE_URI_KEY, Arc::clone(&response));
+	let send_body = cached_params(&conf.params, TEMPLATE_BODY_KEY, Arc::clone(&response));
 
 	// Create the Request
 	let client = reqwest::blocking::Client::new();
@@ -95,7 +103,7 @@ fn call_api(conf: Arc<config::Endpoint>, queue: Arc<shared::queue::MessageQueue<
 
 	// Authentication
 	req = match &conf.auth {
-		Some(Authentication::Header(param)) => req.header(&param.name, parse_param_value(&param.value, Arc::clone(&response))),
+		Some(Authentication::Header(param)) => req.header(&param.name, replace_params(&param.value, Arc::clone(&response))),
 		Some(Authentication::Basic { user, pass }) => req.basic_auth(user, Some(pass)),
 		Some(Authentication::Bearer(token)) => {
 			if token.starts_with("Bearer") {
@@ -110,7 +118,7 @@ fn call_api(conf: Arc<config::Endpoint>, queue: Arc<shared::queue::MessageQueue<
 	// Additional Headers
 	req = req.header("User-Agent", "ingesto-polling/1.0");
 	for header in &conf.header {
-		req = req.header(header.name.to_string(), parse_param_value(&header.value, Arc::clone(&response)));
+		req = req.header(header.name.to_string(), replace_params(&header.value, Arc::clone(&response)));
 	}
 
 	let resp = req.send()?;
@@ -126,11 +134,34 @@ fn call_api(conf: Arc<config::Endpoint>, queue: Arc<shared::queue::MessageQueue<
 	Ok(())
 }
 
-fn replace_params(params: &[Param], value: &mut String, response: Arc<Value>) {
-	for param in params {
-		let repl = parse_param_value(&param.value, response.clone());
-		*value = value.replace(&param.name, &repl);
-	};
+fn cached_params(params: &[Param], cache_key: &str, response: Arc<Value>) -> String {
+	if let Some(cache) = TEMPLATE_CACHE.get(cache_key) {
+		let mut values = HashMap::new();
+		for param in params {
+			values.insert(param.name.clone(), parse_param_value(&param.value, response.clone()));
+		}
+		return cache.render(values);
+	}
+
+	warn!("Template-Cache for '{}' not found. Using EMPTY String.", cache_key);
+	String::from("")
+}
+
+fn replace_params(cache_key: &String, response: Arc<Value>) -> String {
+	if let Some(tpl) = TEMPLATE_CACHE.get(cache_key).or_else(|| {
+		let tpl = Template::parse(cache_key);
+		TEMPLATE_CACHE.insert(cache_key.to_string(), tpl);
+		TEMPLATE_CACHE.get(cache_key)
+	}) {
+		let mut values = HashMap::new();
+		for param in &tpl.params {
+			values.insert(param.clone(), parse_param_value(&param, response.clone()));
+		}
+		return tpl.render(values);
+	}
+
+	warn!("Template-Cache for '{}' not found and not able to build. Using EMPTY String.", cache_key);
+	return String::from("");
 }
 
 fn parse_param_value(param: &String, response: Arc<Value>) -> String {
