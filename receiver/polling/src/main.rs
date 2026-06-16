@@ -147,3 +147,19 @@ fn replace_params(cache_key: &String, response: Arc<Value>) -> String {
 	return String::from("");
 }
 
+
+#[cfg(test)]
+pub mod test {
+	use super::*;
+
+	#[test]
+	fn test_replace_params_uri() {
+		let response = Arc::new(
+			json!({ "paging":{"cursor":"xxx","pages":77}, "data":[ {"foo":"bar"}, {"foo":"bar"}, {"foo":"bar"} ] })
+		);
+		let value = String::from("foo: {{ $response.data.0.foo }} uuid: {{ $uuid }} date: {{ $now(YYYY-mm-dd) }}");
+		let result = replace_params(&value, response.clone());
+		assert_eq!(result, "foo");
+	}
+}
+
