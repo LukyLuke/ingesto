@@ -3,7 +3,7 @@ pub mod template;
 
 use core::time;
 use std::{
-	collections::HashMap, str::FromStr, sync::Arc, thread
+	str::FromStr, sync::Arc, thread
 };
 
 use chrono::{Duration, Utc};
@@ -15,11 +15,11 @@ use shared::{self, init_logging, parser::MessageParser, queue::MessageQueue, usa
 use serde_json::{Value, json};
 use tracing::{debug, error, info, warn};
 
-use crate::{config::{Authentication, Method, Param}, template::Template};
+use crate::{config::{Authentication, Method}, template::Template};
 
 static TEMPLATE_CACHE: Lazy<DashMap<String, Template>> = Lazy::new(|| DashMap::new());
-static TEMPLATE_URI_KEY: &str = "uri";
-static TEMPLATE_BODY_KEY: &str = "body";
+static TEMPLATE_URI_KEY: Lazy<String> = Lazy::new(|| String::from("uri"));
+static TEMPLATE_BODY_KEY: Lazy<String> = Lazy::new(|| String::from("body"));
 
 fn main() {
 	init_logging();
@@ -60,8 +60,8 @@ fn run_scheduler(conf: Arc<config::Endpoint>, cron_expr: &str, queue: Arc<shared
 	info!(message="scheduler started", cron=%cron_expr);
 
 	// Prepare Body and Url Template-Cache
-	TEMPLATE_CACHE.insert(String::from(TEMPLATE_URI_KEY),  Template::parse(&conf.uri));
-	TEMPLATE_CACHE.insert(String::from(TEMPLATE_BODY_KEY), Template::parse(&conf.body.as_deref().unwrap_or_default()));
+	TEMPLATE_CACHE.insert(TEMPLATE_URI_KEY.to_owned(),  Template::parse(&conf.uri));
+	TEMPLATE_CACHE.insert(TEMPLATE_BODY_KEY.to_owned(), Template::parse(&conf.body.as_deref().unwrap_or_default()));
 
 	loop {
 		// Run if the next schedule would be in the past already on the next run
@@ -89,8 +89,8 @@ fn call_api(conf: Arc<config::Endpoint>, queue: Arc<shared::queue::MessageQueue<
 	);
 
 	// Parse URI and Body
-	let uri = cached_params(&conf.params, TEMPLATE_URI_KEY, Arc::clone(&response));
-	let send_body = cached_params(&conf.params, TEMPLATE_BODY_KEY, Arc::clone(&response));
+	let uri = replace_params(&TEMPLATE_URI_KEY, Arc::clone(&response));
+	let send_body = replace_params(&TEMPLATE_BODY_KEY, Arc::clone(&response));
 
 	// Create the Request
 	let client = reqwest::blocking::Client::new();
@@ -134,37 +134,16 @@ fn call_api(conf: Arc<config::Endpoint>, queue: Arc<shared::queue::MessageQueue<
 	Ok(())
 }
 
-fn cached_params(params: &[Param], cache_key: &str, response: Arc<Value>) -> String {
-	if let Some(cache) = TEMPLATE_CACHE.get(cache_key) {
-		let mut values = HashMap::new();
-		for param in params {
-			values.insert(param.name.clone(), parse_param_value(&param.value, response.clone()));
-		}
-		return cache.render(values);
-	}
-
-	warn!("Template-Cache for '{}' not found. Using EMPTY String.", cache_key);
-	String::from("")
-}
-
 fn replace_params(cache_key: &String, response: Arc<Value>) -> String {
 	if let Some(tpl) = TEMPLATE_CACHE.get(cache_key).or_else(|| {
 		let tpl = Template::parse(cache_key);
 		TEMPLATE_CACHE.insert(cache_key.to_string(), tpl);
 		TEMPLATE_CACHE.get(cache_key)
 	}) {
-		let mut values = HashMap::new();
-		for param in &tpl.params {
-			values.insert(param.clone(), parse_param_value(&param, response.clone()));
-		}
-		return tpl.render(values);
+		return tpl.render(response.clone());
 	}
 
 	warn!("Template-Cache for '{}' not found and not able to build. Using EMPTY String.", cache_key);
 	return String::from("");
 }
 
-fn parse_param_value(param: &String, response: Arc<Value>) -> String {
-	// TODO
-	String::from(param)
-}

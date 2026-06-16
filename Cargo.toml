@@ -6,6 +6,7 @@ members = ["exporter/*","receiver/*", "shared"]
 anyhow = { version = "1" }
 clap = { version = "4" }
 dashmap = { version = "6" }
+dateparser = { version = "0" }
 notify = { version = "8" }
 once_cell = { version = "1" }
 serde = { version = "1", features = ["derive"] }
@@ -13,3 +14,4 @@ serde_json = { version = "1" }
 thiserror = { version = "2" }
 tracing = { version = "0" }
 tracing-subscriber = { version = "0", features = ["json", "env-filter"] }
+uuid = { version = "1", features = [ "v4", "v7", "js", "serde" ] }

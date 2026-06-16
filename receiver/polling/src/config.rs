@@ -28,9 +28,6 @@ pub struct Endpoint {
 	pub uri: String,
 
 	#[serde(default)]
-	pub params: Vec<Param>,
-
-	#[serde(default)]
 	pub body: Option<String>,
 
 	#[serde(default = "default_method")]
