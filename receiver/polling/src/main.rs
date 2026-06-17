@@ -153,13 +153,34 @@ pub mod test {
 	use super::*;
 
 	#[test]
-	fn test_replace_params_uri() {
+	fn test_replace_params_existing() {
 		let response = Arc::new(
-			json!({ "paging":{"cursor":"xxx","pages":77}, "data":[ {"foo":"bar"}, {"foo":"bar"}, {"foo":"bar"} ] })
+			json!({ "paging":{"cursor":"xxx","pages":77}, "data":[ {"foo":"bar"}, {"foo":"barrr"}, {"foo":"bar"} ] })
 		);
-		let value = String::from("foo: {{ $response.data.0.foo }} uuid: {{ $uuid }} date: {{ $now(YYYY-mm-dd) }}");
-		let result = replace_params(&value, response.clone());
-		assert_eq!(result, "foo");
+
+		let key = String::from("test-key");
+		let value = String::from("foo: {{ $response/data/1/foo }}");
+		TEMPLATE_CACHE.insert(key.to_owned(),  Template::parse(&value));
+
+		let result = replace_params(&key, response.clone());
+
+		assert_eq!(result, "foo: barrr");
 	}
+
+	#[test]
+	fn test_replace_params_new() {
+		let response = Arc::new(
+			json!({ "paging":{"cursor":"xxx","pages":77}, "data":[ {"foo":"bar"}, {"foo":"barrr"}, {"foo":"lastbar"} ] })
+		);
+
+		let key = String::from("dummy-key");
+		TEMPLATE_CACHE.insert(key.to_owned(),  Template::parse("No real value"));
+
+		let value = String::from("foo: {{ $response/data/2/foo }}");
+		let result = replace_params(&value, response.clone());
+
+		assert_eq!(result, "foo: lastbar");
+	}
+
 }
 

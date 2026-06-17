@@ -236,6 +236,17 @@ use super::*;
 		assert_eq!(res, String::from("foo: bar; cursor: xxx"));
 	}
 
+	#[test]
+	fn test_render_no_result() {
+		let tpl = Template::parse("foo: {{ $response/data/foo }}; cursor: {{ $response/paging/cursor }}");
+		let params = Arc::new(
+			json!({ "paging":{"cursor":"xxx","pages":77}, "data":[ {"foo":"bar"}, {"foo":"bar"}, {"foo":"bar"} ] })
+		);
+
+		let res = tpl.render(params);
+		assert_eq!(res, String::from("foo: ; cursor: xxx"));
+	}
+
 
 	#[test]
 	fn test_parse_inner() {
