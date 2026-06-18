@@ -1,6 +1,8 @@
 use core::fmt;
+use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
+use serde_json::{Value, json};
 use shared::types::{Parser, Queue};
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -88,15 +90,40 @@ impl fmt::Display for Param {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct PagingReguest {
 	pub param: Param,
-	pub until: PagingReguestUntil,
+	pub until: PagingRequestUntil,
+	pub timeout: u32,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub enum PagingReguestUntil {
+pub enum PagingRequestUntil {
 	EmptyResponse,
 	StatusCode(u8),
 	EmptyValue(String),
 	Equals(String, String),
+}
+impl PagingRequestUntil {
+	pub fn check(&self, status: u8, value: String) -> bool {
+		// first some simple checks without parsing the response
+		match self {
+			Self::EmptyResponse if value.is_empty() => return true,
+			Self::StatusCode(code) if *code == status => return true,
+			_ => {}
+		}
+
+		// Try to parse the response as JSON
+		let json = json!(value);
+		return match self {
+			Self::EmptyValue(p) => {
+				// Parse JSON-Pointer value and compare to empty
+				false
+			},
+			Self::Equals(p, v) => {
+				// Parse JSON-Pointer value and compare to the value
+				false
+			},
+			_ => false
+		}
+	}
 }
 
 // Default-Wrapper Functions for Serde::Deserialize
