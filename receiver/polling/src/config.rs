@@ -251,7 +251,7 @@ pub fn template_string(tpl: &String, values: Arc<Value>) -> String {
 pub mod test {
 	use serde_json::json;
 
-use super::*;
+	use super::*;
 
 	#[test]
 	fn test_paging_request_none() {

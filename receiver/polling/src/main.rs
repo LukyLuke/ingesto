@@ -9,7 +9,7 @@ use std::{
 use chrono::{Duration, Utc};
 use cron::Schedule;
 use once_cell::sync::Lazy;
-use reqwest::StatusCode;
+use reqwest::{StatusCode, blocking::{Response, RequestBuilder}};
 use shared::{self, init_logging, parser::MessageParser, queue::MessageQueue, usage};
 use serde_json::{Value, json};
 use tracing::{debug, error, info};
@@ -73,7 +73,9 @@ fn run_scheduler(conf: Arc<config::Endpoint>, cron_expr: &str, queue: Arc<shared
 				let conf_t = Arc::clone(&conf);
 				let queue_t = Arc::clone(&queue);
 				thread::spawn(move || {
-					let _ = call_api(conf_t, queue_t);
+					// call_api_internal(req) function sends out the real request (dep-injection for test)
+					// queue_message is for adding the received data to the queue (dep-injection for test)
+					let _ = call_api(conf_t, queue_t, call_api_internal, queue_message_internal);
 				});
 			}
 		}
@@ -83,7 +85,7 @@ fn run_scheduler(conf: Arc<config::Endpoint>, cron_expr: &str, queue: Arc<shared
 	}
 }
 
-fn call_api(conf: Arc<config::Endpoint>, queue: Arc<shared::queue::MessageQueue<String>>) -> anyhow::Result<()> {
+fn call_api(conf: Arc<config::Endpoint>, queue: Arc<shared::queue::MessageQueue<String>>, send_reqwest: impl Fn(RequestBuilder) -> Result<Response, reqwest::Error>, queue_message: impl Fn(String, Arc<shared::queue::MessageQueue<String>>)) -> anyhow::Result<()> {
 	let mut response = Arc::new( json!({}) );
 	let mut paging = true;
 	let mut pages = 0;
@@ -129,7 +131,7 @@ fn call_api(conf: Arc<config::Endpoint>, queue: Arc<shared::queue::MessageQueue<
 			req = req.header(header.name.to_string(), config::template_string(&header.value, Arc::clone(&response)));
 		}
 
-		let resp = req.send()?;
+		let resp = send_reqwest(req)?;
 		let status = resp.status();
 		let body = resp.text().unwrap_or_default();
 		if status != StatusCode::OK {
@@ -137,7 +139,7 @@ fn call_api(conf: Arc<config::Endpoint>, queue: Arc<shared::queue::MessageQueue<
 		}
 
 		debug!(message="data received", data=body.to_owned());
-		queue.push(body.to_owned());
+		queue_message(body.to_owned(), queue.clone());
 
 		// Check for paging
 		pages += 1;
@@ -153,5 +155,47 @@ fn call_api(conf: Arc<config::Endpoint>, queue: Arc<shared::queue::MessageQueue<
 	}
 
 	Ok(())
+}
+
+fn call_api_internal(req: RequestBuilder) -> Result<Response, reqwest::Error> {
+	req.send()
+}
+
+fn queue_message_internal(data: String, queue: Arc<shared::queue::MessageQueue<String>>) {
+	queue.push(data);
+}
+
+#[cfg(test)]
+pub mod test {
+	use super::*;
+
+	#[test]
+	fn test_call_api() {
+		let conf = Arc::new(config::Endpoint{
+			uri: String::new(),
+			body: None,
+			method: Method::GET,
+			auth: None,
+			header: Vec::new(),
+			paging: config::PagingReguest {
+				param: config::Param { name: String::from("PAGE"), value: String::from("PAGE")},
+				until: None,
+				timeout: 100,
+				max_pages: 1,
+			}
+		});
+		let queue = Arc::new(shared::queue::MessageQueue::<String>::new());
+
+		call_api(conf.clone(), queue.clone(), call_api_internal, queue_message_internal);
+	}
+
+	fn call_api_internal(req: RequestBuilder) -> Result<Response, reqwest::Error> {
+		Ok(Response::from())
+	}
+
+	fn queue_message_internal(data: String, queue: Arc<shared::queue::MessageQueue<String>>) {
+		queue.push(data);
+	}
+
 }
 
