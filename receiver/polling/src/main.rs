@@ -97,7 +97,7 @@ fn call_api(conf: Arc<config::Endpoint>, queue: Arc<shared::queue::MessageQueue<
 		if !conf.paging.param.name.is_empty() {
 			let page_val = config::template_string(&conf.paging.param.value, response.clone());
 			let sep = if uri.find('?').is_some() { "&" } else { "?" };
-			uri = uri + sep + conf.paging.param.name.as_str() + "=" + page_val.as_str();
+			uri = format!("{}{}{}={}", uri, sep, conf.paging.param.name.as_str(), page_val.as_str());
 		}
 
 		// Create the Request
