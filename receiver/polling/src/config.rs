@@ -50,7 +50,7 @@ pub struct Endpoint {
 	pub header: Vec<Param>,
 
 	#[serde(default)]
-	pub paging: Option<PagingReguest>,
+	pub paging: PagingReguest,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -98,8 +98,24 @@ impl fmt::Display for Param {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct PagingReguest {
 	pub param: Param,
+
 	pub until: Option<PagingRequestUntil>,
+
+	#[serde(default)]
 	pub timeout: u32,
+
+	#[serde(default)]
+	pub max_pages: u16,
+}
+impl Default for PagingReguest {
+	fn default() -> Self {
+		Self { param: Param { name: String::new(), value: String::new() }, until: None, timeout: 3600, max_pages: 1 }
+	}
+}
+impl fmt::Display for PagingReguest {
+	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+		write!(f, "PagingRequest: [param]={:?}; [timeout]={:?}; [max]={:?}; [until]={:?};", self.param, self.timeout, self.max_pages, self.until.as_ref().unwrap_or(&PagingRequestUntil::None))
+	}
 }
 
 /// Defines the paging
@@ -136,7 +152,7 @@ impl PagingRequestUntil {
 	/// # Examples
 	///
 	/// ```
-	/// PagingRequestUntil::None.check(200, String::from("")); // -> true
+	/// PagingRequestUntil::None.check(200, String::from("")); // -> false
 	/// PagingRequestUntil::Empty.check(200, String::from("")); // -> true
 	/// PagingRequestUntil::Empty.check(200, String::from("{}")); // -> false
 	/// PagingRequestUntil::StatusCode(200).check(200, String::from("")); // -> true
@@ -151,7 +167,7 @@ impl PagingRequestUntil {
 	pub fn check(&self, status: u16, value: String) -> bool {
 		// Some simple checks without parsing the response first
 		match self {
-			Self::None => return true,
+			Self::None => return false,
 			Self::Empty => return value.is_empty(),
 			Self::StatusCode(code) => return *code == status,
 			_ => {}
@@ -242,7 +258,7 @@ use super::*;
 		let paging = PagingRequestUntil::None;
 		let result = paging.check(200, String::from("{ \"foo\":\"bar\",\"paging\":{ \"cursor\":\"Paging-Cursor\" } }"));
 
-		assert_eq!(result, true);
+		assert_eq!(result, false);
 	}
 
 	#[test]
