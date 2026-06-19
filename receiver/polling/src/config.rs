@@ -1,9 +1,17 @@
 use core::fmt;
 use std::sync::Arc;
 
+use dashmap::DashMap;
+use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::Value;
 use shared::types::{Parser, Queue};
+use tracing::warn;
+
+use crate::template::Template;
+
+/// Static Lazy-Loaded template cache
+static TEMPLATE_CACHE: Lazy<DashMap<String, Template>> = Lazy::new(|| DashMap::new());
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Config {
@@ -90,38 +98,76 @@ impl fmt::Display for Param {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct PagingReguest {
 	pub param: Param,
-	pub until: PagingRequestUntil,
+	pub until: Option<PagingRequestUntil>,
 	pub timeout: u32,
 }
 
+/// Defines the paging
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub enum PagingRequestUntil {
-	EmptyResponse,
-	StatusCode(u8),
+	/// No Paging
+	None,
+
+	/// An empty response
+	Empty,
+
+	/// A defined status code
+	StatusCode(u16),
+
+	/// An empty value inside the json-response
 	EmptyValue(String),
+
+	/// Two values from inside the json-response or static strings have to match
 	Equals(String, String),
 }
 impl PagingRequestUntil {
-	pub fn check(&self, status: u8, value: String) -> bool {
-		// first some simple checks without parsing the response
+	/// Checks if the PagingRequestUntil matches the received response
+	///
+	/// # Arguments
+	///
+	/// * `status` - Status Code from the web request/response
+	/// * `value` - Response value; a JSON String
+	///
+	/// # Returns
+	///
+	/// A boolean if the given PagingRequestUntil matches the value
+	/// If this function returns true, this mostly means that a next page has to be requested
+	///
+	/// # Examples
+	///
+	/// ```
+	/// PagingRequestUntil::None.check(200, String::from("")); // -> true
+	/// PagingRequestUntil::Empty.check(200, String::from("")); // -> true
+	/// PagingRequestUntil::Empty.check(200, String::from("{}")); // -> false
+	/// PagingRequestUntil::StatusCode(200).check(200, String::from("")); // -> true
+	/// PagingRequestUntil::StatusCode(202).check(200, String::from("")); // -> false
+	/// PagingRequestUntil::EmptyValue(String::from("{{ $response/foo }}")).check(200, String::from("{ \"foo\":\"\" }")); // -> true
+	/// PagingRequestUntil::EmptyValue(String::from("{{ $response/foo }}")).check(200, String::from("{ \"foo\":\"bar\" }")); // -> false
+	/// PagingRequestUntil::Equals(String::from("{{ $response/foo }}"), String::from("{{ $response/bar }}")).check(200, String::from("{ \"foo\":\"bar\", \"bar\":\"bar\" }")); // -> true
+	/// PagingRequestUntil::Equals(String::from("{{ $response/foo }}"), String::from("bar")).check(200, String::from("{ \"foo\":\"bar\", \"bar\":\"bar\" }")); // -> true
+	/// PagingRequestUntil::Equals(String::from("bar"), String::from("{{ $response/foo }}")).check(200, String::from("{ \"foo\":\"bar\", \"bar\":\"bar\" }")); // -> true
+	/// PagingRequestUntil::Equals(String::from("bar"), String::from("foo")).check(200, String::from("")); // -> false
+	/// ```
+	pub fn check(&self, status: u16, value: String) -> bool {
+		// Some simple checks without parsing the response first
 		match self {
-			Self::EmptyResponse if value.is_empty() => return true,
-			Self::StatusCode(code) if *code == status => return true,
+			Self::None => return true,
+			Self::Empty => return value.is_empty(),
+			Self::StatusCode(code) => return *code == status,
 			_ => {}
 		}
 
 		// Try to parse the response as JSON
-		let json = json!(value);
+		let json = Arc::<Value>::new(serde_json::from_str(value.as_str()).unwrap_or_default());
 		return match self {
-			Self::EmptyValue(p) => {
-				// Parse JSON-Pointer value and compare to empty
-				false
-			},
-			Self::Equals(p, v) => {
-				// Parse JSON-Pointer value and compare to the value
-				false
-			},
-			_ => false
+			// Parse JSON-Pointer value and compare to empty
+			Self::EmptyValue(val) => return template_string(&val, json.clone()).is_empty(),
+
+			// Parse JSON-Pointer value and compare to the value
+			Self::Equals(left, right) => return template_string(&left, json.clone()) == template_string(&right, json.clone()),
+
+			// Anything else (should be handled above in the first match clause)
+			_ => true
 		}
 	}
 }
@@ -129,3 +175,158 @@ impl PagingRequestUntil {
 // Default-Wrapper Functions for Serde::Deserialize
 fn default_method() -> Method { Method::GET }
 fn default_cron_timer() -> String { String::from("* */5 * * * *") }
+
+
+/// Parse a string into a Template and inserts it into the template cache
+///
+/// # Arguments
+///
+/// * `key` - The key under which the parsed template is stored
+/// * `value` - value to use for the template
+///
+/// # Examples
+///
+/// ```
+/// let tpl = String::from("this is {{ $uuid }} a templated {{ $response/foo/bar }} string");
+/// config::template_string_parse(&tpl, &tpl);
+/// let key = String::from("fixed_key");
+/// config::template_string_parse(&key, &tpl);
+/// ```
+pub fn template_string_parse(key: &String, value: &String) {
+	TEMPLATE_CACHE.insert(key.to_owned(), Template::parse(value));
+}
+
+/// Applies the JSON-Values to the given Template and returns the resulting string.
+/// If there is no parsed template yet for the given string, parse the template.
+///
+/// # Arguments
+///
+/// * `tpl` - The Template-String (or key) of the Template
+/// * `values` - The values to apply to the tempated string
+///
+/// # Returns
+///
+/// A String where all template params are applied
+///
+/// # Examples
+///
+/// ```
+/// let response = Arc::new(
+///     json!({ "paging":{"cursor":"xxx","pages":77}, "data":[ {"foo":"bar"}, {"foo":"bar"}, {"foo":"bar"} ] })
+/// );
+/// let tpl = String::from("this is {{ $uuid }} a templated {{ $response/foo/bar }} string");
+/// let result = config::template_string(&tpl, Arc::clone(&response));
+/// ```
+pub fn template_string(tpl: &String, values: Arc<Value>) -> String {
+	if let Some(template) = TEMPLATE_CACHE.get(tpl).or_else(|| {
+		template_string_parse(tpl, tpl);
+		TEMPLATE_CACHE.get(tpl)
+	}) {
+		return template.render(values.clone());
+	}
+
+	warn!("Template-Cache for '{}' not found and not able to build. Using EMPTY String.", tpl);
+	return String::from("");
+}
+
+
+
+#[cfg(test)]
+pub mod test {
+	use serde_json::json;
+
+use super::*;
+
+	#[test]
+	fn test_paging_request_none() {
+		let paging = PagingRequestUntil::None;
+		let result = paging.check(200, String::from("{ \"foo\":\"bar\",\"paging\":{ \"cursor\":\"Paging-Cursor\" } }"));
+
+		assert_eq!(result, true);
+	}
+
+	#[test]
+	fn test_paging_request_empty() {
+		let paging = PagingRequestUntil::Empty;
+		let result_ok = paging.check(200, String::from(""));
+		let result_nok = paging.check(200, String::from("{ \"foo\":\"bar\",\"paging\":{ \"cursor\":\"Paging-Cursor\" } }"));
+
+		assert_eq!(result_ok, true);
+		assert_eq!(result_nok, false);
+	}
+
+	#[test]
+	fn test_paging_request_satus() {
+		let paging = PagingRequestUntil::StatusCode(200);
+		let result_ok = paging.check(200, String::from(""));
+		let result_nok = paging.check(404, String::from("{ \"foo\":\"bar\",\"paging\":{ \"cursor\":\"Paging-Cursor\" } }"));
+
+		assert_eq!(result_ok, true);
+		assert_eq!(result_nok, false);
+	}
+
+	#[test]
+	fn test_paging_request_empty_value() {
+		let paging = PagingRequestUntil::EmptyValue(String::from("{{ $response/paging/cursor }}"));
+		let result_ok1 = paging.check(200, String::from("{ \"foo\":\"bar\",\"paging\":{ \"cursor\":\"\" } }"));
+		let result_ok2 = paging.check(200, String::from("{ \"foo\":\"bar\",\"paging\":{  } }"));
+		let result_nok = paging.check(200, String::from("{ \"foo\":\"bar\",\"paging\":{ \"cursor\":\"Paging-Cursor\" } }"));
+
+		assert_eq!(result_ok1, true);
+		assert_eq!(result_ok2, true);
+		assert_eq!(result_nok, false);
+	}
+
+	#[test]
+	fn test_paging_request_equal_value() {
+		let paging_a = PagingRequestUntil::Equals(String::from("{{ $response/paging/cursor }}"), String::from("Paging-Cursor"));
+		let paging_b = PagingRequestUntil::Equals(String::from("Paging-Cursor"), String::from("{{ $response/paging/cursor }}"));
+		let paging_c = PagingRequestUntil::Equals(String::from("{{ $response/paging/cursor }}"), String::from("{{ $response/paging/last }}"));
+
+		let result_a_ok  = paging_a.check(200, String::from("{ \"foo\":\"bar\",\"paging\":{ \"cursor\":\"Paging-Cursor\", \"last\":\"Paging-Cursor\" } }"));
+		let result_a_nok = paging_a.check(200, String::from("{ \"foo\":\"bar\",\"paging\":{ \"cursor\":\"No-Paging-Cursor\", \"last\":\"Paging-Cursor\" } }"));
+		let result_b_ok  = paging_b.check(200, String::from("{ \"foo\":\"bar\",\"paging\":{ \"cursor\":\"Paging-Cursor\", \"last\":\"Paging-Cursor\" } }"));
+		let result_b_nok = paging_b.check(200, String::from("{ \"foo\":\"bar\",\"paging\":{ \"cursor\":\"No-Paging-Cursor\", \"last\":\"Paging-Cursor\" } }"));
+		let result_c_ok  = paging_c.check(200, String::from("{ \"foo\":\"bar\",\"paging\":{ \"cursor\":\"Paging-Cursor\", \"last\":\"Paging-Cursor\" } }"));
+		let result_c_nok = paging_c.check(200, String::from("{ \"foo\":\"bar\",\"paging\":{ \"cursor\":\"No-Paging-Cursor\", \"last\":\"Paging-Cursor\" } }"));
+
+		assert_eq!(result_a_ok,  true);
+		assert_eq!(result_a_nok, false);
+		assert_eq!(result_b_ok,  true);
+		assert_eq!(result_b_nok, false);
+		assert_eq!(result_c_ok,  true);
+		assert_eq!(result_c_nok, false);
+	}
+
+
+	#[test]
+	fn test_template_string_existing() {
+		let response = Arc::new(
+			json!({ "paging":{"cursor":"xxx","pages":77}, "data":[ {"foo":"bar"}, {"foo":"barrr"}, {"foo":"bar"} ] })
+		);
+
+		let key = String::from("test-key");
+		let value = String::from("foo: {{ $response/data/1/foo }}");
+		template_string_parse(&key,  &value);
+
+		let result = template_string(&key, response.clone());
+
+		assert_eq!(result, "foo: barrr");
+	}
+
+	#[test]
+	fn test_template_string_new() {
+		let response = Arc::new(
+			json!({ "paging":{"cursor":"xxx","pages":77}, "data":[ {"foo":"bar"}, {"foo":"barrr"}, {"foo":"lastbar"} ] })
+		);
+
+		let key = String::from("dummy-key");
+		TEMPLATE_CACHE.insert(key.to_owned(),  Template::parse("No real value"));
+
+		let value = String::from("foo: {{ $response/data/2/foo }}");
+		let result = template_string(&value, response.clone());
+
+		assert_eq!(result, "foo: lastbar");
+	}
+
+}

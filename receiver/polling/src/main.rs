@@ -8,16 +8,14 @@ use std::{
 
 use chrono::{Duration, Utc};
 use cron::Schedule;
-use dashmap::DashMap;
 use once_cell::sync::Lazy;
 use reqwest::StatusCode;
 use shared::{self, init_logging, parser::MessageParser, queue::MessageQueue, usage};
-use serde_json::{Value, json};
-use tracing::{debug, error, info, warn};
+use serde_json::{json};
+use tracing::{debug, error, info};
 
-use crate::{config::{Authentication, Method}, template::Template};
+use crate::{config::{Authentication, Method}};
 
-static TEMPLATE_CACHE: Lazy<DashMap<String, Template>> = Lazy::new(|| DashMap::new());
 static TEMPLATE_URI_KEY: Lazy<String> = Lazy::new(|| String::from("uri"));
 static TEMPLATE_BODY_KEY: Lazy<String> = Lazy::new(|| String::from("body"));
 
@@ -60,8 +58,8 @@ fn run_scheduler(conf: Arc<config::Endpoint>, cron_expr: &str, queue: Arc<shared
 	info!(message="scheduler started", cron=%cron_expr);
 
 	// Prepare Body and Url Template-Cache
-	TEMPLATE_CACHE.insert(TEMPLATE_URI_KEY.to_owned(),  Template::parse(&conf.uri));
-	TEMPLATE_CACHE.insert(TEMPLATE_BODY_KEY.to_owned(), Template::parse(&conf.body.as_deref().unwrap_or_default()));
+	config::template_string_parse(&TEMPLATE_URI_KEY,  &conf.uri);
+	config::template_string_parse(&TEMPLATE_BODY_KEY, &String::from(conf.body.as_deref().unwrap_or_default()));
 
 	loop {
 		// Run if the next schedule would be in the past already on the next run
@@ -89,8 +87,8 @@ fn call_api(conf: Arc<config::Endpoint>, queue: Arc<shared::queue::MessageQueue<
 	);
 
 	// Parse URI and Body
-	let uri = replace_params(&TEMPLATE_URI_KEY, Arc::clone(&response));
-	let send_body = replace_params(&TEMPLATE_BODY_KEY, Arc::clone(&response));
+	let uri = config::template_string(&TEMPLATE_URI_KEY, Arc::clone(&response));
+	let send_body = config::template_string(&TEMPLATE_BODY_KEY, Arc::clone(&response));
 
 	// Create the Request
 	let client = reqwest::blocking::Client::new();
@@ -103,7 +101,7 @@ fn call_api(conf: Arc<config::Endpoint>, queue: Arc<shared::queue::MessageQueue<
 
 	// Authentication
 	req = match &conf.auth {
-		Some(Authentication::Header(param)) => req.header(&param.name, replace_params(&param.value, Arc::clone(&response))),
+		Some(Authentication::Header(param)) => req.header(&param.name, config::template_string(&param.value, Arc::clone(&response))),
 		Some(Authentication::Basic { user, pass }) => req.basic_auth(user, Some(pass)),
 		Some(Authentication::Bearer(token)) => {
 			if token.starts_with("Bearer") {
@@ -118,7 +116,7 @@ fn call_api(conf: Arc<config::Endpoint>, queue: Arc<shared::queue::MessageQueue<
 	// Additional Headers
 	req = req.header("User-Agent", "ingesto-polling/1.0");
 	for header in &conf.header {
-		req = req.header(header.name.to_string(), replace_params(&header.value, Arc::clone(&response)));
+		req = req.header(header.name.to_string(), config::template_string(&header.value, Arc::clone(&response)));
 	}
 
 	let resp = req.send()?;
@@ -132,55 +130,5 @@ fn call_api(conf: Arc<config::Endpoint>, queue: Arc<shared::queue::MessageQueue<
 	queue.push(body.to_owned());
 
 	Ok(())
-}
-
-fn replace_params(cache_key: &String, response: Arc<Value>) -> String {
-	if let Some(tpl) = TEMPLATE_CACHE.get(cache_key).or_else(|| {
-		let tpl = Template::parse(cache_key);
-		TEMPLATE_CACHE.insert(cache_key.to_string(), tpl);
-		TEMPLATE_CACHE.get(cache_key)
-	}) {
-		return tpl.render(response.clone());
-	}
-
-	warn!("Template-Cache for '{}' not found and not able to build. Using EMPTY String.", cache_key);
-	return String::from("");
-}
-
-
-#[cfg(test)]
-pub mod test {
-	use super::*;
-
-	#[test]
-	fn test_replace_params_existing() {
-		let response = Arc::new(
-			json!({ "paging":{"cursor":"xxx","pages":77}, "data":[ {"foo":"bar"}, {"foo":"barrr"}, {"foo":"bar"} ] })
-		);
-
-		let key = String::from("test-key");
-		let value = String::from("foo: {{ $response/data/1/foo }}");
-		TEMPLATE_CACHE.insert(key.to_owned(),  Template::parse(&value));
-
-		let result = replace_params(&key, response.clone());
-
-		assert_eq!(result, "foo: barrr");
-	}
-
-	#[test]
-	fn test_replace_params_new() {
-		let response = Arc::new(
-			json!({ "paging":{"cursor":"xxx","pages":77}, "data":[ {"foo":"bar"}, {"foo":"barrr"}, {"foo":"lastbar"} ] })
-		);
-
-		let key = String::from("dummy-key");
-		TEMPLATE_CACHE.insert(key.to_owned(),  Template::parse("No real value"));
-
-		let value = String::from("foo: {{ $response/data/2/foo }}");
-		let result = replace_params(&value, response.clone());
-
-		assert_eq!(result, "foo: lastbar");
-	}
-
 }
 
