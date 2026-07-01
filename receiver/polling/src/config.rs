@@ -167,7 +167,7 @@ impl PagingRequestUntil {
 	pub fn check(&self, status: u16, value: String) -> bool {
 		// Some simple checks without parsing the response first
 		match self {
-			Self::None => return false,
+			Self::None => return true,
 			Self::Empty => return value.is_empty(),
 			Self::StatusCode(code) => return *code == status,
 			_ => {}
@@ -258,7 +258,7 @@ pub mod test {
 		let paging = PagingRequestUntil::None;
 		let result = paging.check(200, String::from("{ \"foo\":\"bar\",\"paging\":{ \"cursor\":\"Paging-Cursor\" } }"));
 
-		assert_eq!(result, false);
+		assert_eq!(result, true);
 	}
 
 	#[test]

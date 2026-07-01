@@ -148,9 +148,12 @@ fn call_api(conf: Arc<config::Endpoint>, queue: Arc<shared::queue::MessageQueue<
 			break;
 		}
 
-		paging = !conf.paging.until.as_ref().is_some_and(|p| p.check(status.as_u16(), body.to_owned()));
+		paging = conf.paging.until.as_ref().is_some_and(|p| !p.check(status.as_u16(), body.to_owned()));
 		if paging {
-			response = Arc::<Value>::new(serde_json::from_str(body.to_owned().as_str()).unwrap_or_default());
+			match serde_json::from_str(body.to_owned().as_str()).unwrap_or_default() {
+				Value::Null => break,
+				j => response = Arc::<Value>::new(j)
+			}
 		}
 	}
 
@@ -206,6 +209,36 @@ pub mod test {
 		assert_eq!(j2["uri"], "http://127.0.0.1/polling/?cursor=testing&page=1");
 	}
 
+	#[test]
+	fn test_call_api_nojson() {
+		let conf = Arc::new(config::Endpoint{
+			uri: String::from("http://127.0.0.1/polling/?cursor={{ $response/paging/cursor }}"),
+			body: None,
+			method: Method::GET,
+			auth: None,
+			header: Vec::new(),
+			paging: config::PagingReguest {
+				param: config::Param { name: String::from("page"), value: String::from("{{ $response/paging/page }}")},
+				until: Some(config::PagingRequestUntil::Empty),
+				timeout: 100,
+				max_pages: 2,
+			}
+		});
+		let queue = Arc::new(shared::queue::MessageQueue::<String>::new());
+		config::template_string_parse(&TEMPLATE_URI_KEY,  &conf.uri);
+		config::template_string_parse(&TEMPLATE_BODY_KEY, &String::from(conf.body.as_deref().unwrap_or_default()));
+
+		let res = call_api(conf.clone(), queue.clone(), call_api_internal_nojson, queue_message_internal);
+
+		// Check for one response (no paging requests possible due to no json)
+		assert_eq!(res.is_ok(), true);
+		assert_eq!(queue.size(), 1);
+
+		// Check for no error in case of no json string
+		let r1 = queue.pull(Duration::from_secs_f32(1.0)).unwrap_or_default();
+		assert_eq!(r1, "http://127.0.0.1/polling/?cursor=&page=");
+	}
+
 
 	fn call_api_internal(reqb: RequestBuilder) -> Result<Response, reqwest::Error> {
 		let resp = http::response::Response::new("Test Response");
@@ -220,6 +253,21 @@ pub mod test {
 
 		let body = json!({ "uri":url, "paging": { "page":1, "cursor":"testing" } });
 		let resp = http::response::Response::from_parts(parts, body.to_string());
+		Ok(Response::from(resp))
+	}
+
+	fn call_api_internal_nojson(reqb: RequestBuilder) -> Result<Response, reqwest::Error> {
+		let resp = http::response::Response::new("Test Response");
+		let (mut parts, _body) = resp.into_parts();
+
+		let req = reqb.build().unwrap();
+		let url = String::from(req.url().as_str());
+
+		// Copy over all headers from the request to the response
+		let headers = req.headers();
+		headers.iter().for_each(|h| { parts.headers.insert(h.0, h.1.to_owned()); } );
+
+		let resp = http::response::Response::from_parts(parts, url);
 		Ok(Response::from(resp))
 	}
 
