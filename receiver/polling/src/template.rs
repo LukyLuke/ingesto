@@ -297,8 +297,7 @@ impl fmt::Display for ParamParser {
 #[cfg(test)]
 mod tests {
 	use serde_json::json;
-
-use super::*;
+	use super::*;
 
 	#[test]
 	fn test_render_none() {
