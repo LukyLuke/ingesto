@@ -11,7 +11,11 @@ pub struct Webhook {
 	pub name: String,
 	pub listen: Server,
 	pub routes: Vec<Route>,
+
+	#[serde(default)]
 	pub queue: Queue,
+
+	#[serde(default)]
 	pub parser: Vec<Parser>,
 }
 

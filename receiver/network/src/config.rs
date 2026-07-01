@@ -10,7 +10,11 @@ pub struct Config {
 pub struct Receiver {
 	pub name: String,
 	pub listen: Server,
+
+	#[serde(default)]
 	pub queue: Queue,
+
+	#[serde(default)]
 	pub parser: Vec<Parser>,
 }
 

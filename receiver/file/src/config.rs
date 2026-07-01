@@ -11,7 +11,11 @@ pub struct Config {
 pub struct Reader {
 	pub name: String,
 	pub file: File,
+
+	#[serde(default)]
 	pub queue: Queue,
+
+	#[serde(default)]
 	pub parser: Vec<Parser>,
 }
 
