@@ -97,7 +97,7 @@ fn call_api(conf: Arc<config::Endpoint>, queue: Arc<shared::queue::MessageQueue<
 
 		// Append Paging if available
 		if !conf.paging.param.name.is_empty() {
-			let page_val = config::template_string(&conf.paging.param.value, response.clone());
+			let page_val = config::template_string(&conf.paging.param.value, Arc::clone(&response));
 			let sep = if uri.find('?').is_some() { "&" } else { "?" };
 			uri = format!("{}{}{}={}", uri, sep, conf.paging.param.name.as_str(), page_val.as_str());
 		}
@@ -169,28 +169,58 @@ fn queue_message_internal(data: String, queue: Arc<shared::queue::MessageQueue<S
 pub mod test {
 	use super::*;
 
+	use std::time::Duration;
+
 	#[test]
 	fn test_call_api() {
 		let conf = Arc::new(config::Endpoint{
-			uri: String::new(),
+			uri: String::from("http://127.0.0.1/polling/?cursor={{ $response/paging/cursor }}"),
 			body: None,
 			method: Method::GET,
 			auth: None,
 			header: Vec::new(),
 			paging: config::PagingReguest {
-				param: config::Param { name: String::from("PAGE"), value: String::from("PAGE")},
-				until: None,
+				param: config::Param { name: String::from("page"), value: String::from("{{ $response/paging/page }}")},
+				until: Some(config::PagingRequestUntil::Empty),
 				timeout: 100,
-				max_pages: 1,
+				max_pages: 2,
 			}
 		});
 		let queue = Arc::new(shared::queue::MessageQueue::<String>::new());
+		config::template_string_parse(&TEMPLATE_URI_KEY,  &conf.uri);
+		config::template_string_parse(&TEMPLATE_BODY_KEY, &String::from(conf.body.as_deref().unwrap_or_default()));
 
-		call_api(conf.clone(), queue.clone(), call_api_internal, queue_message_internal);
+		let res = call_api(conf.clone(), queue.clone(), call_api_internal, queue_message_internal);
+
+		// Check for two responses (paging requests)
+		assert_eq!(res.is_ok(), true);
+		assert_eq!(queue.size(), 2);
+
+		let r1 = queue.pull(Duration::from_secs_f32(1.0)).unwrap_or_default();
+		let j1: Value = serde_json::from_str(r1.to_owned().as_str()).unwrap_or_default();
+		let r2 = queue.pull(Duration::from_secs_f32(1.0)).unwrap_or_default();
+		let j2: Value = serde_json::from_str(r2.to_owned().as_str()).unwrap_or_default();
+
+		// Check the URLs from the two requests (paging and cursor replaced correctly)
+		assert_eq!(j1["uri"], "http://127.0.0.1/polling/?cursor=&page=");
+		assert_eq!(j2["uri"], "http://127.0.0.1/polling/?cursor=testing&page=1");
 	}
 
-	fn call_api_internal(req: RequestBuilder) -> Result<Response, reqwest::Error> {
-		Ok(Response::from())
+
+	fn call_api_internal(reqb: RequestBuilder) -> Result<Response, reqwest::Error> {
+		let resp = http::response::Response::new("Test Response");
+		let (mut parts, _body) = resp.into_parts();
+
+		let req = reqb.build().unwrap();
+		let url = String::from(req.url().as_str());
+
+		// Copy over all headers from the request to the response
+		let headers = req.headers();
+		headers.iter().for_each(|h| { parts.headers.insert(h.0, h.1.to_owned()); } );
+
+		let body = json!({ "uri":url, "paging": { "page":1, "cursor":"testing" } });
+		let resp = http::response::Response::from_parts(parts, body.to_string());
+		Ok(Response::from(resp))
 	}
 
 	fn queue_message_internal(data: String, queue: Arc<shared::queue::MessageQueue<String>>) {

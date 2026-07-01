@@ -164,7 +164,13 @@ impl Template {
 						},
 
 						&ParamParser::Response(json_path) => {
-							&format!("{}", value.pointer(json_path.as_str()).unwrap_or(&Value::Null).as_str().unwrap_or_default())
+							let v = match &value.pointer(json_path.as_str()).unwrap_or(&Value::Null) {
+								&Value::Bool(v) => format!("{}", v),
+								&Value::Number(v) => format!("{}", v.as_f64().unwrap_or(0.0)),
+								&Value::String(v) => v.clone(),
+								_ => String::new()
+							};
+							&format!("{}", v)
 						},
 
 						&ParamParser::Static(token) => {

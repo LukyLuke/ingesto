@@ -6,9 +6,10 @@ edition = "2024"
 [dependencies]
 shared = { path = "../../shared" }
 
-reqwest = { version = "0.13", features = [ "blocking" ] }
-cron = { version = "0.16" }
-chrono = { version = "0.4" }
+cron = { version = "0" }
+chrono = { version = "0" }
+reqwest = { version = "0", features = [ "blocking" ] }
+http = { version = "1" }
 
 anyhow = { workspace = true }
 dashmap = { workspace = true }
