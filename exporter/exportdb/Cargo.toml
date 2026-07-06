@@ -1,5 +1,5 @@
 [package]
-name = "webhook"
+name = "exportdb"
 version = "0.1.0"
 edition = "2024"
 license = "MIT"
@@ -11,5 +11,6 @@ tiny_http = { version = "0" }
 
 anyhow = { workspace = true }
 serde = { workspace = true }
+serde_json = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }

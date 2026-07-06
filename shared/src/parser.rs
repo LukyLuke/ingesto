@@ -1,5 +1,9 @@
-use std::{collections::HashMap, sync::Arc, thread::{self}, time::{Duration, Instant}};
+use std::{collections::HashMap, sync::{Arc, OnceLock}, thread::{self}, time::{Duration, Instant}};
+
 use anyhow::Result;
+use opentelemetry::logs::{Logger, LoggerProvider, LogRecord, Severity, AnyValue};
+use opentelemetry_otlp::{LogExporter, Protocol, WithExportConfig};
+use opentelemetry_sdk::{ Resource, logs::{SdkLogger, SdkLoggerProvider} };
 use regex::Regex;
 use serde_json::Value;
 use serde_json_path::JsonPath;
@@ -94,20 +98,31 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 	}
 
 	pub fn run(self: Arc<Self>) {
+		// Do not process any logs if there is no log receiver
+		if self.conf.otel_logger.as_ref().is_none() {
+			info!(message="no log processing due to no otel_logger in queue-configuration");
+			return
+		}
+
 		let me = Arc::clone(&self);
-		let max_size = self.conf.max_size - 2; // -2 for the [] around the messages
-		let max_msg = self.conf.max_messages;
+		let collect = self.conf.collect_messages;
+		let max_msg = if collect { self.conf.max_messages } else { 1 }; // If no messages shall be collected, send only one max each time
+		let max_size = self.conf.max_size - 2; // -2 for the "[]" around the messages when encoded as a json array
 		let max_time = Duration::from_secs_f32(self.conf.max_seconds as f32);
 
 		info!(message="start processing", max_time=%max_time.as_secs_f32(), max_messages=%max_msg, max_message_size=%max_size);
 		thread::spawn(move || {
+			let otlp = me.conf.otel_logger.as_ref().unwrap();
+
 			loop {
 				let start = Instant::now();
 				let mut msg = String::with_capacity(max_size);
 				let mut count: u16 = 0;
 				let mut chars:usize = 0;
 
-				msg.push('[');
+				if collect {
+					msg.push('[');
+				}
 				while chars < max_size {
 					let elapsed = start.elapsed();
 					let remaining = max_time - elapsed;
@@ -140,13 +155,78 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 						break;
 					}
 				}
-				msg.push(']');
+				if collect {
+					msg.push(']');
+				}
 
-				// TODO: Send the message out
 				info!(message="messages processed", count=%count, size=%chars);
 				debug!(message="messages", processed=%msg);
+
+				// Send out all message
+				match me.send_message(&otlp, &msg) {
+					Ok(_) => info!(message="sent logs to otlp endpoint", endpoint=%otlp.endpoint, service=%otlp.service),
+					Err(e) => error!(message="failed to send messages to otlp endpoint", endpoint=%otlp.endpoint, service=%otlp.service, error=%e)
+				};
 			}
 		});
+	}
+
+	/// Sends out a message as an OTLP Log-Message to one ore more configured receivers
+	///
+	/// # Arguments
+	///
+	/// * `conf` - The OTLP Configuration
+	/// * `message` - The log emssage to send out
+	///
+	/// # Results
+	///
+	/// Returns a Result indication wether the message was sent or not.
+	fn send_message(&self, conf: &types::OtelLogger, message: &String) -> Result<()> {
+		match self.get_logger(conf) {
+			Ok(logger) => {
+				let msg = message.to_owned();
+
+				let mut record = logger.create_log_record();
+				record.set_severity_number(Severity::Info);
+				record.set_severity_text("INFO");
+
+				record.set_body(AnyValue::String(msg.into()));
+
+				logger.emit(record);
+				Ok(())
+			},
+			Err(e) => Err(e),
+		}
+	}
+
+	/// Creates and returns an OpenTelemetry Resource
+	///
+	/// # Returns
+	///
+	/// An OpenTelemetry Logger
+	fn get_logger(&self, conf: &types::OtelLogger) -> Result<SdkLogger> {
+		static RESOURCE: OnceLock<Result<SdkLogger>> = OnceLock::new();
+		let res = RESOURCE.get_or_init(|| {
+			let exporter = LogExporter::builder()
+			.with_http()
+			.with_protocol(Protocol::HttpBinary)
+			.with_endpoint(&conf.endpoint)
+			.build()?;
+
+			Ok(SdkLoggerProvider::builder()
+				.with_resource(
+					Resource::builder().with_service_name(conf.service.clone()).build()
+				)
+				.with_batch_exporter(exporter)
+				.build()
+				.logger(conf.service.clone())
+			)
+		});
+
+		match res.as_ref() {
+			Ok(logger) => Ok(logger.clone()),
+			Err(e) => Err(anyhow::anyhow!(e)),
+		}
 	}
 
 	/// Tries to find an appropriate parser for the given message and applies it then

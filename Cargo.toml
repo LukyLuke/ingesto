@@ -1,6 +1,7 @@
 [workspace]
 resolver = "3"
 members = ["exporter/*","receiver/*", "shared"]
+license = "MIT"
 
 [workspace.dependencies]
 anyhow = { version = "1" }
@@ -9,6 +10,9 @@ dashmap = { version = "6" }
 dateparser = { version = "0" }
 notify = { version = "8" }
 once_cell = { version = "1" }
+opentelemetry = { version = "0.32" }
+opentelemetry-otlp = { version = "0.32" }
+opentelemetry_sdk = { version = "0.32" }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1" }
 thiserror = { version = "2" }

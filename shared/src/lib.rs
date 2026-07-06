@@ -39,7 +39,7 @@ pub fn usage() -> anyhow::Result<PathBuf> {
 			.value_parser(PathBufValueParser::default())
 			.short('c')
 			.long("config")
-			.help("Configuration file to use"))
+			.help("Configuration file to use (toml or yaml)"))
 		.get_matches();
 
 	let f: &PathBuf = matches.get_one("config_file").unwrap();

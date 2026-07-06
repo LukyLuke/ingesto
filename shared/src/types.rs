@@ -2,7 +2,7 @@ use core::fmt;
 use serde::{Deserialize, Serialize};
 
 /// Message-Queue configuration
-#[derive(Debug, Copy, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Queue {
 	// Max number of message in the queue before the processor (parser) is reading out and clearing the queue
 	#[serde(default = "default_messages")]
@@ -15,10 +15,19 @@ pub struct Queue {
 	// Maximum length of the final message (cummulated json strings as an array)
 	#[serde(default = "default_size")]
 	pub max_size: usize,
+
+	// Collect messages and sent out a list of logs (true) or send each one separate (false)
+	#[serde(default = "default_collect")]
+	pub collect_messages: bool,
+
+	// Where to send the log messages to
+	#[serde(default)]
+	pub otel_logger: Option<OtelLogger>,
 }
 fn default_messages() -> u16 { 1024 }
 fn default_size() -> usize { 65535 }
 fn default_time() -> u16 { 60 }
+fn default_collect() -> bool { false }
 
 impl Default for Queue {
 	fn default() -> Self {
@@ -26,6 +35,8 @@ impl Default for Queue {
 			max_messages: default_messages(),
 			max_seconds: default_time(),
 			max_size: default_size(),
+			collect_messages: default_collect(),
+			otel_logger: None,
 		}
 	}
 }
@@ -116,7 +127,7 @@ pub enum ParserSettings {
 	// If it is a header, the `source` can be used in the matcher for the column name, otherwise the `index` defines the column number
 	Csv(bool),
 }
-fn default_parser_setting() ->ParserSettings { ParserSettings::Nothing }
+fn default_parser_setting() -> ParserSettings { ParserSettings::Nothing }
 impl fmt::Display for ParserSettings {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		write!(f, "{:?}", self)
@@ -147,3 +158,13 @@ pub struct FieldMapping {
 	#[serde(default)]
 	pub empty: bool,
 }
+
+/// Represents an OpenTelemetry Endpoint, where Metrics and/or Logs can be sent to
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct OtelLogger {
+	pub endpoint: String,
+
+	#[serde(default = "default_otel_service")]
+	pub service: String,
+}
+fn default_otel_service() -> String { String::from("ingesto") }

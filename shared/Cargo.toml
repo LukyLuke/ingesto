@@ -2,6 +2,7 @@
 name = "shared"
 version = "0.1.0"
 edition = "2024"
+license = "MIT"
 
 [dependencies]
 toml = { version = "1" }
@@ -11,6 +12,9 @@ serde_json_path = { version = "0" }
 
 anyhow = { workspace = true }
 clap = { workspace = true }
+opentelemetry = { workspace = true }
+opentelemetry-otlp = { workspace = true }
+opentelemetry_sdk = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
