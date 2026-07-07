@@ -189,6 +189,8 @@ impl OtelLogger {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct OtelReceiver {
 	pub address: String,
+
+	#[serde(default = "default_otel_port")]
 	pub port: u16,
 
 	#[serde(default = "default_logs_path")]
@@ -198,5 +200,14 @@ fn default_logs_path() -> String { String::from("/v1/logs") }
 impl OtelReceiver {
 	pub fn get_address(&self) -> String {
 		format!("{}:{}", self.address, self.port)
+	}
+}
+impl Default for OtelReceiver {
+	fn default() -> Self {
+		Self {
+			address: String::from("127.0.0.1"),
+			port: default_otel_port(),
+			path: default_logs_path(),
+		}
 	}
 }
