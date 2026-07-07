@@ -5,8 +5,8 @@ use opentelemetry_proto::tonic::collector::logs::v1::{ExportLogsServiceRequest, 
 use opentelemetry_proto::tonic::common::v1::any_value::Value::{
 	self, ArrayValue, BoolValue, BytesValue, DoubleValue, IntValue, KvlistValue, StringValue, StringValueStrindex
 };
-use prost::Message; use serde_json::{Map, json};
-// deserialize otel tonic messages
+use prost::Message;
+use serde_json::{Map, json};
 use tiny_http::{Header, Request, Response, Server, StatusCode};
 use tracing::{debug, error, info};
 
