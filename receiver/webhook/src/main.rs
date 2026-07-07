@@ -40,7 +40,7 @@ fn main() {
 	}
 }
 
-fn webhook_listener(conf: Arc<config::Webhook>, queue: Arc<shared::queue::MessageQueue<String>>) ->anyhow::Result<()> {
+fn webhook_listener(conf: Arc<config::Webhook>, queue: Arc<shared::queue::MessageQueue<String>>) -> anyhow::Result<()> {
 	let server = match Server::http(conf.listen.get_address()) {
 		Ok(server) => server,
 		Err(e) => return Err(anyhow!("{:#?}", e))
@@ -69,7 +69,7 @@ fn handle_request(mut req: Request, conf: Arc<config::Webhook>, queue: Arc<share
 	if route_opt.is_none() {
 		let mut resp = Response::from_string("invalid request");
 		resp = resp.with_status_code(StatusCode(404));
-		let _ = req.respond(resp);
+		req.respond(resp).ok();
 		error!("Invalid Request: {:?} {:?}", method, url);
 		return;
 	}
@@ -83,7 +83,7 @@ fn handle_request(mut req: Request, conf: Arc<config::Webhook>, queue: Arc<share
 	if let Err(e) = req.as_reader().read_to_string(&mut body) {
 		let mut resp = Response::from_string("invalid data");
 		resp = resp.with_status_code(StatusCode(400));
-		let _ = req.respond(resp);
+		req.respond(resp).ok();
 		error!("Error while reading Requets-Body: {:#?}", e);
 		return;
 	}
@@ -98,7 +98,7 @@ fn handle_request(mut req: Request, conf: Arc<config::Webhook>, queue: Arc<share
 	// Just a default response
 	let mut ok = Response::from_string("processed");
 	ok = ok.with_status_code(200);
-	let _ = req.respond(ok);
+	req.respond(ok).ok();
 }
 
 
