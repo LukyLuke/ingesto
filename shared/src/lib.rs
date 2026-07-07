@@ -1,6 +1,7 @@
 pub mod errors;
 pub mod parser;
 pub mod queue;
+pub mod receiver;
 pub mod types;
 
 use serde::de::DeserializeOwned;
