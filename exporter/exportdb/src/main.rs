@@ -2,8 +2,8 @@ pub mod config;
 
 use std::sync::Arc;
 
-use shared::{self, init_logging, queue::MessageQueue, usage};
-use tracing::{debug, error, info};
+use shared::{self, init_logging, queue::MessageQueue, usage, receiver::start_otel_listener};
+use tracing::{error, info};
 
 fn main() {
 	init_logging();
@@ -27,4 +27,11 @@ fn main() {
 
 	info!(message="starting", name=%conf.name);
 	let queue = Arc::new(MessageQueue::<String>::new());
+	let c = Arc::new(conf.listener.clone());
+	match start_otel_listener(c, queue.clone()) {
+		Err(e) => {
+			error!("{:#?}", e);
+		},
+		Ok(_) => {}
+	}
 }
