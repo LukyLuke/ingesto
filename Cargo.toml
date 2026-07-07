@@ -1,10 +1,22 @@
 [workspace]
 resolver = "3"
-members = ["exporter/*","receiver/*", "shared"]
+members = [
+	"exporter/*",
+	"receiver/*",
+	"shared"
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
 license = "MIT"
+authors = [ "Ingesto Contributors" ]
+repository = "https://github.com/lukyluke/ingesto"
+homepage = "https://github.com/lukyluke/ingesto"
 
 [workspace.dependencies]
 anyhow = { version = "1" }
+bytes = { version = "1" }
 clap = { version = "4" }
 dashmap = { version = "6" }
 dateparser = { version = "0" }
@@ -12,10 +24,13 @@ notify = { version = "8" }
 once_cell = { version = "1" }
 opentelemetry = { version = "0.32" }
 opentelemetry-otlp = { version = "0.32" }
+opentelemetry-proto = { version = "0.32", features = [ "logs", "metrics", "with-serde" ] }
 opentelemetry_sdk = { version = "0.32" }
+prost = { version = "0" }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1" }
 thiserror = { version = "2" }
+tiny_http = { version = "0" }
 tracing = { version = "0" }
 tracing-subscriber = { version = "0", features = ["json", "env-filter"] }
 uuid = { version = "1", features = [ "v4", "v7", "js", "serde" ] }

@@ -1,21 +1,28 @@
 [package]
 name = "shared"
-version = "0.1.0"
-edition = "2024"
-license = "MIT"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
 
 [dependencies]
 toml = { version = "1" }
 regex = { version = "1" }
-serde_json = { version = "1" }
 serde_json_path = { version = "0" }
 
 anyhow = { workspace = true }
+bytes = { workspace = true }
 clap = { workspace = true }
 opentelemetry = { workspace = true }
 opentelemetry-otlp = { workspace = true }
+opentelemetry-proto = { workspace = true }
 opentelemetry_sdk = { workspace = true }
+prost = { workspace = true }
 serde = { workspace = true }
+serde_json = { workspace = true }
 thiserror = { workspace = true }
+tiny_http = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
