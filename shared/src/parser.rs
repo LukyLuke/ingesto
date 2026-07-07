@@ -1,9 +1,9 @@
-use std::{collections::HashMap, sync::{Arc, OnceLock}, thread::{self}, time::{Duration, Instant}};
+use std::{collections::HashMap, sync::{Arc, OnceLock}, thread::{self}, time::Duration};
 
 use anyhow::Result;
 use opentelemetry::logs::{Logger, LoggerProvider, LogRecord, Severity, AnyValue};
 use opentelemetry_otlp::{LogExporter, Protocol, WithExportConfig};
-use opentelemetry_sdk::{ Resource, logs::{SdkLogger, SdkLoggerProvider} };
+use opentelemetry_sdk::{ Resource, logs::{BatchConfigBuilder, BatchLogProcessor, SdkLogger, SdkLoggerProvider} };
 use regex::Regex;
 use serde_json::Value;
 use serde_json_path::JsonPath;
@@ -105,67 +105,32 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 		}
 
 		let me = Arc::clone(&self);
-		let collect = self.conf.collect_messages;
-		let max_msg = if collect { self.conf.max_messages } else { 1 }; // If no messages shall be collected, send only one max each time
-		let max_size = self.conf.max_size - 2; // -2 for the "[]" around the messages when encoded as a json array
+		let max_msg = self.conf.max_messages;
 		let max_time = Duration::from_secs_f32(self.conf.max_seconds as f32);
 
-		info!(message="start processing", max_time=%max_time.as_secs_f32(), max_messages=%max_msg, max_message_size=%max_size);
+		info!(message="start processing", max_time=%max_time.as_secs_f32(), max_messages=%max_msg);
 		thread::spawn(move || {
 			let otlp = me.conf.otel_logger.as_ref().unwrap();
 
 			loop {
-				let start = Instant::now();
-				let mut msg = String::with_capacity(max_size);
-				let mut count: u16 = 0;
-				let mut chars:usize = 0;
+				let q_msg = match me.queue.pull(max_time) {
+					Some(m) => m.into().trim().to_string(),
+					None => {
+						info!(message="queue empty", waited=%max_time.as_secs_f32());
+						continue;
+					}
+				};
 
-				if collect {
-					msg.push('[');
-				}
-				while chars < max_size {
-					let elapsed = start.elapsed();
-					let remaining = max_time - elapsed;
-					let q_msg = match me.queue.pull(remaining) {
-						Some(m) => m.into().trim().to_string(),
-						None => {
-							info!(message="queue empty", waited=%remaining.as_secs_f32());
-							break;
-						}
-					};
+				// Parse and return Structured JSON-String
+				let msg = me.parse_message(&q_msg);
+				debug!(message="processed message", original=%q_msg, processed=%msg);
 
-					// Parse and return Structured JSON-String
-					let p_msg = me.parse_message(&q_msg);
-
-					// If the final message would be too long, close the old message and push the current one back to the front
-					// But if this is the first message and that one is already too long, add it and anyways
-					if (count > 0) && (chars + p_msg.chars().count() > max_size) {
+				match me.send_message(&otlp, &msg, max_msg, max_time) {
+					Ok(_) => info!(message="enqueued message for otlp endpoint", endpoint=%otlp.endpoint, service=%otlp.service),
+					Err(e) => {
 						me.queue.push_front(q_msg.into());
-						break;
+						error!(message="failed to enqueue message for otlp endpoint", endpoint=%otlp.endpoint, service=%otlp.service, error=%e)
 					}
-
-					if count > 0 {
-						msg.push(',');
-					}
-					msg.push_str(&p_msg);
-					chars = msg.chars().count();
-
-					count += 1;
-					if count >= max_msg {
-						break;
-					}
-				}
-				if collect {
-					msg.push(']');
-				}
-
-				info!(message="messages processed", count=%count, size=%chars);
-				debug!(message="messages", processed=%msg);
-
-				// Send out all message
-				match me.send_message(&otlp, &msg) {
-					Ok(_) => info!(message="sent logs to otlp endpoint", endpoint=%otlp.endpoint, service=%otlp.service),
-					Err(e) => error!(message="failed to send messages to otlp endpoint", endpoint=%otlp.endpoint, service=%otlp.service, error=%e)
 				};
 			}
 		});
@@ -177,21 +142,20 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 	///
 	/// * `conf` - The OTLP Configuration
 	/// * `message` - The log emssage to send out
+	/// * `count` - Number of messages to enqueue
+	/// * `duration` - Duration to wait until the queued messages are sent
 	///
 	/// # Results
 	///
 	/// Returns a Result indication wether the message was sent or not.
-	fn send_message(&self, conf: &types::OtelLogger, message: &String) -> Result<()> {
-		match self.get_logger(conf) {
+	fn send_message(&self, conf: &types::OtelLogger, message: &String, count: u16, duration: Duration) -> Result<()> {
+		match self.get_logger(conf, count, duration) {
 			Ok(logger) => {
 				let msg = message.to_owned();
-
 				let mut record = logger.create_log_record();
 				record.set_severity_number(Severity::Info);
 				record.set_severity_text("INFO");
-
 				record.set_body(AnyValue::String(msg.into()));
-
 				logger.emit(record);
 				Ok(())
 			},
@@ -201,23 +165,40 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 
 	/// Creates and returns an OpenTelemetry Resource
 	///
+	/// # Arguments
+	///
+	/// * `conf` - The OTLP Configuration
+	/// * `count` - Number of messages to enqueue
+	/// * `duration` - Duration to wait until the queued messages are sent
+	///
 	/// # Returns
 	///
 	/// An OpenTelemetry Logger
-	fn get_logger(&self, conf: &types::OtelLogger) -> Result<SdkLogger> {
+	fn get_logger(&self, conf: &types::OtelLogger, count: u16, duration: Duration) -> Result<SdkLogger> {
 		static RESOURCE: OnceLock<Result<SdkLogger>> = OnceLock::new();
 		let res = RESOURCE.get_or_init(|| {
 			let exporter = LogExporter::builder()
 			.with_http()
 			.with_protocol(Protocol::HttpBinary)
-			.with_endpoint(&conf.endpoint)
+			.with_endpoint(&conf.get_endpoint("/v1/logs"))
 			.build()?;
+
+			// Queue size and time handled by OTEL
+			let processor = BatchLogProcessor::builder(exporter)
+				.with_batch_config(
+					BatchConfigBuilder::default()
+						.with_max_queue_size(2048)
+						.with_max_export_batch_size(count.into())
+						.with_scheduled_delay(duration)
+						.build(),
+				)
+				.build();
 
 			Ok(SdkLoggerProvider::builder()
 				.with_resource(
 					Resource::builder().with_service_name(conf.service.clone()).build()
 				)
-				.with_batch_exporter(exporter)
+				.with_log_processor(processor)
 				.build()
 				.logger(conf.service.clone())
 			)

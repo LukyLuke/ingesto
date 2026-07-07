@@ -164,7 +164,39 @@ pub struct FieldMapping {
 pub struct OtelLogger {
 	pub endpoint: String,
 
+	#[serde(default = "default_otel_port")]
+	pub port: u16,
+
 	#[serde(default = "default_otel_service")]
 	pub service: String,
 }
 fn default_otel_service() -> String { String::from("ingesto") }
+fn default_otel_port() -> u16 { 4318 }
+impl OtelLogger {
+	pub fn get_endpoint(&self, path: &str) -> String {
+		let mut p = path.to_owned();
+		if let Some(s) = p.get(0..1) && s !=  "/" {
+			p.insert_str(0, "/");
+		};
+		if self.endpoint.starts_with("http") {
+			return format!("{}:{}{}", self.endpoint, self.port, p);
+		}
+		format!("http://{}:{}{}", self.endpoint, self.port, p)
+	}
+}
+
+/// Represents an OpenTelemetry Endpoint, where Metrics and/or Logs can be received
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct OtelReceiver {
+	pub address: String,
+	pub port: u16,
+
+	#[serde(default = "default_logs_path")]
+	pub path: String,
+}
+fn default_logs_path() -> String { String::from("/v1/logs") }
+impl OtelReceiver {
+	pub fn get_address(&self) -> String {
+		format!("{}:{}", self.address, self.port)
+	}
+}
