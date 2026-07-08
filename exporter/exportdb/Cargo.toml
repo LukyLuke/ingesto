@@ -13,6 +13,7 @@ shared = { path = "../../shared" }
 tiny_http = { version = "0" }
 
 anyhow = { workspace = true }
+futures = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
