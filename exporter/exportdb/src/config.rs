@@ -1,7 +1,7 @@
 use std::fmt::Display;
 
 use serde::{Deserialize, Serialize};
-use shared::types::{DbField, OtelReceiver, Queue, SimpleFieldMapping};
+use shared::types::{DbField, OtelReceiver, Queue};
 use sqlx::{mysql::MySqlConnectOptions, postgres::PgConnectOptions, sqlite::SqliteConnectOptions};
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -197,6 +197,18 @@ pub enum SslMode {
 }
 
 /// Represents a Database-Table with a simple field-mapping from a message to the table schema
+///
+/// ```toml
+/// [[config.database.tables]]
+/// name = "example"
+/// for_messages = ".*"
+/// fields = [
+///   { kind = "String", name = "dbfield", origin = "message" },
+///   { kind = "Int",    name = "dbint",   origin = "severity" },
+///   { kind = "Float",  name = "dbfloat", origin = "some_float" },
+///   { kind = "Bool",   name = "dbbool", origin = "some_boolean" },
+/// ]
+/// ```
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct DbTable {
 	/// Table-Name
@@ -209,11 +221,6 @@ pub struct DbTable {
 	/// Define the Database-Fields with a type to convert the values into
 	#[serde(default)]
 	pub fields: Vec<DbField>,
-
-	// Field-Mapping from the source to the resulting structured mesage
-	// A FieldMapper can reference to a Parser
-	#[serde(default)]
-	pub mapping: Vec<SimpleFieldMapping>,
 }
 fn default_for_messages() -> String { String::from(".*") }
 
@@ -223,7 +230,6 @@ impl Default for DbTable {
 			name: String::from("undefined"),
 			for_messages: default_for_messages(),
 			fields: Vec::new(),
-			mapping: Vec::new(),
 		}
 	}
 }

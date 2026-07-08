@@ -135,16 +135,6 @@ impl fmt::Display for ParserSettings {
 	}
 }
 
-/// Represents a simple mapping of a field from the source message in the destination message
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct SimpleFieldMapping {
-	/// Name of the field in the final struct
-	pub name: String,
-
-	/// The name of the field from the source message
-	pub source: String,
-}
-
 /// Represents a universal mapping of a field from the source message in the final message
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct FieldMapping {
@@ -234,13 +224,16 @@ pub enum DbValue {
 	DateTimeUtc(DateTime<Utc>),
 }
 
+/// Defines a field in the Database from a given type, fieldname and message-field name
+/// * `name` - Field name in the Database
+/// * `origin` - Field name from the log message
 #[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(tag = "kind", content = "name")]
+#[serde(tag = "kind")]
 pub enum DbField {
-	Bool(String),
-	Int(String),
-	Float(String),
-	String(String),
-	Bytes(String),
-	DateTimeUtc(String),
+	Bool { name: String, origin: String },
+	Int { name: String, origin: String },
+	Float { name: String, origin: String },
+	String { name: String, origin: String },
+	Bytes { name: String, origin: String },
+	DateTimeUtc { name: String, origin: String },
 }

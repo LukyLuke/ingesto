@@ -4,7 +4,7 @@ pub mod db;
 use std::{sync::Arc, thread, time::Duration};
 
 use futures::executor::block_on;
-use shared::{self, init_logging, queue::MessageQueue, receiver::start_otel_listener, usage};
+use shared::{self, init_logging, queue::MessageQueue, receiver::start_otel_listener, types::{DbField, DbValue}, usage};
 use tracing::{debug, error, info};
 
 fn main() {
@@ -64,7 +64,22 @@ fn start_exporter(conf: Arc<config::DbConf>, queue: Arc<MessageQueue<String>>) {
 			};
 			debug!(message="processing message", message=%msg);
 
-			let fields = vec!();
+			let mut fields = Vec::new();
+			for table in &conf.database.tables {
+				if table.for_messages != "" {
+					for field in &table.fields {
+						match field {
+							DbField::String { name, origin: _ } => fields.push((String::from(name), DbValue::String(String::from("msg")))),
+							DbField::Float { name, origin: _ } => fields.push((String::from(name), DbValue::F64(0.0))),
+							DbField::Bool { name, origin: _ } => fields.push((String::from(name), DbValue::Bool(true))),
+							DbField::Int { name, origin: _ } => fields.push((String::from(name), DbValue::I64(0))),
+							_ => {}
+						}
+					}
+					break;
+				}
+			}
+
 			block_on(db.insert(&db_name, &fields)).ok();
 		}
 	});
