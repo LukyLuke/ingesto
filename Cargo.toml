@@ -17,9 +17,11 @@ homepage = "https://github.com/lukyluke/ingesto"
 [workspace.dependencies]
 anyhow = { version = "1" }
 bytes = { version = "1" }
+chrono = { version = "0" }
 clap = { version = "4" }
 dashmap = { version = "6" }
 dateparser = { version = "0" }
+futures = { version = "0" }
 notify = { version = "8" }
 once_cell = { version = "1" }
 opentelemetry = { version = "0.32" }
@@ -29,7 +31,7 @@ opentelemetry_sdk = { version = "0.32" }
 prost = { version = "0" }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1" }
-sqlx = { version = "0", features = [ "tls-rustls", "runtime-async-std", "postgres", "mysql", "sqlite", "json" ] }
+sqlx = { version = "0", features = [ "tls-rustls", "runtime-async-std", "postgres", "mysql", "sqlite", "json", "chrono" ] }
 thiserror = { version = "2" }
 tiny_http = { version = "0" }
 tracing = { version = "0" }

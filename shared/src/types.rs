@@ -1,4 +1,5 @@
 use core::fmt;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 /// Message-Queue configuration
@@ -210,4 +211,14 @@ impl Default for OtelReceiver {
 			path: default_logs_path(),
 		}
 	}
+}
+
+/// Specific internal type for adding and reading values from a database
+pub enum DbValue {
+	Bool(bool),
+	I64(i64),
+	F64(f64),
+	String(String),
+	Bytes(Vec<u8>),
+	DateTimeUtc(DateTime<Utc>),
 }
