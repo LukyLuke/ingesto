@@ -44,7 +44,6 @@ fn start_exporter(conf: Arc<config::DbConf>, queue: Arc<MessageQueue<String>>) {
 	let max_time = Duration::from_secs_f32(conf.queue.max_seconds as f32);
 	let _max_messages = conf.queue.max_messages;
 	let db_name = String::from(&conf.database.database);
-	let fields = vec!();
 
 	thread::spawn(move || {
 		let db = db::Db::new(conf.clone());
@@ -65,6 +64,7 @@ fn start_exporter(conf: Arc<config::DbConf>, queue: Arc<MessageQueue<String>>) {
 			};
 			debug!(message="processing message", message=%msg);
 
+			let fields = vec!();
 			block_on(db.insert(&db_name, &fields)).ok();
 		}
 	});

@@ -11,7 +11,7 @@ static ERR_POOL_DIED: &str = "database pool is not alive any more";
 static ERR_NO_CONN: &str = "unable to acquire a db connection";
 static ERR_NOT_REACHABLE: &str = "database not reachable:";
 
-pub struct Db {
+pub(crate) struct Db {
 	pub kind: config::DbKind,
 	pub postgres: Option<PgPool>,
 	pub mariadb: Option<MySqlPool>,
@@ -19,8 +19,8 @@ pub struct Db {
 }
 impl Db {
 	pub(crate) fn new(conf: Arc<config::DbConf>) -> Self {
-		info!(message="initialize database connection", kind=%conf.database.connection.kind);
-		match conf.database.connection.kind {
+		info!(message="initialize database connection", kind=%conf.database.kind);
+		match conf.database.kind {
 			DbKind::PostgreSQL => {
 				Self {
 					kind: DbKind::PostgreSQL,
@@ -48,7 +48,7 @@ impl Db {
 		}
 	}
 
-	pub async fn alive(&self) -> Result<()> {
+	pub(crate) async fn alive(&self) -> Result<()> {
 		match self.kind {
 			DbKind::PostgreSQL => {
 				let pool = self.postgres.as_ref().ok_or_else(|| anyhow!(ERR_POOL_DIED))?;
@@ -71,7 +71,7 @@ impl Db {
 		}
 	}
 
-	pub async fn insert(&self, table: &str, fields: &[(String, DbValue)]) -> Result<()> {
+	pub(crate) async fn insert(&self, table: &str, fields: &[(String, DbValue)]) -> Result<()> {
 		match self.kind {
 			DbKind::PostgreSQL => {
 				let pool = self.postgres.as_ref().ok_or_else(|| anyhow!(ERR_POOL_DIED))?;

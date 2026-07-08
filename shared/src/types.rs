@@ -135,6 +135,16 @@ impl fmt::Display for ParserSettings {
 	}
 }
 
+/// Represents a simple mapping of a field from the source message in the destination message
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct SimpleFieldMapping {
+	/// Name of the field in the final struct
+	pub name: String,
+
+	/// The name of the field from the source message
+	pub source: String,
+}
+
 /// Represents a universal mapping of a field from the source message in the final message
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct FieldMapping {
@@ -173,6 +183,7 @@ pub struct OtelLogger {
 }
 fn default_otel_service() -> String { String::from("ingesto") }
 fn default_otel_port() -> u16 { 4318 }
+
 impl OtelLogger {
 	pub fn get_endpoint(&self, path: &str) -> String {
 		let mut p = path.to_owned();
@@ -221,4 +232,15 @@ pub enum DbValue {
 	String(String),
 	Bytes(Vec<u8>),
 	DateTimeUtc(DateTime<Utc>),
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(tag = "kind", content = "name")]
+pub enum DbField {
+	Bool(String),
+	Int(String),
+	Float(String),
+	String(String),
+	Bytes(String),
+	DateTimeUtc(String),
 }
