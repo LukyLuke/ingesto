@@ -1,12 +1,15 @@
 pub mod config;
 pub mod db;
 
-use std::{sync::Arc, thread, time::Duration};
+use std::{collections::HashMap, sync::{Arc, OnceLock}, thread, time::Duration};
 
 use anyhow::{Result, anyhow};
 use futures::executor::block_on;
+use regex::Regex;
 use shared::{self, init_logging, queue::MessageQueue, receiver::start_otel_listener, types::{DbField, DbValue}, usage};
 use tracing::{debug, error, info};
+
+use crate::config::DbTable;
 
 fn main() {
 	init_logging();
@@ -41,11 +44,19 @@ fn main() {
 	}
 }
 
+/// Starting DB-Exporter
+///
+/// # Arguments
+///
+/// * `conf` - Database configuration
+/// * `queue` - Queue to fetch messages from
 fn start_exporter(conf: Arc<config::DbConf>, queue: Arc<MessageQueue<String>>) {
 	thread::spawn(move || {
 		let max_time = Duration::from_secs_f32(conf.queue.max_seconds as f32);
 		let max_messages = conf.queue.max_messages;
 		let db = Arc::new(db::Db::new(conf.clone()));
+
+		precompile_regex(&conf.database.tables);
 
 		loop {
 			// If the database is not reachable, pause for max_time
@@ -62,6 +73,18 @@ fn start_exporter(conf: Arc<config::DbConf>, queue: Arc<MessageQueue<String>>) {
 	});
 }
 
+/// Read out a message from the queue and insert it into the Database
+///
+/// # Arguments
+///
+/// * `queue` - The queue to read a message from
+/// * `max_time` - Number of seconds to wait for a message in the queue
+/// * `_max_messages` - not used yet
+/// * `db` - The Database-implementation
+///
+/// # Returns
+///
+/// An empty Ok Result or an Error with a string identifying what went wrong
 fn process_queue<DB: db::DbAccess + 'static>(queue: Arc<MessageQueue<String>>, max_time: Duration, _max_messages: u16, db: Arc<DB>) -> Result<()> {
 	let msg = match queue.pull(max_time) {
 		Some(m) => m.to_owned().trim().to_string(),
@@ -72,11 +95,9 @@ fn process_queue<DB: db::DbAccess + 'static>(queue: Arc<MessageQueue<String>>, m
 	};
 	debug!(message="processing message", message=%msg);
 
-	for table in db.tables() {
-		// TODO: Check
-		if table.for_messages != "" {
+	match find_matching_table_config(db.tables_config(), &msg) {
+		Ok(table) => {
 			let json: serde_json::Value = serde_json::from_str(&msg).unwrap_or_default();
-			println!("{:?}", json);
 			let mut fields = Vec::new();
 			for field in &table.fields {
 				match field {
@@ -87,24 +108,81 @@ fn process_queue<DB: db::DbAccess + 'static>(queue: Arc<MessageQueue<String>>, m
 					_ => {}
 				}
 			}
-			return db.insert(&table.name, &fields);
-		}
+			db.insert(&table.name, &fields)
+		},
+		Err(e) => Err(e),
 	}
-	Err(anyhow!("no suitable table configuration found"))
 }
+
+/// A static HashMap to cache Regular Expressions to match a message with a table config
+static TABLES_REGEXES: OnceLock<HashMap<String, Regex>> = OnceLock::new();
+
+/// Precompiles all Regular Expressions for the Message-Matching
+///
+/// The HashMap has the Regular-Expression String as key and the Regex-Impl as value.
+///
+/// # Arguments
+///
+/// * `tables` - List of all Table-Configurations
+///
+/// # Returns
+///
+/// The HashMap with all precompiled matches
+fn precompile_regex(tables: &[DbTable]) -> &HashMap<String, Regex> {
+	TABLES_REGEXES.get_or_init(|| {
+		let mut rm = HashMap::new();
+		for table in tables {
+			match Regex::new(&table.for_messages) {
+				Ok(re) => {
+					info!(message="regex compile", regex=%table.for_messages);
+					rm.insert(table.for_messages.to_owned(), re);
+				},
+				Err(e) => error!(message="regex compile", regex=%table.for_messages, error=%e),
+			};
+		}
+		rm
+	})
+}
+
+/// Finds a matching Table-Configuration for a given message
+///
+/// # Arguments
+///
+/// * `tables` - List of all Table Coonfigurations
+/// * `msg` - Message to find a configuration for
+///
+/// # Returns
+///
+/// A matching Table Configuration or an Error
+/// * If there is no Regular Expression which matches the emssage
+/// * If the Regular Expressions where not yet cached via `precompile_regex()`
+fn find_matching_table_config(tables: &[DbTable], msg: &str) -> Result<DbTable> {
+	if let Some(reg) = TABLES_REGEXES.get() {
+		if let Some(Some(table)) = reg.iter()
+			.find(|(_, re)| re.is_match(msg))
+			.map(|(for_message, _)| {
+				tables.iter().find(|table| table.for_messages == *for_message)
+			}) {
+			return Ok(table.clone());
+		}
+		return Err(anyhow!("no suitable table configuration found"));
+	}
+	Err(anyhow!("tables regex need to be precompiled before accessed: precompile_regex(&[DbTable])"))
+}
+
 
 #[cfg(test)]
 mod test {
 	use super::*;
-	use crate::db::DbAccess;
+	use crate::{config::DbTable, db::DbAccess};
 
 	struct DbTest {
-		pub tables: Vec<config::DbTable>,
+		pub tables: Vec<DbTable>,
 		pub expected: Vec<(String, DbValue)>,
 	}
 	impl DbAccess for DbTest {
-		fn tables(&self) -> &[config::DbTable] {
-			return &self.tables;
+		fn tables_config(&self) -> &[DbTable] {
+			&self.tables
 		}
 
 		fn insert(&self, _table: &str, fields: &[(String, DbValue)]) -> anyhow::Result<()> {
@@ -117,61 +195,80 @@ mod test {
 			}
 		}
 	}
+	impl DbTest {
+		fn new(expected: Vec<(String, DbValue)>) -> Self {
+			let tables = vec!(
+				config::DbTable{
+					name: "first".to_string(),
+					for_messages: "\"match\":\"first\"".to_string(),
+					fields: vec!(
+						DbField::Int    { name: "db_int1".to_string(),   origin: "int1".to_string() },
+						DbField::Bool   { name: "db_bool1".to_string(),  origin: "bool1".to_string() },
+						DbField::Float  { name: "db_float1".to_string(), origin: "float1".to_string() },
+						DbField::String { name: "db_foo1".to_string(),   origin: "foo1".to_string() },
+						DbField::String { name: "db_foo2".to_string(),   origin: "foo2".to_string() },
+					),
+				},
+				config::DbTable{
+					name: "second".to_string(),
+					for_messages: "\"match\":\"second\"".to_string(),
+					fields: vec!(
+						DbField::String { name: "db_foo1".to_string(),   origin: "foo1".to_string() },
+						DbField::String { name: "db_foo2".to_string(),   origin: "foo2".to_string() },
+					),
+				},
+			);
+			precompile_regex(&tables);
+
+			Self {
+				expected,
+				tables,
+			}
+		}
+	}
 
 	#[test]
 	fn test_process_queue_no_messages() {
 		let queue = Arc::new(MessageQueue::<String>::new());
-		let testdb = Arc::new(DbTest{
-			tables: Vec::new(),
-			expected: Vec::new(),
-		});
+		let testdb = Arc::new(DbTest::new(Vec::new()));
 
 		let res = process_queue(queue, Duration::from_millis(1), 0, testdb);
 		assert!(res.is_ok());
-	}
-
-	#[test]
-	fn test_process_queue_no_tables() {
-		let queue = Arc::new(MessageQueue::<String>::new());
-		queue.push(String::from("message"));
-		let testdb = Arc::new(DbTest{
-			tables: Vec::new(),
-			expected: Vec::new(),
-		});
-
-		let res = process_queue(queue, Duration::from_millis(1), 0, testdb);
-		assert_eq!(res.unwrap_err().to_string(), "no suitable table configuration found");
 	}
 
 	#[test]
 	fn test_process_queue_message() {
 		let queue = Arc::new(MessageQueue::<String>::new());
-		queue.push(String::from("{\"foo1\":\"bar1\",\"foo2\":\"bar2\",\"int1\":666,\"float1\":666.666,\"bool1\":true}"));
-
-		let testdb = Arc::new(DbTest{
-			tables: vec!(
-				config::DbTable{
-					name: "test".to_string(),
-					for_messages: ".*".to_string(),
-					fields: vec!(
-						shared::types::DbField::Int    { name: "db_int1".to_string(),   origin: "int1".to_string() },
-						shared::types::DbField::Bool   { name: "db_bool1".to_string(),  origin: "bool1".to_string() },
-						shared::types::DbField::Float  { name: "db_float1".to_string(), origin: "float1".to_string() },
-						shared::types::DbField::String { name: "db_foo1".to_string(),   origin: "foo1".to_string() },
-						shared::types::DbField::String { name: "db_foo2".to_string(),   origin: "foo2".to_string() },
-					),
-				},
-			),
-			expected: vec!(
+		queue.push(String::from("{\"match\":\"first\",\"foo1\":\"bar1\",\"foo2\":\"bar2\",\"int1\":666,\"float1\":666.666,\"bool1\":true}"));
+		let testdb = Arc::new(DbTest::new(
+			vec!(
 				(String::from("db_foo1"),   DbValue::String(String::from("bar1"))),
 				(String::from("db_foo2"),   DbValue::String(String::from("bar2"))),
 				(String::from("db_int1"),   DbValue::I64(666)),
 				(String::from("db_float1"), DbValue::F64(666.666)),
 				(String::from("db_bool1"),  DbValue::Bool(true)),
-			),
-		});
+			)
+		));
 
 		let res = process_queue(queue, Duration::from_millis(1), 0, testdb);
 		assert!(res.is_ok());
+	}
+
+	#[test]
+	fn test_process_queue_no_match() {
+		let queue = Arc::new(MessageQueue::<String>::new());
+		queue.push(String::from("{\"foo1\":\"bar1\",\"foo2\":\"bar2\"}"));
+		let testdb = Arc::new(DbTest::new(
+			vec!(
+				(String::from("db_foo1"),   DbValue::String(String::from("bar1"))),
+				(String::from("db_foo2"),   DbValue::String(String::from("bar2"))),
+				(String::from("db_int1"),   DbValue::I64(666)),
+				(String::from("db_float1"), DbValue::F64(666.666)),
+				(String::from("db_bool1"),  DbValue::Bool(true)),
+			)
+		));
+
+		let res = process_queue(queue, Duration::from_millis(1), 0, testdb);
+		assert_eq!(res.unwrap_err().to_string(), "no suitable table configuration found");
 	}
 }

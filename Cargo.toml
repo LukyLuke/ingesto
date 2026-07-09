@@ -29,6 +29,7 @@ opentelemetry-otlp = { version = "0.32" }
 opentelemetry-proto = { version = "0.32", features = [ "logs", "metrics", "with-serde" ] }
 opentelemetry_sdk = { version = "0.32" }
 prost = { version = "0" }
+regex = { version = "1" }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1" }
 sqlx = { version = "0", features = [ "tls-rustls", "runtime-async-std", "postgres", "mysql", "sqlite", "json", "chrono" ] }

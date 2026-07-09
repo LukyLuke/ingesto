@@ -13,16 +13,16 @@ static ERR_NO_CONN: &str = "unable to acquire a db connection";
 static ERR_NOT_REACHABLE: &str = "database not reachable:";
 
 pub trait DbAccess: Send + Sync {
-	fn tables(&self) -> &[DbTable];
+	fn tables_config(&self) -> &[DbTable];
 	fn insert(&self, table: &str, fields: &[(String, DbValue)]) -> Result<()>;
 }
 
 pub(crate) struct Db {
-	pub kind: config::DbKind,
-	pub tables: Vec<DbTable>,
-	pub postgres: Option<PgPool>,
-	pub mariadb: Option<MySqlPool>,
-	pub sqlite: Option<SqlitePool>,
+	pub(crate) kind: config::DbKind,
+	pub(crate) tables: Vec<DbTable>,
+	pub(crate) postgres: Option<PgPool>,
+	pub(crate) mariadb: Option<MySqlPool>,
+	pub(crate) sqlite: Option<SqlitePool>,
 }
 impl Drop for Db {
 	fn drop(&mut self) {
@@ -179,7 +179,7 @@ impl Db {
 }
 
 impl DbAccess for Db {
-	fn tables(&self) -> &[DbTable] {
+	fn tables_config(&self) -> &[DbTable] {
 		&self.tables
 	}
 
