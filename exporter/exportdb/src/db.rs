@@ -17,6 +17,11 @@ pub trait DbAccess: Send + Sync {
 	fn insert(&self, table: &str, fields: &[(String, DbValue)]) -> Result<()>;
 }
 
+enum DbBackend {
+	Postgres(PgPool),
+	MadiaDb(MySqlPool),
+	SqLite(SqlitePool),
+}
 pub(crate) struct Db {
 	pub(crate) tables: Vec<DbTable>,
 	pub(crate) postgres: Option<PgPool>,
