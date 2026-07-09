@@ -18,7 +18,6 @@ pub trait DbAccess: Send + Sync {
 }
 
 pub(crate) struct Db {
-	pub(crate) kind: config::DbKind,
 	pub(crate) tables: Vec<DbTable>,
 	pub(crate) postgres: Option<PgPool>,
 	pub(crate) mariadb: Option<MySqlPool>,
@@ -35,7 +34,6 @@ impl Db {
 		match conf.database.kind {
 			DbKind::PostgreSQL => {
 				Self {
-					kind: DbKind::PostgreSQL,
 					tables: conf.database.tables.clone(),
 					postgres: Some(PgPool::connect_lazy_with(conf.database.get_postgres_options())),
 					mariadb: None,
@@ -44,7 +42,6 @@ impl Db {
 			},
 			DbKind::MariaDB => {
 				Self {
-					kind: DbKind::MariaDB,
 					tables: conf.database.tables.clone(),
 					postgres: None,
 					mariadb: Some(MySqlPool::connect_lazy_with(conf.database.get_mysql_options())),
@@ -53,7 +50,6 @@ impl Db {
 			},
 			DbKind::SQLite => {
 				Self {
-					kind: DbKind::SQLite,
 					tables: conf.database.tables.clone(),
 					postgres: None,
 					mariadb: None,
@@ -64,46 +60,38 @@ impl Db {
 	}
 
 	pub(crate) async fn shutdown(&self) -> Result<()> {
-		match self.kind {
-			DbKind::PostgreSQL => {
-				let pool = self.postgres.as_ref().ok_or_else(|| anyhow!(ERR_POOL_DIED))?;
-				pool.close().await;
-				Ok(())
-			},
-			DbKind::MariaDB => {
-				let pool = self.mariadb.as_ref().ok_or_else(|| anyhow!(ERR_POOL_DIED))?;
-				pool.close().await;
-				Ok(())
-			},
-			DbKind::SQLite => {
-				let pool = self.sqlite.as_ref().ok_or_else(|| anyhow!(ERR_POOL_DIED))?;
-				pool.close().await;
-				Ok(())
-			},
+		if let Some(pool) = self.postgres.as_ref() {
+			pool.close().await;
+
+		} else if let Some(pool) = self.mariadb.as_ref() {
+			pool.close().await;
+
+		} else if let Some(pool) = self.sqlite.as_ref() {
+			pool.close().await;
+
+		} else {
+			return Err(anyhow!(ERR_POOL_DIED));
 		}
+		Ok(())
 	}
 
 	pub(crate) async fn alive(&self) -> Result<()> {
-		match self.kind {
-			DbKind::PostgreSQL => {
-				let pool = self.postgres.as_ref().ok_or_else(|| anyhow!(ERR_POOL_DIED))?;
-				let mut conn = pool.try_acquire().ok_or_else(|| anyhow!(ERR_NO_CONN))?;
-				conn.ping().await.map_err(|e| anyhow!("{}: {:?}", ERR_NOT_REACHABLE, e))?;
-				Ok(())
-			},
-			DbKind::MariaDB => {
-				let pool = self.mariadb.as_ref().ok_or_else(|| anyhow!(ERR_POOL_DIED))?;
-				let mut conn = pool.try_acquire().ok_or_else(|| anyhow!(ERR_NO_CONN))?;
-				conn.ping().await.map_err(|e| anyhow!("{}: {:?}", ERR_NOT_REACHABLE, e))?;
-				Ok(())
-			},
-			DbKind::SQLite => {
-				let pool = self.sqlite.as_ref().ok_or_else(|| anyhow!(ERR_POOL_DIED))?;
-				let mut conn = pool.try_acquire().ok_or_else(|| anyhow!(ERR_NO_CONN))?;
-				conn.ping().await.map_err(|e| anyhow!("{}: {:?}", ERR_NOT_REACHABLE, e))?;
-				Ok(())
-			},
+		if let Some(pool) = self.postgres.as_ref() {
+			let mut conn = pool.try_acquire().ok_or_else(|| anyhow!(ERR_NO_CONN))?;
+			conn.ping().await.map_err(|e| anyhow!("{}: {:?}", ERR_NOT_REACHABLE, e))?;
+
+		} else if let Some(pool) = self.mariadb.as_ref() {
+			let mut conn = pool.try_acquire().ok_or_else(|| anyhow!(ERR_NO_CONN))?;
+			conn.ping().await.map_err(|e| anyhow!("{}: {:?}", ERR_NOT_REACHABLE, e))?;
+
+		} else if let Some(pool) = self.sqlite.as_ref() {
+			let mut conn = pool.try_acquire().ok_or_else(|| anyhow!(ERR_NO_CONN))?;
+			conn.ping().await.map_err(|e| anyhow!("{}: {:?}", ERR_NOT_REACHABLE, e))?;
+
+		} else {
+			return Err(anyhow!(ERR_POOL_DIED));
 		}
+		Ok(())
 	}
 
 	fn build_insert_query<DB: Database>(table: &str, kind: &DbKind, fields: &[(String, DbValue)]) -> QueryBuilder::<DB> {
@@ -184,22 +172,20 @@ impl DbAccess for Db {
 	}
 
 	fn insert(&self, table: &str, fields: &[(String, DbValue)]) -> Result<()> {
-		match self.kind {
-			DbKind::PostgreSQL => {
-				let pool = self.postgres.as_ref().ok_or_else(|| anyhow!(ERR_POOL_DIED))?;
-				let builder: QueryBuilder<Postgres> = Self::build_insert_query(table, &self.kind, &fields);
-				block_on(Self::execute_postgres(pool, builder, &fields))
-			},
-			DbKind::MariaDB => {
-				let pool = self.mariadb.as_ref().ok_or_else(|| anyhow!(ERR_POOL_DIED))?;
-				let builder: QueryBuilder<MySql> = Self::build_insert_query(table, &self.kind, &fields);
-				block_on(Self::execute_mariadb(pool, builder, &fields))
-			},
-			DbKind::SQLite => {
-				let pool = self.sqlite.as_ref().ok_or_else(|| anyhow!(ERR_POOL_DIED))?;
-				let builder: QueryBuilder<Sqlite> = Self::build_insert_query(table, &self.kind, &fields);
-				block_on(Self::execute_sqlite(pool, builder, &fields))
-			},
+		if let Some(pool) = self.postgres.as_ref() {
+			let builder: QueryBuilder<Postgres> = Self::build_insert_query(table, &DbKind::PostgreSQL, &fields);
+			return block_on(Self::execute_postgres(pool, builder, &fields));
+
+		} else if let Some(pool) = self.mariadb.as_ref() {
+			let builder: QueryBuilder<MySql> = Self::build_insert_query(table, &DbKind::MariaDB, &fields);
+			return block_on(Self::execute_mariadb(pool, builder, &fields));
+
+		} else if let Some(pool) = self.sqlite.as_ref() {
+			let builder: QueryBuilder<Sqlite> = Self::build_insert_query(table, &DbKind::SQLite, &fields);
+			return block_on(Self::execute_sqlite(pool, builder, &fields));
+
 		}
+		Err(anyhow!(ERR_POOL_DIED))
 	}
 }
+
