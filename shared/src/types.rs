@@ -215,6 +215,7 @@ impl Default for OtelReceiver {
 }
 
 /// Specific internal type for adding and reading values from a database
+#[derive(Debug, Clone, PartialEq)]
 pub enum DbValue {
 	Bool(bool),
 	I64(i64),
