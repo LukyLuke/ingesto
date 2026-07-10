@@ -19,7 +19,7 @@ fn main() {
 
 	let r_conf: anyhow::Result<config::Config> = shared::load_config(conf_file);
 	let conf = match r_conf {
-		Ok(c) => Arc::new(c.webhook),
+		Ok(c) => Arc::new(c.config),
 		Err(e) => {
 			error!("{:#?}", e);
 			return;

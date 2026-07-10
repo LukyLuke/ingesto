@@ -19,15 +19,17 @@ anyhow = { version = "1" }
 bytes = { version = "1" }
 chrono = { version = "0" }
 clap = { version = "4" }
-dashmap = { version = "6" }
 dateparser = { version = "0" }
+dashmap = { version = "6" }
 futures = { version = "0" }
+jiff = { version = "0" }
 notify = { version = "8" }
 once_cell = { version = "1" }
 opentelemetry = { version = "0.32" }
 opentelemetry-otlp = { version = "0.32" }
 opentelemetry-proto = { version = "0.32", features = [ "logs", "metrics", "with-serde" ] }
 opentelemetry_sdk = { version = "0.32" }
+parse_datetime = { version = "0" }
 prost = { version = "0" }
 regex = { version = "1" }
 serde = { version = "1", features = ["derive"] }

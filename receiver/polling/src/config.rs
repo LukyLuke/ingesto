@@ -15,7 +15,7 @@ static TEMPLATE_CACHE: Lazy<DashMap<String, Template>> = Lazy::new(|| DashMap::n
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Config {
-	pub polling: Polling,
+	pub config: Polling,
 }
 
 #[derive(Debug, Deserialize, Serialize)]

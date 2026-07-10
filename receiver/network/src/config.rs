@@ -3,7 +3,7 @@ use shared::types::{Parser, Queue};
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Config {
-	pub receiver: Receiver,
+	pub config: Receiver,
 }
 
 #[derive(Debug, Deserialize, Serialize)]

@@ -1,6 +1,7 @@
-use std::{fmt, sync::Arc};
+use core::fmt;
+use std::sync::Arc;
 
-use chrono::Utc;
+use jiff::{Timestamp, Zoned, tz::TimeZone};
 use serde_json::Value;
 use uuid::Uuid;
 
@@ -135,34 +136,62 @@ impl Template {
 				// Append the 'PARAM-Value' or '{{PARAM}}' if no value is set
 				TemplateToken::Param(val) => {
 					let v = match &val {
+						// UUIDs
 						&ParamParser::Uuid => {
 							let uuid = Uuid::new_v4().to_string();
 							&format!("{}", uuid)
 						},
 
+						// Current Date-Time Values
 						&ParamParser::Now(format) => {
 							let formatted = if format.is_empty() {
-								Utc::now().format("%Y-%m-%d").to_string()
+								Zoned::now().with_time_zone(TimeZone::UTC).strftime("%Y-%m-%d").to_string()
 							} else {
-								Utc::now().format(format).to_string()
+								Zoned::now().with_time_zone(TimeZone::UTC).strftime(format).to_string()
 							};
 							&format!("{}", formatted)
 						},
 
+						// Any DateTime formats, including relative dates like "-5 days"
 						&ParamParser::Date(d, format) => {
 							let date = if d == "$now" {
-								Utc::now()
+								Zoned::now().with_time_zone(TimeZone::UTC)
+
 							} else {
-								dateparser::parse(d).unwrap_or_default().with_timezone(&Utc)
+								// Check the result for a DateTime value, parse it and use the UTC value
+								let date_val = if d.get(0..4).unwrap_or_default() == "$res" {
+									// TODO: implement $date($response/foo/bar#%Y-%m-%d)
+									// Enable `test_render_date_result()` afterwards
+									d.to_owned()
+								} else {
+									d.to_owned()
+								};
+
+								// Try to parse a normal date in one of the most common formats,
+								// if this fails, try to parse it as a relative date format like "-5 days"
+								match dateparser::parse(&date_val) {
+									Ok(d) => {
+										let ts: Timestamp = d.to_rfc3339().parse().unwrap_or_default();
+										ts.to_zoned(TimeZone::UTC)
+									},
+									Err(_) => {
+										match parse_datetime::parse_datetime(&date_val) {
+											Ok(p) => p.into_zoned().unwrap_or_default().with_time_zone(TimeZone::UTC),
+											Err(_) => Zoned::now().with_time_zone(TimeZone::UTC)
+										}
+									}
+								}
 							};
+
 							let formatted = if format.is_empty() {
-								date.format("%Y-%m-%d").to_string()
+								date.strftime("%Y-%m-%d").to_string()
 							} else {
-								date.format(format).to_string()
+								date.strftime(format).to_string()
 							};
 							&format!("{}", formatted)
 						},
 
+						// Value from the last response
 						&ParamParser::Response(json_path) => {
 							let v = match &value.pointer(json_path.as_str()).unwrap_or(&Value::Null) {
 								&Value::Bool(v) => format!("{}", v),
@@ -173,6 +202,7 @@ impl Template {
 							&format!("{}", v)
 						},
 
+						// Just a static value
 						&ParamParser::Static(token) => {
 							&format!("{{{{{}}}}}", token)
 						},
@@ -296,7 +326,8 @@ impl fmt::Display for ParamParser {
 
 #[cfg(test)]
 mod tests {
-	use serde_json::json;
+	use jiff::ToSpan;
+use serde_json::json;
 	use super::*;
 
 	#[test]
@@ -310,12 +341,34 @@ mod tests {
 
 	#[test]
 	fn test_render_dates() {
-		let tpl = Template::parse("Now:{{ $now }}; dmY:{{ $now(%d-%m-%Y) }}; Date:{{ $date(2010-11-12) }}; Date-dmY:{{ $date(2010-11-12#%d-%m-%Y) }};");
+		let tpl = Template::parse("Now:{{ $now }}; dmY:{{ $now(%d-%m-%Y) }}; Date:{{ $date(2008-10-12) }}; Date-dmY:{{ $date(2008-10-12#%d-%m-%Y) }};");
 		let params = Arc::new(Value::Null);
-		let now = Utc::now();
+		let now = Zoned::now().with_time_zone(TimeZone::UTC);
 
 		let res = tpl.render(params);
-		assert_eq!(res, String::from(format!("Now:{}; dmY:{}; Date:2010-11-12; Date-dmY:12-11-2010;", now.format("%Y-%m-%d"), now.format("%d-%m-%Y"))));
+		assert_eq!(res, String::from(format!("Now:{}; dmY:{}; Date:2008-10-12; Date-dmY:12-10-2008;", now.strftime("%Y-%m-%d"), now.strftime("%d-%m-%Y"))));
+	}
+
+	#[test]
+	fn test_render_relative_dates() {
+		let tpl = Template::parse("Relative:{{ $date(-5days) }}; Date-dmY:{{ $date(-5days#%d-%m-%Y) }};");
+		let params = Arc::new(Value::Null);
+		let date = Zoned::now().saturating_sub(5.days()).with_time_zone(TimeZone::UTC);
+
+		let res = tpl.render(params);
+		assert_eq!(res, String::from(format!("Relative:{}; Date-dmY:{};", date.strftime("%Y-%m-%d"), date.strftime("%d-%m-%Y"))));
+	}
+
+	#[test]
+	#[ignore]
+	fn test_render_date_result() {
+		let tpl = Template::parse("Response:{{ $date($response/data/foo) }}; Date-dmY:{{ $date($response/data/foo#%d-%m-%Y) }};");
+		let params = Arc::new(
+			json!({ "paging":{"cursor":"xxx","pages":77}, "data":{ "foo": "2008-10-12 10:12:14" } })
+		);
+
+		let res = tpl.render(params);
+		assert_eq!(res, String::from("Response:2008-10-12; Date-dmY: 12-10-2008"));
 	}
 
 	#[test]

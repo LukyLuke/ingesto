@@ -11,15 +11,17 @@ homepage.workspace = true
 shared = { path = "../../shared" }
 
 cron = { version = "0" }
-chrono = { version = "0" }
-reqwest = { version = "0", features = [ "blocking" ] }
 http = { version = "1" }
+reqwest = { version = "0", features = [ "blocking" ] }
 
 anyhow = { workspace = true }
-dashmap = { workspace = true }
+chrono = { workspace = true }
 dateparser = { workspace = true }
+dashmap = { workspace = true }
+jiff = { workspace = true }
 notify = { workspace = true }
 once_cell = { workspace = true }
+parse_datetime = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }

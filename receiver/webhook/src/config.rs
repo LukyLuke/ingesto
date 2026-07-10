@@ -3,7 +3,7 @@ use shared::types::{Parser, Queue};
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Config {
-	pub webhook: Webhook,
+	pub config: Webhook,
 }
 
 #[derive(Debug, Deserialize, Serialize)]

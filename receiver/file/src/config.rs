@@ -4,7 +4,7 @@ use shared::types::{Parser, Queue};
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Config {
-	pub reader: Reader,
+	pub config: Reader,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
