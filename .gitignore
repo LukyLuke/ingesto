@@ -1,6 +1,8 @@
 *~
 *.swp
 *.tmp
+*-swp
+*-tmp
 *.log
 
 /target/

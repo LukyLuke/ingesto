@@ -8,57 +8,67 @@ use shared::{self, types::DbValue};
 use sqlx::{Connection, Database, MySql, MySqlPool, PgPool, Postgres, QueryBuilder, Sqlite, SqlitePool};
 use tracing::{info, error};
 
-static ERR_POOL_DIED: &str = "database pool is not alive any more";
 static ERR_NO_CONN: &str = "unable to acquire a db connection";
 static ERR_NOT_REACHABLE: &str = "database not reachable:";
 
+/// Trait to be able to have different implementations (for tests mainly)
 pub trait DbAccess: Send + Sync {
 	fn tables_config(&self) -> &[DbTable];
 	fn insert(&self, table: &str, fields: &[(String, DbValue)]) -> Result<()>;
 }
 
+/// Identifies a Database Backend with a conneciton pool to it
 enum DbBackend {
 	Postgres(PgPool),
 	MadiaDb(MySqlPool),
 	SqLite(SqlitePool),
 }
+
+/// The main Database conenction and data handling
 pub(crate) struct Db {
-	pub(crate) tables: Vec<DbTable>,
-	pub(crate) postgres: Option<PgPool>,
-	pub(crate) mariadb: Option<MySqlPool>,
-	pub(crate) sqlite: Option<SqlitePool>,
+	/// List of table configuration
+	tables: Vec<DbTable>,
+
+	/// The Database Backend
+	db: DbBackend,
 }
+
+/// The Drop-Trait is for shuttingDown/Closing the DB connections gracefully
 impl Drop for Db {
 	fn drop(&mut self) {
 		block_on(self.shutdown()).inspect_err(|e| error!(%e)).ok();
 	}
 }
+
 impl Db {
-	pub(crate) fn new(conf: Arc<config::DbConf>) -> Self {
+	/// Create a new Database Instance
+	///
+	/// # Arguments
+	///
+	/// * `conf` - The Database Configuration
+	///
+	/// # Returns
+	///
+	/// A Db Instance
+	pub fn new(conf: Arc<config::DbConf>) -> Self {
 		info!(message="initialize database connection", kind=%conf.database.kind);
 		match conf.database.kind {
 			DbKind::PostgreSQL => {
 				Self {
 					tables: conf.database.tables.clone(),
-					postgres: Some(PgPool::connect_lazy_with(conf.database.get_postgres_options())),
-					mariadb: None,
-					sqlite: None,
+					db: DbBackend::Postgres(PgPool::connect_lazy_with(conf.database.get_postgres_options())),
 				}
 			},
 			DbKind::MariaDB => {
 				Self {
 					tables: conf.database.tables.clone(),
-					postgres: None,
-					mariadb: Some(MySqlPool::connect_lazy_with(conf.database.get_mysql_options())),
-					sqlite: None,
+					db: DbBackend::MadiaDb(MySqlPool::connect_lazy_with(conf.database.get_mysql_options())),
 				}
 			},
 			DbKind::SQLite => {
 				Self {
 					tables: conf.database.tables.clone(),
-					postgres: None,
-					mariadb: None,
-					sqlite: Some(SqlitePool::connect_lazy_with(conf.database.get_sqlite_options())),
+					db: DbBackend::SqLite(SqlitePool::connect_lazy_with(conf.database.get_sqlite_options())),
 				}
 			},
 		}
@@ -70,17 +80,10 @@ impl Db {
 	///
 	/// Ok if the pool was shutdown, an Error otherwise
 	pub(crate) async fn shutdown(&self) -> Result<()> {
-		if let Some(pool) = self.postgres.as_ref() {
-			pool.close().await;
-
-		} else if let Some(pool) = self.mariadb.as_ref() {
-			pool.close().await;
-
-		} else if let Some(pool) = self.sqlite.as_ref() {
-			pool.close().await;
-
-		} else {
-			return Err(anyhow!(ERR_POOL_DIED));
+		match &self.db {
+			DbBackend::Postgres(pool) => pool.close().await,
+			DbBackend::MadiaDb(pool) => pool.close().await,
+			DbBackend::SqLite(pool) => pool.close().await,
 		}
 		Ok(())
 	}
@@ -90,23 +93,21 @@ impl Db {
 	/// # Results
 	///
 	/// Ok if the pool is still alive, otherwise an error
-	pub(crate) async fn alive(&self) -> Result<()> {
-		if let Some(pool) = self.postgres.as_ref() {
-			let mut conn = pool.try_acquire().ok_or_else(|| anyhow!(ERR_NO_CONN))?;
-			conn.ping().await.map_err(|e| anyhow!("{}: {:?}", ERR_NOT_REACHABLE, e))?;
-
-		} else if let Some(pool) = self.mariadb.as_ref() {
-			let mut conn = pool.try_acquire().ok_or_else(|| anyhow!(ERR_NO_CONN))?;
-			conn.ping().await.map_err(|e| anyhow!("{}: {:?}", ERR_NOT_REACHABLE, e))?;
-
-		} else if let Some(pool) = self.sqlite.as_ref() {
-			let mut conn = pool.try_acquire().ok_or_else(|| anyhow!(ERR_NO_CONN))?;
-			conn.ping().await.map_err(|e| anyhow!("{}: {:?}", ERR_NOT_REACHABLE, e))?;
-
-		} else {
-			return Err(anyhow!(ERR_POOL_DIED));
+	pub async fn alive(&self) -> Result<()> {
+		match &self.db {
+			DbBackend::Postgres(pool) => {
+				let mut conn = pool.try_acquire().ok_or_else(|| anyhow!(ERR_NO_CONN))?;
+				conn.ping().await.map_err(|e| anyhow!("{}: {:?}", ERR_NOT_REACHABLE, e))
+			},
+			DbBackend::MadiaDb(pool) => {
+				let mut conn = pool.try_acquire().ok_or_else(|| anyhow!(ERR_NO_CONN))?;
+				conn.ping().await.map_err(|e| anyhow!("{}: {:?}", ERR_NOT_REACHABLE, e))
+			},
+			DbBackend::SqLite(pool) => {
+				let mut conn = pool.try_acquire().ok_or_else(|| anyhow!(ERR_NO_CONN))?;
+				conn.ping().await.map_err(|e| anyhow!("{}: {:?}", ERR_NOT_REACHABLE, e))
+			},
 		}
-		Ok(())
 	}
 
 	/// Builds the start of an INSERT-Query as a QueryBuilder
@@ -269,26 +270,42 @@ impl Db {
 	}
 }
 
+/// The DbAccess-Trait if for having different implementations of the direct DB-Connections
 impl DbAccess for Db {
+	/// Returns the Tables configuration
+	///
+	/// # Returns
+	///
+	/// List of all Tables which are configured
 	fn tables_config(&self) -> &[DbTable] {
 		&self.tables
 	}
 
+	/// Insert values into a DB Table
+	///
+	/// # Arguments
+	///
+	/// * `table` - Table to insert values into
+	/// * `fields` - List of tuples identifying the Column-Name and Value
+	///
+	/// # Returns
+	///
+	/// Result if the insert was Ok or not
 	fn insert(&self, table: &str, fields: &[(String, DbValue)]) -> Result<()> {
-		if let Some(pool) = self.postgres.as_ref() {
-			let builder: QueryBuilder<Postgres> = Self::build_insert_query(table, &DbKind::PostgreSQL, &fields);
-			return block_on(Self::execute_postgres(pool, builder, &fields));
-
-		} else if let Some(pool) = self.mariadb.as_ref() {
-			let builder: QueryBuilder<MySql> = Self::build_insert_query(table, &DbKind::MariaDB, &fields);
-			return block_on(Self::execute_mariadb(pool, builder, &fields));
-
-		} else if let Some(pool) = self.sqlite.as_ref() {
-			let builder: QueryBuilder<Sqlite> = Self::build_insert_query(table, &DbKind::SQLite, &fields);
-			return block_on(Self::execute_sqlite(pool, builder, &fields));
-
+		match &self.db {
+			DbBackend::Postgres(pool) => {
+				let builder: QueryBuilder<Postgres> = Self::build_insert_query(table, &DbKind::PostgreSQL, &fields);
+				block_on(Self::execute_postgres(pool, builder, &fields))
+			},
+			DbBackend::MadiaDb(pool) => {
+				let builder: QueryBuilder<MySql> = Self::build_insert_query(table, &DbKind::PostgreSQL, &fields);
+				block_on(Self::execute_mariadb(pool, builder, &fields))
+			},
+			DbBackend::SqLite(pool) => {
+				let builder: QueryBuilder<Sqlite> = Self::build_insert_query(table, &DbKind::PostgreSQL, &fields);
+				block_on(Self::execute_sqlite(pool, builder, &fields))
+			},
 		}
-		Err(anyhow!(ERR_POOL_DIED))
 	}
 }
 
