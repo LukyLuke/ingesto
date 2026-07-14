@@ -11,6 +11,7 @@ homepage.workspace = true
 shared = { path = "../../shared" }
 
 anyhow = { workspace = true }
+base64 = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
 tiny_http = { workspace = true }

@@ -99,15 +99,18 @@ pub enum Authentication {
 	/// With/out 'Bearer' prefix
 	/// use `file:/FILE` or `env:ENV_VAR` for a secure configuration of user and password values
 	Bearer(String),
+
+	/// Header Authentication with a key and a value.
+	/// use `file:/FILE` or `env:ENV_VAR` for a secure configuration of user and password values
 	Header(Param),
 }
 impl fmt::Display for Authentication {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		match self {
 			Authentication::None => write!(f, "None"),
-			Authentication::Basic { user: u, pass: _ } => write!(f, "Basic '{}: ****'", u),
-			Authentication::Bearer(_) => write!(f, "Bearer ****"),
-			Authentication::Header(param) => write!(f, "Header '{}: ****'", param.name),
+			Authentication::Basic { user, pass } => write!(f, "Basic '{}: {}****'", user, pass.get(0..3).unwrap_or_default()),
+			Authentication::Bearer(bearer) => write!(f, "Bearer {}****", bearer.get(0..3).unwrap_or_default()),
+			Authentication::Header(param) => write!(f, "Header '{}: {}****'", param.name, param.value.get(0..3).unwrap_or_default()),
 		}
 	}
 }

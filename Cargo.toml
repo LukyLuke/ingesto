@@ -16,6 +16,7 @@ homepage = "https://github.com/lukyluke/ingesto"
 
 [workspace.dependencies]
 anyhow = { version = "1" }
+base64 = { version = "0" }
 bytes = { version = "1" }
 chrono = { version = "0" }
 clap = { version = "4" }
