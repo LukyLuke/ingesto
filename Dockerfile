@@ -33,11 +33,32 @@ COPY .cargo.toml.* .cargo/config.toml
 COPY . .
 RUN --mount=type=cache,target=$SCCACHE_DIR,sharing=locked \
   cargo build --release
-RUN rm -Rf /app/{build,incremental,deps,examples,*.d,lib*}
 
 
 # Finally: Create an image from scratch with all the binaries
+#FROM rust:1.97-slim
 FROM scratch
 WORKDIR /app
-COPY --from=build /app/target/release/ .
 
+USER 1000
+VOLUME /app/config
+
+COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+
+COPY --from=build /lib/x86_64-linux-gnu/ld-linux-x86-64.so* /lib/x86_64-linux-gnu/
+COPY --from=build /lib64/ld-linux-x86-64.so.2 /lib64/
+
+COPY --from=build /lib/x86_64-linux-gnu/libc.so* /lib/x86_64-linux-gnu/
+COPY --from=build /lib/x86_64-linux-gnu/libgcc_s.so* /lib/x86_64-linux-gnu/
+COPY --from=build /lib/x86_64-linux-gnu/libm.so* /lib/x86_64-linux-gnu/
+COPY --from=build /lib/x86_64-linux-gnu/libselinux.so* /lib/x86_64-linux-gnu/
+COPY --from=build /lib/x86_64-linux-gnu/libcap.so* /lib/x86_64-linux-gnu/
+COPY --from=build /lib/x86_64-linux-gnu/libpcre* /lib/x86_64-linux-gnu/
+COPY --from=build /usr/bin/sh /bin/
+COPY --from=build /usr/bin/ls /bin/
+COPY --from=build /usr/bin/ldd /bin/
+COPY --from=build /usr/bin/rm /bin/
+
+COPY --from=build /app/target/release/ingesto-* .
+
+RUN /bin/rm *.d
