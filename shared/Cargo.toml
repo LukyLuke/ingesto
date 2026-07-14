@@ -8,6 +8,7 @@ repository.workspace = true
 homepage.workspace = true
 
 [dependencies]
+env = { version = "1" }
 toml = { version = "1" }
 serde_json_path = { version = "0" }
 
