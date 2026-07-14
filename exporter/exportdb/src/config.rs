@@ -1,7 +1,7 @@
 use std::fmt::Display;
 
 use serde::{Deserialize, Serialize};
-use shared::types::{DbField, OtelReceiver, Queue};
+use shared::{secrets_string, types::{DbField, OtelReceiver, Queue}};
 use sqlx::{mysql::MySqlConnectOptions, postgres::PgConnectOptions, sqlite::SqliteConnectOptions};
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -81,7 +81,7 @@ impl Database {
 		opt = match &self.auth {
 			Some(auth) => {
 				match auth {
-					Authentication::Simple { user, pass } => opt.username(user).password(pass),
+					Authentication::Simple { user, pass } => opt.username(secrets_string(user).unwrap_or_default().as_ref()).password(secrets_string(pass).unwrap_or_default().as_ref()),
 					_ => opt,
 				}
 			},
@@ -122,6 +122,7 @@ pub enum Authentication {
 	Passfile,
 
 	/// Use a Username and Password
+	/// use `file:/FILE` or `env:ENV_VAR` for a secure configuration of user and password values
 	Simple { user: String, pass: String },
 }
 

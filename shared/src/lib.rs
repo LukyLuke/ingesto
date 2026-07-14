@@ -12,7 +12,7 @@ use clap::{Arg, Command, builder::{PathBufValueParser}};
 use toml;
 
 /// Initialize global logging
-/// Set the environment `RUST_LOG` to `debug|info|error`
+/// Set the environment `RUST_LOG` to `debug|info|error` for the loglevel
 pub fn init_logging() {
 	let filter = EnvFilter::try_from_default_env()
 		.unwrap_or_else(|_| EnvFilter::new("debug"));
