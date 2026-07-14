@@ -10,7 +10,7 @@ use chrono::{Duration, Utc};
 use cron::Schedule;
 use once_cell::sync::Lazy;
 use reqwest::{StatusCode, blocking::{Response, RequestBuilder}};
-use shared::{self, init_logging, parser::MessageParser, queue::MessageQueue, usage};
+use shared::{self, init_logging, parser::MessageParser, queue::MessageQueue, usage, secrets_string};
 use serde_json::{Value, json};
 use tracing::{debug, error, info};
 
@@ -113,13 +113,13 @@ fn call_api(conf: Arc<config::Endpoint>, queue: Arc<shared::queue::MessageQueue<
 
 		// Authentication
 		req = match &conf.auth {
-			Some(Authentication::Header(param)) => req.header(&param.name, config::template_string(&param.value, Arc::clone(&response))),
-			Some(Authentication::Basic { user, pass }) => req.basic_auth(user, Some(pass)),
+			Some(Authentication::Header(param)) => req.header(&param.name, config::template_string(&secrets_string(&param.value).unwrap_or_default(), Arc::clone(&response))),
+			Some(Authentication::Basic { user, pass }) => req.basic_auth(secrets_string(user).unwrap_or_default(), secrets_string(pass).ok()),
 			Some(Authentication::Bearer(token)) => {
 				if token.starts_with("Bearer") {
-					req.bearer_auth(token.get(7..).unwrap_or_default())
+					req.bearer_auth(secrets_string(token.get(7..).unwrap_or_default()).unwrap_or_default())
 				} else {
-					req.bearer_auth(token)
+					req.bearer_auth(secrets_string(token).unwrap_or_default())
 				}
 			},
 			_ => req,
