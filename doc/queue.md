@@ -23,5 +23,9 @@ max_messages = 1024
 max_seconds = 60
 max_size = 65535
 collect_messages = true
-```
 
+[config.queue.otel_logger]
+endpoint = "exporter-xy.containers.internal"
+port = 4318
+service = "ingesto"
+```

@@ -13,7 +13,7 @@ FROM base AS prepare
 WORKDIR /app
 COPY .cargo.toml.* .cargo/config.toml
 COPY . .
-RUN --mount=type=cache,target=$SCCACHE_DIR,sharing=locked \
+RUN --mount=type=cache,target=$SCCACHE_DIR,sharing=locked,uid=1000 \
   cargo chef prepare --recipe-path recipe.json
 
 
@@ -22,7 +22,7 @@ FROM base AS cook
 WORKDIR /app
 COPY .cargo.toml.* .cargo/config.toml
 COPY --from=prepare /app/recipe.json recipe.json
-RUN --mount=type=cache,target=$SCCACHE_DIR,sharing=locked \
+RUN --mount=type=cache,target=$SCCACHE_DIR,sharing=locked,uid=1000 \
   cargo chef cook --release --recipe-path recipe.json
 
 
@@ -31,16 +31,14 @@ FROM cook AS build
 WORKDIR /app
 COPY .cargo.toml.* .cargo/config.toml
 COPY . .
-RUN --mount=type=cache,target=$SCCACHE_DIR,sharing=locked \
+RUN --mount=type=cache,target=$SCCACHE_DIR,sharing=locked,uid=1000 \
   cargo build --release
 
 
 # Finally: Create an image from scratch with all the binaries
-#FROM rust:1.97-slim
 FROM scratch
 WORKDIR /app
 
-USER 1000
 VOLUME /app/config
 VOLUME /app/secrets
 
@@ -61,5 +59,8 @@ COPY --from=build /usr/bin/ldd /bin/
 COPY --from=build /usr/bin/rm /bin/
 
 COPY --from=build /app/target/release/ingesto-* .
-
 RUN /bin/rm *.d
+
+USER 1000
+ENTRYPOINT [""]
+CMD [""]
