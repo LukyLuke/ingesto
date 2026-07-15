@@ -1,3 +1,4 @@
+# Editor
 *~
 *.swp
 *.tmp
@@ -5,15 +6,19 @@
 *-tmp
 *.log
 
-.cargo.toml.*
-
+# Rust
 /target/
 **/target/
 
 /Cargo.lock
 **/Cargo.lock
 
+# Container
+.cargo.toml.*
+/configs
+/secrets
 
+# Local Testing
 /*config.toml
 **/*config.toml
 /*config.yaml

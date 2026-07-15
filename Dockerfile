@@ -42,6 +42,7 @@ WORKDIR /app
 
 USER 1000
 VOLUME /app/config
+VOLUME /app/secrets
 
 COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 

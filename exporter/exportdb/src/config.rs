@@ -89,7 +89,7 @@ impl Database {
 		};
 
 		// SSL Related
-		opt = match &self.connection.mode {
+		opt = match &self.connection.ssl_mode {
 			SslMode::Disable => opt.ssl_mode(sqlx::postgres::PgSslMode::Disable),
 			SslMode::Allow => opt.ssl_mode(sqlx::postgres::PgSslMode::Allow),
 			SslMode::Prefer => opt.ssl_mode(sqlx::postgres::PgSslMode::Prefer),
@@ -138,7 +138,7 @@ pub struct Connection {
 
 	/// SSL-Mode to connect to; Default is SSL-Disabled
 	#[serde(default = "default_ssl_mode")]
-	pub mode: SslMode,
+	pub ssl_mode: SslMode,
 
 	/// Path to the ROOT-Certificate if not the system defaults should be used
 	#[serde(default)]
@@ -160,7 +160,7 @@ impl Default for Connection {
 		Self {
 			host: String::new(),
 			port: default_postgres_port(),
-			mode: default_ssl_mode(),
+			ssl_mode: default_ssl_mode(),
 			root_cert: None,
 			ssl_cert: None,
 			ssl_key: None,
