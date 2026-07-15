@@ -19,6 +19,7 @@ A receiver can have multiple parsers to handle mutliple message formats.
 	* `parser.mapping.index` - For Regex-Match-Groups without names: The number of the group, where `0` is the whole message.
 	* `parser.mapping.parser` - Uses the value of the field and parses it with an other parser (see `parser.name`).
 	* `parser.mapping.empty` - Just add an empty value on this field in the final message.
+	* `parser.mapping.value` - A static string or templated value.
 
 
 ```toml
@@ -63,4 +64,11 @@ source = "/foo/bar/value"
 name = "FieldParser"
 parser = "Parser Regex"
 
+[[config.parser.mapping]]
+name = "StaticValue"
+static = "Static Text"
+
+[[config.parser.mapping]]
+name = "TemplatedValue"
+static = "{{ @uuid }} - {{ $date(#%Y-%m-%d) }}"
 ```

@@ -9,7 +9,7 @@ use serde_json::Value;
 use serde_json_path::JsonPath;
 use tracing::{debug, info, error};
 
-use crate::{queue, types::FieldMapping};
+use crate::{queue, template::template_string, types::FieldMapping};
 use crate::types;
 
 pub struct MessageParser<T> {
@@ -355,12 +355,12 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 		// See https://docs.rs/serde_json_path/latest/serde_json_path/
 		// Test: https://serdejsonpath.live/
 		let mut results: HashMap<String, String> = HashMap::new();
-		let json: Value = serde_json::from_str(raw.as_str()).map_or_else(|e|{
+		let json: Arc<Value> = Arc::new(serde_json::from_str(raw.as_str()).map_or_else(|e|{
 			error!(message="json parsing error", json=%raw, error=%e);
 			Value::Null
-		}, |v| v);
+		}, |v| v));
 
-		for obj in jpath.query(&json).iter() {
+		for obj in jpath.query(json.clone().as_ref()).iter() {
 			for fld in mapping {
 				let mut val: String = String::new();
 				if !fld.source.is_empty() {
@@ -380,6 +380,12 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 						Value::Object(v) => serde_json::to_string(v).map_or(String::new(), |s| s),
 						_ => String::new(),
 					};
+				}
+
+				// Static value via templating
+				// Only apply the template if no value is assigned yet. So the configuration can read a value and apply a static value if no value is evaluated yet
+				if !fld.static_value.is_empty() && val.is_empty() {
+					val = template_string(&fld.static_value, json.clone());
 				}
 
 				// Sub-Parser values are returned directly
@@ -420,6 +426,7 @@ mod tests {
 				index: 0,
 				parser: String::new(),
 				empty: true,
+				static_value: String::new(),
 			},
 
 			// Source Field by name
@@ -429,6 +436,7 @@ mod tests {
 				index: 0,
 				parser: String::new(),
 				empty: false,
+				static_value: String::new(),
 			},
 
 			// Source Field by index
@@ -438,6 +446,7 @@ mod tests {
 				index: 3,
 				parser: String::new(),
 				empty: false,
+				static_value: String::new(),
 			},
 
 			// Json Sub-Parser
@@ -447,6 +456,7 @@ mod tests {
 				index: 0,
 				parser: String::from("jsonsub"),
 				empty: false,
+				static_value: String::new(),
 			},
 			FieldMapping {
 				name: String::from("map5"),
@@ -454,6 +464,7 @@ mod tests {
 				index: 0,
 				parser: String::from("jsonsub"),
 				empty: false,
+				static_value: String::new(),
 			},
 			FieldMapping {
 				name: String::from("map1"),
@@ -461,6 +472,15 @@ mod tests {
 				index: 0,
 				parser: String::new(),
 				empty: false,
+				static_value: String::new(),
+			},
+			FieldMapping {
+				name: String::from("static"),
+				source: String::new(),
+				index: 0,
+				parser: String::new(),
+				empty: false,
+				static_value: String::from("UUID: {{ $uuid }}"),
 			},
 		]
 	}
@@ -508,8 +528,9 @@ mod tests {
 		let jpath = JsonPath::parse("$.result").unwrap();
 
 		let res = parser.parse_json_string(&mapping, &message, &jpath);
+		let json: Value = serde_json::from_str(res.as_str()).unwrap();
 
-		assert_eq!(res, String::from("{\"map1\":\"\"}"));
+		assert_eq!(json["map1"], String::from(""));
 	}
 
 	#[test]
@@ -522,8 +543,9 @@ mod tests {
 		let jpath = JsonPath::parse("$.result").unwrap();
 
 		let res = parser.parse_json_string(&mapping, &message, &jpath);
+		let json: Value = serde_json::from_str(res.as_str()).unwrap();
 
-		assert_eq!(res, String::from("{\"map1\":\"foobar\"}"));
+		assert_eq!(json["map1"], String::from("foobar"));
 	}
 
 	#[test]
@@ -536,8 +558,9 @@ mod tests {
 		let jpath = JsonPath::parse("$").unwrap();
 
 		let res = parser.parse_json_string(&mapping, &message, &jpath);
+		let json: Value = serde_json::from_str(res.as_str()).unwrap();
 
-		assert_eq!(res, String::from("{\"map1\":\"foobar\"}"));
+		assert_eq!(json["map1"], String::from("foobar"));
 	}
 
 	#[test]
@@ -569,6 +592,23 @@ mod tests {
 		let json: Value = serde_json::from_str(res.as_str()).unwrap();
 
 		assert_eq!(json["map1"], String::from("foobar"));
+	}
+
+	#[test]
+	fn test_parse_json_string_static() {
+		let queue = Arc::new(MessageQueue::<String>::new());
+		let parser = MessageParser::<String>::new(queue.clone(), types::Queue::default(), get_parser());
+		let mapping = prepare_field_mapping();
+
+		let message = String::from("{ \"result\": { \"grp\":{\"grp\":{\"grp\":\"foobar\"}} } }");
+		let jpath = JsonPath::parse("$.result").unwrap();
+
+		let res = parser.parse_json_string(&mapping, &message, &jpath);
+		let json: Value = serde_json::from_str(res.as_str()).unwrap();
+
+		// Check for the length and prefix: "UUID: b654bd71-0c3c-4ae1-a32f-662b2d5fb947"
+		assert_eq!(json["static"].as_str().unwrap().starts_with("UUID: "), true);
+		assert_eq!(json["static"].as_str().unwrap().len(), 42);
 	}
 
 

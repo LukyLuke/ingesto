@@ -158,6 +158,12 @@ pub struct FieldMapping {
 	/// Shall an empty value be added to the final struct or not
 	#[serde(default)]
 	pub empty: bool,
+
+	/// Static field value
+	// This can be a templated value like {{ $date() }} or {{ $uuid }}
+	// The {{ $response/field/value }} is not supported
+	#[serde(default, rename="static")]
+	pub static_value: String,
 }
 
 /// Represents an OpenTelemetry Endpoint, where Metrics and/or Logs can be sent to
