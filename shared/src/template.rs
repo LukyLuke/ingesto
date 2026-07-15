@@ -468,6 +468,17 @@ mod tests {
 	}
 
 	#[test]
+	fn test_render_iso8601_now() {
+		let tpl = Template::parse("ISO-8601:{{ $now(iso8601) }};");
+		let params = Arc::new(Value::Null);
+		let date = Zoned::now().with_time_zone(TimeZone::UTC);
+
+		let res = tpl.render(params);
+		// Do not check seconds-fraction '%.6f' which will never be the same anyways - even seconds is critical to test
+		assert_eq!(res.get(0..29), String::from(format!("ISO-8601:{}", date.strftime("%FT%T%.6f%:z"))).get(0..29));
+	}
+
+	#[test]
 	#[ignore]
 	fn test_render_date_result() {
 		let tpl = Template::parse("Response:{{ $date($response/data/foo) }}; Date-dmY:{{ $date($response/data/foo#%d-%m-%Y) }};");

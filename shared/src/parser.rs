@@ -355,12 +355,13 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 		// See https://docs.rs/serde_json_path/latest/serde_json_path/
 		// Test: https://serdejsonpath.live/
 		let mut results: HashMap<String, String> = HashMap::new();
-		let json: Arc<Value> = Arc::new(serde_json::from_str(raw.as_str()).map_or_else(|e|{
+		let json_root: Value = serde_json::from_str(raw.as_str()).map_or_else(|e|{
 			error!(message="json parsing error", json=%raw, error=%e);
 			Value::Null
-		}, |v| v));
+		}, |v| v);
 
-		for obj in jpath.query(json.clone().as_ref()).iter() {
+		for obj in jpath.query(&json_root).iter() {
+			let json = Arc::new((**obj).clone());
 			for fld in mapping {
 				let mut val: String = String::new();
 				if !fld.source.is_empty() {
@@ -481,6 +482,14 @@ mod tests {
 				parser: String::new(),
 				empty: false,
 				static_value: String::from("UUID: {{ $uuid }}"),
+			},
+			FieldMapping {
+				name: String::from("static_response"),
+				source: String::new(),
+				index: 0,
+				parser: String::new(),
+				empty: false,
+				static_value: String::from("Response: {{ $response/grp/grp/grp }}"),
 			},
 		]
 	}
@@ -609,6 +618,21 @@ mod tests {
 		// Check for the static prefix and the length of a result like "UUID: b654bd71-0c3c-4ae1-a32f-662b2d5fb947"
 		assert_eq!(json["static"].as_str().unwrap().starts_with("UUID: "), true);
 		assert_eq!(json["static"].as_str().unwrap().len(), 42);
+	}
+
+	#[test]
+	fn test_parse_json_string_static_response() {
+		let queue = Arc::new(MessageQueue::<String>::new());
+		let parser = MessageParser::<String>::new(queue.clone(), types::Queue::default(), get_parser());
+		let mapping = prepare_field_mapping();
+
+		let message = String::from("{ \"result\": { \"grp\":{\"grp\":{\"grp\":\"foobar\"}} } }");
+		let jpath = JsonPath::parse("$.result").unwrap();
+
+		let res = parser.parse_json_string(&mapping, &message, &jpath);
+		let json: Value = serde_json::from_str(res.as_str()).unwrap();
+
+		assert_eq!(json["static_response"], String::from("Response: foobar"));
 	}
 
 
