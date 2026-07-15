@@ -370,6 +370,7 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 						Some(c) if c == "/" => &obj.pointer(&fld.source).unwrap_or_default(),
 						_ => &obj[&fld.source],
 					};
+
 					// Extract the JsonValue form the field
 					val = match field_val {
 						Value::String(s) => String::from(s),

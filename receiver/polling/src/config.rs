@@ -1,17 +1,10 @@
 use core::fmt;
 use std::sync::Arc;
 
-use dashmap::DashMap;
-use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use shared::types::{Parser, Queue};
-use tracing::warn;
 
-use crate::template::Template;
-
-/// Static Lazy-Loaded template cache
-static TEMPLATE_CACHE: Lazy<DashMap<String, Template>> = Lazy::new(|| DashMap::new());
 
 /// The main Polling-Configuration
 #[derive(Debug, Deserialize, Serialize)]
@@ -217,11 +210,11 @@ impl PagingRequestUntil {
 		let json = Arc::<Value>::new(serde_json::from_str(value.as_str()).unwrap_or_default());
 		match self {
 			// Parse JSON-Pointer value and compare to empty
-			Self::EmptyValue(val) => template_string(&val, json.clone()).is_empty(),
+			Self::EmptyValue(val) => shared::template::template_string(&val, json.clone()).is_empty(),
 
 			// Parse JSON-Pointer value and compare to the value
 			Self::Equals(left, right) => {
-				template_string(&left, json.clone()) == template_string(&right, json.clone())
+				shared::template::template_string(&left, json.clone()) == shared::template::template_string(&right, json.clone())
 			},
 
 			// Anything else (should be handled above in the first match clause)
@@ -235,65 +228,8 @@ fn default_method() -> Method { Method::GET }
 fn default_cron_timer() -> String { String::from("* */5 * * * *") }
 
 
-/// Parse a string into a Template and inserts it into the template cache
-///
-/// # Arguments
-///
-/// * `key` - The key under which the parsed template is stored
-/// * `value` - value to use for the template
-///
-/// # Examples
-///
-/// ```
-/// let tpl = String::from("this is {{ $uuid }} a templated {{ $response/foo/bar }} string");
-/// config::template_string_parse(&tpl, &tpl);
-/// let key = String::from("fixed_key");
-/// config::template_string_parse(&key, &tpl);
-/// ```
-pub fn template_string_parse(key: &String, value: &String) {
-	TEMPLATE_CACHE.insert(key.to_owned(), Template::parse(value));
-}
-
-/// Applies the JSON-Values to the given Template and returns the resulting string.
-/// If there is no parsed template yet for the given string, parse the template.
-///
-/// # Arguments
-///
-/// * `tpl` - The Template-String (or key) of the Template
-/// * `values` - The values to apply to the tempated string
-///
-/// # Returns
-///
-/// A String where all template params are applied
-///
-/// # Examples
-///
-/// ```
-/// let response = Arc::new(
-///     json!({ "paging":{"cursor":"xxx","pages":77}, "data":[ {"foo":"bar"}, {"foo":"bar"}, {"foo":"bar"} ] })
-/// );
-/// let tpl = String::from("this is {{ $uuid }} a templated {{ $response/foo/bar }} string");
-/// let result = config::template_string(&tpl, Arc::clone(&response));
-/// ```
-pub fn template_string(tpl: &String, values: Arc<Value>) -> String {
-	if let Some(template) = TEMPLATE_CACHE.get(tpl).or_else(|| {
-		template_string_parse(tpl, tpl);
-		TEMPLATE_CACHE.get(tpl)
-	}) {
-		let res = template.render(values.clone());
-		return if res == "null" { "".to_string() } else { res }
-	}
-
-	warn!("Template-Cache for '{}' not found and not able to build. Using EMPTY String.", tpl);
-	return String::from("");
-}
-
-
-
 #[cfg(test)]
 pub mod test {
-	use serde_json::json;
-
 	use super::*;
 
 	#[test]
@@ -362,37 +298,6 @@ pub mod test {
 		assert_eq!(result_c_nok, false);
 		assert_eq!(result_d_ok,  true);
 		assert_eq!(result_d_nok, false);
-	}
-
-
-	#[test]
-	fn test_template_string_existing() {
-		let response = Arc::new(
-			json!({ "paging":{"cursor":"xxx","pages":77}, "data":[ {"foo":"bar"}, {"foo":"barrr"}, {"foo":"bar"} ] })
-		);
-
-		let key = String::from("test-key");
-		let value = String::from("foo: {{ $response/data/1/foo }}");
-		template_string_parse(&key,  &value);
-
-		let result = template_string(&key, response.clone());
-
-		assert_eq!(result, "foo: barrr");
-	}
-
-	#[test]
-	fn test_template_string_new() {
-		let response = Arc::new(
-			json!({ "paging":{"cursor":"xxx","pages":77}, "data":[ {"foo":"bar"}, {"foo":"barrr"}, {"foo":"lastbar"} ] })
-		);
-
-		let key = String::from("dummy-key");
-		TEMPLATE_CACHE.insert(key.to_owned(),  Template::parse("No real value"));
-
-		let value = String::from("foo: {{ $response/data/2/foo }}");
-		let result = template_string(&value, response.clone());
-
-		assert_eq!(result, "foo: lastbar");
 	}
 
 }

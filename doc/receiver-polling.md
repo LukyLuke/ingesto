@@ -2,6 +2,21 @@
 
 The **Polling-Receiver** calls an HTTP-Endpoint, including paging, and parses the received data.
 
+The timer has a cron format with seconds:
+```
+sec  min  hour  day  month  weekday  year
+ *   */5    *    *     *      *      *
+```
+With the following possible values:
+* `sec` - Seconds like `10,20,30`, a range like `10-20` or an interval like `*/10` for every 10 seconds
+* `min` - Minutes like `10,20,30`, a range like `10-20` or an interval like `*/10` for every 10 minutes
+* `hour` - Hours like `10,20,30`, a range like `10-20`, an interval like `*/10` for every 10 hours or `@hourly` to run it once every full hour
+* `day` - Day of month like `1,15,28`, a range like `10-20`, an interval like `*/2` for every second day or `@daily` to run it once a day at midnight
+* `month` - Name of the month like `Jan,Mar,Dec`, number of the month like `1,3,12`, a range like `Mar-Oct` or `@monthly` to run it every first day of the month
+* `weekday` - Name of the day during week like `Mon,Thurs,Sat` or a range like `Mon-Fri`
+* `year` - The Year to run like `2022,2024,2030`, a range of years like `2020-2030`, an interval like `*/2` to run it every second year or `@yearly` to run it once a year
+
+
 ## Authentication
 
 The Authentication can be one of:

@@ -1,5 +1,4 @@
 pub mod config;
-pub mod template;
 
 use core::time;
 use std::{
@@ -60,8 +59,8 @@ fn run_scheduler(conf: Arc<config::Endpoint>, cron_expr: &str, queue: Arc<shared
 	info!(message="scheduler started", cron=%cron_expr);
 
 	// Prepare Body and Url Template-Cache
-	config::template_string_parse(&TEMPLATE_URI_KEY,  &conf.uri);
-	config::template_string_parse(&TEMPLATE_BODY_KEY, &String::from(conf.body.as_deref().unwrap_or_default()));
+	shared::template::template_string_parse(&TEMPLATE_URI_KEY,  &conf.uri);
+	shared::template::template_string_parse(&TEMPLATE_BODY_KEY, &String::from(conf.body.as_deref().unwrap_or_default()));
 
 	loop {
 		// Run if the next schedule would be in the past already on the next run
@@ -92,15 +91,16 @@ fn call_api(conf: Arc<config::Endpoint>, queue: Arc<shared::queue::MessageQueue<
 
 	while paging {
 		// Parse URI and Body
-		let mut uri = config::template_string(&TEMPLATE_URI_KEY, Arc::clone(&response));
-		let send_body = config::template_string(&TEMPLATE_BODY_KEY, Arc::clone(&response));
+		let mut uri = shared::template::template_string(&TEMPLATE_URI_KEY, Arc::clone(&response));
+		let send_body = shared::template::template_string(&TEMPLATE_BODY_KEY, Arc::clone(&response));
 
 		// Append Paging if available
 		if !conf.paging.param.name.is_empty() {
-			let page_val = config::template_string(&conf.paging.param.value, Arc::clone(&response));
+			let page_val = shared::template::template_string(&conf.paging.param.value, Arc::clone(&response));
 			let sep = if uri.find('?').is_some() { "&" } else { "?" };
 			uri = format!("{}{}{}={}", uri, sep, conf.paging.param.name.as_str(), page_val.as_str());
 		}
+		debug!(message="calling api", uri=%uri);
 
 		// Create the Request
 		let client = reqwest::blocking::Client::new();
@@ -113,7 +113,7 @@ fn call_api(conf: Arc<config::Endpoint>, queue: Arc<shared::queue::MessageQueue<
 
 		// Authentication
 		req = match &conf.auth {
-			Some(Authentication::Header(param)) => req.header(&param.name, config::template_string(&secrets_string(&param.value).unwrap_or_default(), Arc::clone(&response))),
+			Some(Authentication::Header(param)) => req.header(&param.name, shared::template::template_string(&secrets_string(&param.value).unwrap_or_default(), Arc::clone(&response))),
 			Some(Authentication::Basic { user, pass }) => req.basic_auth(secrets_string(user).unwrap_or_default(), secrets_string(pass).ok()),
 			Some(Authentication::Bearer(token)) => {
 				if token.starts_with("Bearer") {
@@ -128,7 +128,7 @@ fn call_api(conf: Arc<config::Endpoint>, queue: Arc<shared::queue::MessageQueue<
 		// Additional Headers
 		req = req.header("User-Agent", "ingesto-polling/1.0");
 		for header in &conf.header {
-			req = req.header(header.name.to_string(), config::template_string(&header.value, Arc::clone(&response)));
+			req = req.header(header.name.to_string(), shared::template::template_string(&header.value, Arc::clone(&response)));
 		}
 
 		let resp = send_reqwest(req)?;
@@ -190,8 +190,8 @@ pub mod test {
 			}
 		});
 		let queue = Arc::new(shared::queue::MessageQueue::<String>::new());
-		config::template_string_parse(&TEMPLATE_URI_KEY,  &conf.uri);
-		config::template_string_parse(&TEMPLATE_BODY_KEY, &String::from(conf.body.as_deref().unwrap_or_default()));
+		shared::template::template_string_parse(&TEMPLATE_URI_KEY,  &conf.uri);
+		shared::template::template_string_parse(&TEMPLATE_BODY_KEY, &String::from(conf.body.as_deref().unwrap_or_default()));
 
 		let res = call_api(conf.clone(), queue.clone(), call_api_internal, queue_message_internal);
 
@@ -225,8 +225,8 @@ pub mod test {
 			}
 		});
 		let queue = Arc::new(shared::queue::MessageQueue::<String>::new());
-		config::template_string_parse(&TEMPLATE_URI_KEY,  &conf.uri);
-		config::template_string_parse(&TEMPLATE_BODY_KEY, &String::from(conf.body.as_deref().unwrap_or_default()));
+		shared::template::template_string_parse(&TEMPLATE_URI_KEY,  &conf.uri);
+		shared::template::template_string_parse(&TEMPLATE_BODY_KEY, &String::from(conf.body.as_deref().unwrap_or_default()));
 
 		let res = call_api(conf.clone(), queue.clone(), call_api_internal_nojson, queue_message_internal);
 

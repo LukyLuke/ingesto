@@ -1,9 +1,68 @@
 use core::fmt;
 use std::sync::Arc;
 
+use dashmap::DashMap;
+use once_cell::sync::Lazy;
 use jiff::{Timestamp, Zoned, tz::TimeZone};
 use serde_json::Value;
+use tracing::warn;
 use uuid::Uuid;
+
+/// Static Lazy-Loaded template cache
+static TEMPLATE_CACHE: Lazy<DashMap<String, Template>> = Lazy::new(|| DashMap::new());
+
+/// Parse a string into a Template and inserts it into the template cache
+///
+/// # Arguments
+///
+/// * `key` - The key under which the parsed template is stored
+/// * `value` - value to use for the template
+///
+/// # Examples
+///
+/// ```
+/// let tpl = String::from("this is {{ $uuid }} a templated {{ $response/foo/bar }} string");
+/// shared::template::template_string_parse(&tpl, &tpl);
+/// let key = String::from("fixed_key");
+/// shared::template::template_string_parse(&key, &tpl);
+/// ```
+pub fn template_string_parse(key: &String, value: &String) {
+	TEMPLATE_CACHE.insert(key.to_owned(), Template::parse(value));
+}
+
+/// Applies the JSON-Values to the given Template and returns the resulting string.
+/// If there is no parsed template yet for the given string, parse the template.
+///
+/// # Arguments
+///
+/// * `tpl` - The Template-String (or key) of the Template
+/// * `values` - The values to apply to the tempated string
+///
+/// # Returns
+///
+/// A String where all template params are applied
+///
+/// # Examples
+///
+/// ```
+/// let response = std::sync::Arc::new(
+///     serde_json::json!({ "paging":{"cursor":"xxx","pages":77}, "data":[ {"foo":"bar"}, {"foo":"bar"}, {"foo":"bar"} ] })
+/// );
+/// let tpl = String::from("this is {{ $uuid }} a templated {{ $response/foo/bar }} string");
+/// let result = shared::template::template_string(&tpl, std::sync::Arc::clone(&response));
+/// ```
+pub fn template_string(tpl: &String, values: Arc<Value>) -> String {
+	if let Some(template) = TEMPLATE_CACHE.get(tpl).or_else(|| {
+		template_string_parse(tpl, tpl);
+		TEMPLATE_CACHE.get(tpl)
+	}) {
+		let res = template.render(values.clone());
+		return if res == "null" { "".to_string() } else { res }
+	}
+
+	warn!("Template-Cache for '{}' not found and not able to build. Using EMPTY String.", tpl);
+	return String::from("");
+}
 
 /// Represents the Template-Parsing engine.
 #[derive(Clone, Debug)]
@@ -38,10 +97,10 @@ impl Template {
 	/// # Example
 	///
 	/// ```
-	/// let uuid = Template::parse("UUID: {{ $uuid }}");
-	/// let resp = Template::parse("Response: {{ $response/one/two/three }};");
-	/// let now  = Template::parse("Now: {{ $now }}; Formatted: {{ $now(%d-%m-%Y) }}");
-	/// let date = Template::parse("Date: {{ $date(2010-11-12) }}; Formatted: {{ $date(2010-11-12#%d-%m-%Y) }};");
+	/// let uuid = shared::template::Template::parse("UUID: {{ $uuid }}");
+	/// let resp = shared::template::Template::parse("Response: {{ $response/one/two/three }};");
+	/// let now  = shared::template::Template::parse("Now: {{ $now }}; Formatted: {{ $now(%d-%m-%Y) }}");
+	/// let date = shared::template::Template::parse("Date: {{ $date(2010-11-12) }}; Formatted: {{ $date(2010-11-12#%d-%m-%Y) }};");
 	/// ```
 	pub fn parse(s: &str) -> Self {
 		let mut tokens = Vec::new();
@@ -109,20 +168,20 @@ impl Template {
 	/// # Example
 	///
 	/// ```
-	/// let params = Arc::new(Value::Null);
+	/// let params = std::sync::Arc::new(serde_json::Value::Null);
 	///
-	/// let uuid = Template::parse("UUID: {{ $uuid }}");
-	/// println!("Parsed: {}", uuid.parse(params.clone()));
+	/// let uuid = shared::template::Template::parse("UUID: {{ $uuid }}");
+	/// println!("Parsed: {}", uuid.render(params.clone()));
 	///
-	/// let json = Arc::new(json!({"one":{"two":{"three":"Foo Bar"}}}));
-	/// let resp = Template::parse("Response: {{ $response/one/two/three }};");
-	/// println!("Parsed: {}", resp.parse(json.clone()));
+	/// let json = std::sync::Arc::new(serde_json::json!({"one":{"two":{"three":"Foo Bar"}}}));
+	/// let resp = shared::template::Template::parse("Response: {{ $response/one/two/three }};");
+	/// println!("Parsed: {}", resp.render(json.clone()));
 	///
-	/// let now  = Template::parse("Now: {{ $now }}; Formatted: {{ $now(%d-%m-%Y) }}");
-	/// println!("Parsed: {}", now.parse(params.clone()));
+	/// let now  = shared::template::Template::parse("Now: {{ $now }}; Formatted: {{ $now(%d-%m-%Y) }}");
+	/// println!("Parsed: {}", now.render(params.clone()));
 	///
-	/// let date = Template::parse("Date: {{ $date(2010-11-12) }}; Formatted: {{ $date(2010-11-12#%d-%m-%Y) }};");
-	/// println!("Parsed: {}", date.parse(params.clone()));
+	/// let date = shared::template::Template::parse("Date: {{ $date(2010-11-12) }}; Formatted: {{ $date(2010-11-12#%d-%m-%Y) }};");
+	/// println!("Parsed: {}", date.render(params.clone()));
 	///
 	/// ```
 	pub fn render(&self, value: Arc<Value>) -> String {
@@ -326,9 +385,41 @@ impl fmt::Display for ParamParser {
 
 #[cfg(test)]
 mod tests {
+	use std::sync::Arc;
 	use jiff::ToSpan;
-use serde_json::json;
+	use serde_json::json;
+
 	use super::*;
+
+	#[test]
+	fn test_template_string_existing() {
+		let response = Arc::new(
+			json!({ "paging":{"cursor":"xxx","pages":77}, "data":[ {"foo":"bar"}, {"foo":"barrr"}, {"foo":"bar"} ] })
+		);
+
+		let key = String::from("test-key");
+		let value = String::from("foo: {{ $response/data/1/foo }}");
+		template_string_parse(&key,  &value);
+
+		let result = template_string(&key, response.clone());
+
+		assert_eq!(result, "foo: barrr");
+	}
+
+	#[test]
+	fn test_template_string_new() {
+		let response = Arc::new(
+			json!({ "paging":{"cursor":"xxx","pages":77}, "data":[ {"foo":"bar"}, {"foo":"barrr"}, {"foo":"lastbar"} ] })
+		);
+
+		let key = String::from("dummy-key");
+		TEMPLATE_CACHE.insert(key.to_owned(),  Template::parse("No real value"));
+
+		let value = String::from("foo: {{ $response/data/2/foo }}");
+		let result = template_string(&value, response.clone());
+
+		assert_eq!(result, "foo: lastbar");
+	}
 
 	#[test]
 	fn test_render_none() {
