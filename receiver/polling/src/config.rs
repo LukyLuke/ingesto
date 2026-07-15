@@ -205,7 +205,7 @@ impl PagingRequestUntil {
 	/// PagingRequestUntil::Equals(String::from("bar"), String::from("foo")).check(200, String::from("")); // -> false
 	/// ```
 	pub fn check(&self, status: u16, value: String) -> bool {
-		// Some simple checks without parsing the response first
+		// Some simple checks with an **early return** and without parsing the vaulue
 		match self {
 			Self::None => return true,
 			Self::Empty => return value.is_empty(),
@@ -215,12 +215,14 @@ impl PagingRequestUntil {
 
 		// Try to parse the response as JSON
 		let json = Arc::<Value>::new(serde_json::from_str(value.as_str()).unwrap_or_default());
-		return match self {
+		match self {
 			// Parse JSON-Pointer value and compare to empty
-			Self::EmptyValue(val) => return template_string(&val, json.clone()).is_empty(),
+			Self::EmptyValue(val) => template_string(&val, json.clone()).is_empty(),
 
 			// Parse JSON-Pointer value and compare to the value
-			Self::Equals(left, right) => return template_string(&left, json.clone()) == template_string(&right, json.clone()),
+			Self::Equals(left, right) => {
+				template_string(&left, json.clone()) == template_string(&right, json.clone())
+			},
 
 			// Anything else (should be handled above in the first match clause)
 			_ => true
@@ -278,7 +280,8 @@ pub fn template_string(tpl: &String, values: Arc<Value>) -> String {
 		template_string_parse(tpl, tpl);
 		TEMPLATE_CACHE.get(tpl)
 	}) {
-		return template.render(values.clone());
+		let res = template.render(values.clone());
+		return if res == "null" { "".to_string() } else { res }
 	}
 
 	warn!("Template-Cache for '{}' not found and not able to build. Using EMPTY String.", tpl);
@@ -324,13 +327,15 @@ pub mod test {
 	#[test]
 	fn test_paging_request_empty_value() {
 		let paging = PagingRequestUntil::EmptyValue(String::from("{{ $response/paging/cursor }}"));
-		let result_ok1 = paging.check(200, String::from("{ \"foo\":\"bar\",\"paging\":{ \"cursor\":\"\" } }"));
-		let result_ok2 = paging.check(200, String::from("{ \"foo\":\"bar\",\"paging\":{  } }"));
-		let result_nok = paging.check(200, String::from("{ \"foo\":\"bar\",\"paging\":{ \"cursor\":\"Paging-Cursor\" } }"));
+		let result_ok1  = paging.check(200, String::from("{ \"foo\":\"bar\",\"paging\":{ \"cursor\":\"\" } }"));
+		let result_ok2  = paging.check(200, String::from("{ \"foo\":\"bar\",\"paging\":{  } }"));
+		let result_null = paging.check(200, String::from("{ \"foo\":\"bar\",\"paging\":{ \"cursor\":null } }"));
+		let result_nok  = paging.check(200, String::from("{ \"foo\":\"bar\",\"paging\":{ \"cursor\":\"Paging-Cursor\" } }"));
 
-		assert_eq!(result_ok1, true);
-		assert_eq!(result_ok2, true);
-		assert_eq!(result_nok, false);
+		assert_eq!(result_ok1,  true);
+		assert_eq!(result_ok2,  true);
+		assert_eq!(result_null, true);
+		assert_eq!(result_nok,  false);
 	}
 
 	#[test]
@@ -338,6 +343,7 @@ pub mod test {
 		let paging_a = PagingRequestUntil::Equals(String::from("{{ $response/paging/cursor }}"), String::from("Paging-Cursor"));
 		let paging_b = PagingRequestUntil::Equals(String::from("Paging-Cursor"), String::from("{{ $response/paging/cursor }}"));
 		let paging_c = PagingRequestUntil::Equals(String::from("{{ $response/paging/cursor }}"), String::from("{{ $response/paging/last }}"));
+		let paging_d = PagingRequestUntil::Equals(String::from("{{ $response/paging/cursor }}"), String::from("null"));
 
 		let result_a_ok  = paging_a.check(200, String::from("{ \"foo\":\"bar\",\"paging\":{ \"cursor\":\"Paging-Cursor\", \"last\":\"Paging-Cursor\" } }"));
 		let result_a_nok = paging_a.check(200, String::from("{ \"foo\":\"bar\",\"paging\":{ \"cursor\":\"No-Paging-Cursor\", \"last\":\"Paging-Cursor\" } }"));
@@ -345,6 +351,8 @@ pub mod test {
 		let result_b_nok = paging_b.check(200, String::from("{ \"foo\":\"bar\",\"paging\":{ \"cursor\":\"No-Paging-Cursor\", \"last\":\"Paging-Cursor\" } }"));
 		let result_c_ok  = paging_c.check(200, String::from("{ \"foo\":\"bar\",\"paging\":{ \"cursor\":\"Paging-Cursor\", \"last\":\"Paging-Cursor\" } }"));
 		let result_c_nok = paging_c.check(200, String::from("{ \"foo\":\"bar\",\"paging\":{ \"cursor\":\"No-Paging-Cursor\", \"last\":\"Paging-Cursor\" } }"));
+		let result_d_ok  = paging_d.check(200, String::from("{ \"foo\":\"bar\",\"paging\":{ \"cursor\":null, \"last\":\"Paging-Cursor\" } }"));
+		let result_d_nok = paging_d.check(200, String::from("{ \"foo\":\"bar\",\"paging\":{ \"cursor\":\"NotNull\", \"last\":\"Paging-Cursor\" } }"));
 
 		assert_eq!(result_a_ok,  true);
 		assert_eq!(result_a_nok, false);
@@ -352,6 +360,8 @@ pub mod test {
 		assert_eq!(result_b_nok, false);
 		assert_eq!(result_c_ok,  true);
 		assert_eq!(result_c_nok, false);
+		assert_eq!(result_d_ok,  true);
+		assert_eq!(result_d_nok, false);
 	}
 
 

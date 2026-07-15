@@ -196,7 +196,7 @@ impl Template {
 							let v = match &value.pointer(json_path.as_str()).unwrap_or(&Value::Null) {
 								&Value::Bool(v) => format!("{}", v),
 								&Value::Number(v) => format!("{}", v.as_f64().unwrap_or(0.0)),
-								&Value::String(v) => v.clone(),
+								&Value::String(v) => if v == "null" { "".to_string() } else { v.clone() },
 								_ => String::new()
 							};
 							&format!("{}", v)

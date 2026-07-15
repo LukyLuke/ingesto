@@ -143,7 +143,7 @@ fn call_api(conf: Arc<config::Endpoint>, queue: Arc<shared::queue::MessageQueue<
 
 		// Check for paging
 		pages += 1;
-		debug!(message="paging", conf=%conf.paging, pages=pages, most_pages=MAX_PAGING_REQUESTS);
+		debug!(message="paging", conf=%conf.paging, pages=pages, max_pages=MAX_PAGING_REQUESTS);
 		if conf.paging.until.is_none() || pages >= conf.paging.max_pages || pages >= MAX_PAGING_REQUESTS {
 			break;
 		}
