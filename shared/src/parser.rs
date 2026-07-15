@@ -606,7 +606,7 @@ mod tests {
 		let res = parser.parse_json_string(&mapping, &message, &jpath);
 		let json: Value = serde_json::from_str(res.as_str()).unwrap();
 
-		// Check for the length and prefix: "UUID: b654bd71-0c3c-4ae1-a32f-662b2d5fb947"
+		// Check for the static prefix and the length of a result like "UUID: b654bd71-0c3c-4ae1-a32f-662b2d5fb947"
 		assert_eq!(json["static"].as_str().unwrap().starts_with("UUID: "), true);
 		assert_eq!(json["static"].as_str().unwrap().len(), 42);
 	}

@@ -11,6 +11,12 @@ use uuid::Uuid;
 /// Static Lazy-Loaded template cache
 static TEMPLATE_CACHE: Lazy<DashMap<String, Template>> = Lazy::new(|| DashMap::new());
 
+// ISO-8601 Date-Format in UTC
+// "%+" is equal to "%FT%T%.6f%:z" is equal to "%Y-%m-%dT%H:%M:%S%.6f%:z"
+// However, "%+" throws errors...
+// See https://docs.rs/chrono/latest/chrono/format/strftime/index.html
+static FORMAT_ISO8601: &str = "%FT%T%.6f%:z";
+
 /// Parse a string into a Template and inserts it into the template cache
 ///
 /// # Arguments
@@ -206,7 +212,7 @@ impl Template {
 							let formatted = if format.is_empty() {
 								Zoned::now().with_time_zone(TimeZone::UTC).strftime("%Y-%m-%d").to_string()
 							} else {
-								Zoned::now().with_time_zone(TimeZone::UTC).strftime(format).to_string()
+								Zoned::now().with_time_zone(TimeZone::UTC).strftime(if format == "iso8601" {FORMAT_ISO8601} else {format}).to_string()
 							};
 							&format!("{}", formatted)
 						},
@@ -245,7 +251,7 @@ impl Template {
 							let formatted = if format.is_empty() {
 								date.strftime("%Y-%m-%d").to_string()
 							} else {
-								date.strftime(format).to_string()
+								date.strftime(if format == "iso8601" {FORMAT_ISO8601} else {format}).to_string()
 							};
 							&format!("{}", formatted)
 						},
@@ -448,6 +454,17 @@ mod tests {
 
 		let res = tpl.render(params);
 		assert_eq!(res, String::from(format!("Relative:{}; Date-dmY:{};", date.strftime("%Y-%m-%d"), date.strftime("%d-%m-%Y"))));
+	}
+
+	#[test]
+	fn test_render_iso8601_dates() {
+		let tpl = Template::parse("ISO-8601:{{ $date(#iso8601) }};");
+		let params = Arc::new(Value::Null);
+		let date = Zoned::now().with_time_zone(TimeZone::UTC);
+
+		let res = tpl.render(params);
+		// Do not check seconds-fraction '%.6f' which will never be the same anyways - even seconds is critical to test
+		assert_eq!(res.get(0..29), String::from(format!("ISO-8601:{}", date.strftime("%FT%T%.6f%:z"))).get(0..29));
 	}
 
 	#[test]
