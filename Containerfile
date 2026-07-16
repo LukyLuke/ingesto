@@ -55,7 +55,8 @@ COPY --from=build /lib/x86_64-linux-gnu/libcap.so* /lib/x86_64-linux-gnu/
 COPY --from=build /lib/x86_64-linux-gnu/libpcre* /lib/x86_64-linux-gnu/
 COPY --from=build /usr/bin/sh /bin/
 COPY --from=build /usr/bin/ls /bin/
-COPY --from=build /usr/bin/ldd /bin/
+COPY --from=build /usr/bin/cat /bin/
+COPY --from=build /usr/bin/mv /bin/
 COPY --from=build /usr/bin/rm /bin/
 
 COPY --from=build /app/target/release/ingesto-* .
