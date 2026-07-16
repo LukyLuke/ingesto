@@ -233,14 +233,14 @@ pub enum DbValue {
 
 /// Defines a field in the Database from a given type, fieldname and message-field name
 /// * `name` - Field name in the Database
-/// * `origin` - Field name from the log message
+/// * `origin` - Optional: Field name from the log message; If not defined, the same as `name` is used
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(tag = "kind")]
 pub enum DbField {
-	Bool { name: String, origin: String },
-	Int { name: String, origin: String },
-	Float { name: String, origin: String },
-	String { name: String, origin: String },
-	Bytes { name: String, origin: String },
-	DateTimeUtc { name: String, origin: String },
+	Bool { name: String, origin: Option<String> },
+	Int { name: String, origin: Option<String> },
+	Float { name: String, origin: Option<String> },
+	String { name: String, origin: Option<String> },
+	Bytes { name: String, origin: Option<String> },
+	DateTimeUtc { name: String, origin: Option<String> },
 }

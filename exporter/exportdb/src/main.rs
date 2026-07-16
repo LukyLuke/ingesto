@@ -101,10 +101,22 @@ fn process_queue<DB: db::DbAccess + 'static>(queue: Arc<MessageQueue<String>>, m
 			let mut fields = Vec::new();
 			for field in &table.fields {
 				match field {
-					DbField::String { name, origin } => fields.push((String::from(name), DbValue::String( json.get(origin).unwrap_or_default().as_str().unwrap_or_default().to_string() ))),
-					DbField::Float { name, origin } => fields.push((String::from(name), DbValue::F64( json.get(origin).unwrap_or_default().as_f64().unwrap_or_default() ))),
-					DbField::Bool { name, origin } => fields.push((String::from(name), DbValue::Bool( json.get(origin).unwrap_or_default().as_bool().unwrap_or_default() ))),
-					DbField::Int { name, origin } => fields.push((String::from(name), DbValue::I64( json.get(origin).unwrap_or_default().as_i64().unwrap_or_default() ))),
+					DbField::String { name, origin } => fields.push((
+						String::from(name),
+						DbValue::String( json.get(origin.as_ref().unwrap_or(name)).unwrap_or_default().as_str().unwrap_or_default().to_string() )
+					)),
+					DbField::Float { name, origin } => fields.push((
+						String::from(name),
+						DbValue::F64( json.get(origin.as_ref().unwrap_or(name)).unwrap_or_default().as_f64().unwrap_or_default() )
+					)),
+					DbField::Bool { name, origin } => fields.push((
+						String::from(name),
+						DbValue::Bool( json.get(origin.as_ref().unwrap_or(name)).unwrap_or_default().as_bool().unwrap_or_default() )
+					)),
+					DbField::Int { name, origin } => fields.push((
+						String::from(name),
+						DbValue::I64( json.get(origin.as_ref().unwrap_or(name)).unwrap_or_default().as_i64().unwrap_or_default() )
+					)),
 					_ => {}
 				}
 			}
@@ -202,19 +214,19 @@ mod test {
 					name: "first".to_string(),
 					for_messages: "\"match\":\"first\"".to_string(),
 					fields: vec!(
-						DbField::Int    { name: "db_int1".to_string(),   origin: "int1".to_string() },
-						DbField::Bool   { name: "db_bool1".to_string(),  origin: "bool1".to_string() },
-						DbField::Float  { name: "db_float1".to_string(), origin: "float1".to_string() },
-						DbField::String { name: "db_foo1".to_string(),   origin: "foo1".to_string() },
-						DbField::String { name: "db_foo2".to_string(),   origin: "foo2".to_string() },
+						DbField::Int    { name: "db_int1".to_string(),   origin: Some("int1".to_string()) },
+						DbField::Bool   { name: "db_bool1".to_string(),  origin: Some("bool1".to_string()) },
+						DbField::Float  { name: "db_float1".to_string(), origin: Some("float1".to_string()) },
+						DbField::String { name: "db_foo1".to_string(),   origin: Some("foo1".to_string()) },
+						DbField::String { name: "db_foo2".to_string(),   origin: Some("foo2".to_string()) },
 					),
 				},
 				config::DbTable{
 					name: "second".to_string(),
 					for_messages: "\"match\":\"second\"".to_string(),
 					fields: vec!(
-						DbField::String { name: "db_foo1".to_string(),   origin: "foo1".to_string() },
-						DbField::String { name: "db_foo2".to_string(),   origin: "foo2".to_string() },
+						DbField::String { name: "db_foo1".to_string(),   origin: Some("foo1".to_string()) },
+						DbField::String { name: "db_foo2".to_string(),   origin: Some("foo2".to_string()) },
 					),
 				},
 			);
