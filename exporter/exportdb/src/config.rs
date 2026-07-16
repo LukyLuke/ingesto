@@ -81,7 +81,10 @@ impl Database {
 		opt = match &self.auth {
 			Some(auth) => {
 				match auth {
-					Authentication::Simple { user, pass } => opt.username(secrets_string(user).unwrap_or_default().as_ref()).password(secrets_string(pass).unwrap_or_default().as_ref()),
+					Authentication::Simple { user, pass } => {
+						opt.username(secrets_string(user).unwrap_or_default().as_ref())
+							.password(secrets_string(pass).unwrap_or_default().as_ref())
+					},
 					_ => opt,
 				}
 			},

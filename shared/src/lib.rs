@@ -7,6 +7,7 @@ pub mod types;
 
 use serde::de::DeserializeOwned;
 use tracing_subscriber::EnvFilter;
+use tracing::{debug};
 use std::{fs, path::Path, path::PathBuf};
 use anyhow::Context;
 use clap::{Arg, Command, builder::{PathBufValueParser}};
@@ -72,15 +73,21 @@ pub fn load_config<T: DeserializeOwned, P: AsRef<Path>>(path: P) -> anyhow::Resu
 pub fn secrets_string(val: &str) -> anyhow::Result<String> {
 	if val.starts_with("file:/") && let Some(file) = val.get(6..) {
 		if let Ok(content) = fs::read_to_string(file) && !content.is_empty() {
-			return Ok(content.lines().next().unwrap_or_default().to_string());
+			let line = content.lines().next().unwrap_or_default().to_string();
+			debug!(message="secrets_string", variant="file", key=val, val=mask(&line, 3) );
+			return Ok(line);
 		}
 	} else if val.starts_with("env:") && let Some(env) = val.get(4..) {
-		let e = env::var(env);
-		println!("{:?}", e);
+		if let Ok(line) = env::var(env) {
+			debug!(message="secrets_string", variant="env", key=val, val=mask(&line, 3) );
+			return Ok(line.to_string());
+		}
 	}
+	debug!(message="secrets_string", variant="none", key=val, val=mask(&val, 3) );
 	Ok(val.to_owned())
 }
 
+/// Simply shows the usage of the program and returns the path to a possible given config file
 pub fn usage() -> anyhow::Result<PathBuf> {
 	let matches = Command::new("Ingesto")
 		.about("Log-Ingestion from various sources into various destinations in various formats.")
@@ -94,6 +101,31 @@ pub fn usage() -> anyhow::Result<PathBuf> {
 
 	let f: &PathBuf = matches.get_one("config_file").unwrap();
 	return Ok(f.to_path_buf())
+}
+
+/// Masks a string with '*' and only shows the first couple chars
+///
+/// # Arguments
+///
+/// * `val` - value to mask
+/// * `num` - number of chars to show as plain text at the start
+///
+/// # Examples
+///
+/// ```
+/// let val = "This is a Secret String";
+/// let masked = shared::mask(val, 6);
+/// println!("Masked: {}", masked); // Prints `Masked: This i*****************`
+/// ```
+///
+/// # Returns
+///
+/// A masked string like "Password" -> "Pas****"
+pub fn mask(val: &str, num: usize) -> String {
+	val.chars()
+		.enumerate()
+		.map(|(i, c)| { if i > num { '*' } else { c } })
+		.collect::<String>()
 }
 
 
