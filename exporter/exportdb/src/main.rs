@@ -1,13 +1,12 @@
 pub mod config;
 pub mod db;
 
-use std::{collections::HashMap, str::FromStr, sync::{Arc, OnceLock}, thread, time::Duration};
+use std::{collections::HashMap, sync::{Arc, OnceLock}, thread, time::Duration};
 
 use anyhow::{Result, anyhow};
 use futures::executor::block_on;
 use regex::Regex;
-use shared::{self, init_logging, queue::MessageQueue, receiver::start_otel_listener, types::{DbField, DbValue}, usage};
-use sqlx::types::{chrono::{self, Utc}, ipnetwork::Ipv4Network};
+use shared::{self, init_logging, queue::MessageQueue, receiver::start_otel_listener, types::DbValue, usage};
 use tracing::{debug, error, info};
 
 use crate::config::DbTable;
@@ -99,47 +98,7 @@ fn process_queue<DB: db::DbAccess + 'static>(queue: Arc<MessageQueue<String>>, m
 	match find_matching_table_config(db.tables_config(), &msg) {
 		Ok(table) => {
 			let json: serde_json::Value = serde_json::from_str(&msg).unwrap_or_default();
-			let mut fields = Vec::new();
-			for field in &table.fields {
-				match field {
-					DbField::String { name, origin } => fields.push((
-						String::from(name),
-						DbValue::String( json.get(origin.as_ref().unwrap_or(name)).unwrap_or_default().as_str().unwrap_or_default().to_string() )
-					)),
-					DbField::Float { name, origin } => fields.push((
-						String::from(name),
-						DbValue::F64( json.get(origin.as_ref().unwrap_or(name)).unwrap_or_default().as_f64().unwrap_or_default() )
-					)),
-					DbField::Bool { name, origin } => fields.push((
-						String::from(name),
-						DbValue::Bool( json.get(origin.as_ref().unwrap_or(name)).unwrap_or_default().as_bool().unwrap_or_default() )
-					)),
-					DbField::Int { name, origin } => fields.push((
-						String::from(name),
-						DbValue::I64( json.get(origin.as_ref().unwrap_or(name)).unwrap_or_default().as_i64().unwrap_or_default() )
-					)),
-					DbField::DateTimeUtc { name, origin } => fields.push((
-						String::from(name),
-						DbValue::DateTimeUtc( {
-							match dateparser::parse(json.get(origin.as_ref().unwrap_or(name)).unwrap_or_default().as_str().unwrap_or_default()) {
-								Ok(dt) => dt.to_utc(),
-								Err(_) => chrono::DateTime::<Utc>::MIN_UTC
-							}
-						} )
-					)),
-					DbField::IpAddress { name, origin } => fields.push((
-						String::from(name),
-						DbValue::IpAddress( Ipv4Network::from_str( json.get(origin.as_ref().unwrap_or(name)).unwrap_or_default().as_str().unwrap_or_default() )
-							.unwrap_or(Ipv4Network::from_str("127.0.0.1/32").unwrap())
-						)
-					)),
-					DbField::Bytes { name, origin } => fields.push((
-						String::from(name),
-						DbValue::Bytes( json.get(origin.as_ref().unwrap_or(name)).unwrap_or_default().as_str().unwrap_or_default().as_bytes().to_vec() )
-					)),
-
-				}
-			}
+			let fields = DbValue::from(&table.fields, &json);
 			db.insert(&table.name, &fields)
 		},
 		Err(e) => Err(e),
@@ -206,6 +165,7 @@ fn find_matching_table_config(tables: &[DbTable], msg: &str) -> Result<DbTable> 
 #[cfg(test)]
 mod test {
 	use super::*;
+	use shared::types::{DbField, DbValue};
 	use crate::{config::DbTable, db::DbAccess};
 
 	struct DbTest {

@@ -1,4 +1,4 @@
-use core::fmt;
+use std::{fmt, str::FromStr};
 use chrono::{DateTime, Utc};
 use ipnetwork::Ipv4Network;
 use serde::{Deserialize, Serialize};
@@ -231,6 +231,49 @@ pub enum DbValue {
 	Bytes(Vec<u8>),
 	DateTimeUtc(DateTime<Utc>),
 	IpAddress(Ipv4Network),
+}
+impl DbValue {
+	pub fn from(fields: &Vec<DbField>, json: &serde_json::Value) -> Vec<(String, DbValue)> {
+		fields.iter().map(|field| Self::convert(field, &json)).collect()
+	}
+
+	fn convert(val: &DbField, json: &serde_json::Value) -> (String, DbValue) {
+		match val {
+			DbField::String { name, origin } => (
+				String::from(name),
+				Self::String( json.get(origin.as_ref().unwrap_or(name)).unwrap_or_default().as_str().unwrap_or_default().to_string() )
+			),
+			DbField::Float { name, origin } => (
+				String::from(name),
+				Self::F64( json.get(origin.as_ref().unwrap_or(name)).unwrap_or_default().as_f64().unwrap_or_default() )
+			),
+			DbField::Bool { name, origin } => (
+				String::from(name),
+				Self::Bool( json.get(origin.as_ref().unwrap_or(name)).unwrap_or_default().as_bool().unwrap_or_default() )
+			),
+			DbField::Int { name, origin } => (
+				String::from(name),
+				Self::I64( json.get(origin.as_ref().unwrap_or(name)).unwrap_or_default().as_i64().unwrap_or_default() )
+			),
+			DbField::DateTimeUtc { name, origin } => (
+				String::from(name),
+				Self::DateTimeUtc( {
+					match dateparser::parse(json.get(origin.as_ref().unwrap_or(name)).unwrap_or_default().as_str().unwrap_or_default()) {
+						Ok(dt) => dt.to_utc(),
+						Err(_) => chrono::DateTime::<Utc>::MIN_UTC
+					}
+				} )
+			),
+			DbField::IpAddress { name, origin } => (
+				String::from(name),
+				Self::IpAddress( Ipv4Network::from_str( json.get(origin.as_ref().unwrap_or(name)).unwrap_or_default().as_str().unwrap_or_default() ).unwrap_or(Ipv4Network::from_str("127.0.0.1/32").unwrap()) )
+			),
+			DbField::Bytes { name, origin } => (
+				String::from(name),
+				Self::Bytes( json.get(origin.as_ref().unwrap_or(name)).unwrap_or_default().as_str().unwrap_or_default().as_bytes().to_vec() )
+			),
+		}
+	}
 }
 
 /// Defines a field in the Database from a given type, fieldname and message-field name
