@@ -96,15 +96,15 @@ impl Db {
 	pub async fn alive(&self) -> Result<()> {
 		match &self.db {
 			DbBackend::Postgres(pool) => {
-				let mut conn = pool.try_acquire().ok_or_else(|| anyhow!(ERR_NO_CONN))?;
+				let mut conn = pool.acquire().await.map_err(|e| anyhow!("{}: {:?}", ERR_NO_CONN, e))?;
 				conn.ping().await.map_err(|e| anyhow!("{}: {:?}", ERR_NOT_REACHABLE, e))
 			},
 			DbBackend::MadiaDb(pool) => {
-				let mut conn = pool.try_acquire().ok_or_else(|| anyhow!(ERR_NO_CONN))?;
+				let mut conn = pool.acquire().await.map_err(|e| anyhow!("{}: {:?}", ERR_NO_CONN, e))?;
 				conn.ping().await.map_err(|e| anyhow!("{}: {:?}", ERR_NOT_REACHABLE, e))
 			},
 			DbBackend::SqLite(pool) => {
-				let mut conn = pool.try_acquire().ok_or_else(|| anyhow!(ERR_NO_CONN))?;
+				let mut conn = pool.acquire().await.map_err(|e| anyhow!("{}: {:?}", ERR_NO_CONN, e))?;
 				conn.ping().await.map_err(|e| anyhow!("{}: {:?}", ERR_NOT_REACHABLE, e))
 			},
 		}

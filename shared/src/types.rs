@@ -213,7 +213,7 @@ impl OtelReceiver {
 impl Default for OtelReceiver {
 	fn default() -> Self {
 		Self {
-			address: String::from("127.0.0.1"),
+			address: String::from("0.0.0.0"),
 			port: default_otel_port(),
 			path: default_logs_path(),
 		}
