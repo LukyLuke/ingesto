@@ -149,6 +149,7 @@ fn call_api(conf: Arc<config::Endpoint>, queue: Arc<shared::queue::MessageQueue<
 		}
 
 		paging = conf.paging.until.as_ref().is_some_and(|p| !p.check(status.as_u16(), body.to_owned()));
+		debug!(message="apply paging", apply=paging);
 		if paging {
 			match serde_json::from_str(body.to_owned().as_str()).unwrap_or_default() {
 				Value::Null => break,

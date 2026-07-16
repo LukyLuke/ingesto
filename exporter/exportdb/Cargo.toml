@@ -13,6 +13,7 @@ shared = { path = "../../shared" }
 tiny_http = { version = "0" }
 
 anyhow = { workspace = true }
+dateparser = { workspace = true }
 futures = { workspace = true }
 regex = { workspace = true }
 serde = { workspace = true }

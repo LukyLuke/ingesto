@@ -126,10 +126,10 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 				debug!(message="processed message", original=%q_msg, processed=%msg);
 
 				match me.send_message(&otlp, &msg, max_msg, max_time) {
-					Ok(_) => info!(message="enqueued message for otlp endpoint", endpoint=%otlp.endpoint, service=%otlp.service),
+					Ok(_) => info!(message="enqueued message for otlp endpoint", endpoint=%otlp.endpoint, port=%otlp.port, service=%otlp.service),
 					Err(e) => {
 						me.queue.push_front(q_msg.into());
-						error!(message="failed to enqueue message for otlp endpoint", endpoint=%otlp.endpoint, service=%otlp.service, error=%e)
+						error!(message="failed to enqueue message for otlp endpoint", endpoint=%otlp.endpoint, port=%otlp.port, service=%otlp.service, error=%e)
 					}
 				};
 			}
@@ -221,17 +221,10 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 	///
 	/// Returns the either the parsed or the raw message
 	fn parse_message(&self, raw: &String) -> String {
-		// First find the right parser
-		let mut parser: Option<&types::Parser> = None;
-		for p in &self.parser {
-			let re = match self.regexes.get(&p.matcher) {
-				Some(re) => re,
-				None => continue
-			};
-			if re.is_match(raw) {
-				parser = Some(&p);
-			}
-		}
+		// First find the right parser and apply it
+		let parser = self.parser.iter()
+			.find_map(|parser| self.regexes.get(&parser.matcher)
+				.and_then(|re| if re.is_match(raw) { Some(parser) } else { None }) );
 		self.apply_parser(raw, parser)
 	}
 

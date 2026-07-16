@@ -5,7 +5,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use shared::types::{Parser, Queue};
 
-
 /// The main Polling-Configuration
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Config {
@@ -214,6 +213,11 @@ impl PagingRequestUntil {
 
 			// Parse JSON-Pointer value and compare to the value
 			Self::Equals(left, right) => {
+				tracing::debug!(
+					message = "PAGING-CHECK",
+					left = shared::template::template_string(&left, json.clone()),
+					right = shared::template::template_string(&right, json.clone())
+				);
 				shared::template::template_string(&left, json.clone()) == shared::template::template_string(&right, json.clone())
 			},
 

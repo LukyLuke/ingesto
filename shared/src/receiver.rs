@@ -69,9 +69,9 @@ fn handle_request(mut req: Request, conf: Arc<OtelReceiver>, queue: Arc<MessageQ
 			.map(convert_tonic)
 			.filter_map(|val| {
 				match serde_json::to_string(&val) {
-					Ok(json) => {
-						queue.push(json.clone());
-						debug!(message="log received", log=%json);
+					Ok(jstr) => {
+						queue.push(jstr.clone());
+						debug!(message="log received", log=%jstr);
 						Ok(())
 					},
 					Err(e) => {
@@ -106,7 +106,13 @@ fn handle_request(mut req: Request, conf: Arc<OtelReceiver>, queue: Arc<MessageQ
 fn convert_tonic(val: &Value) -> serde_json::Value {
 	match val {
 		BoolValue(v) => json!(*v),
-		StringValue(v) => json!(v.to_string()),
+		StringValue(v) => {
+			// Try to decode a string as json
+			match serde_json::from_str::<serde_json::Value>(v) {
+				Ok(jv) => jv,
+				Err(_) => json!(v.to_string()),
+			}
+		},
 		StringValueStrindex(v) => { error!("type 'StringValueStrindex' received which shold not be used: {}", v); json!(v.to_string()) },
 		IntValue(v) => json!(v),
 		DoubleValue(v) => json!(v),

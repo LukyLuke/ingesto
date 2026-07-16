@@ -1,5 +1,6 @@
 use core::fmt;
 use chrono::{DateTime, Utc};
+use ipnetwork::Ipv4Network;
 use serde::{Deserialize, Serialize};
 
 /// Message-Queue configuration
@@ -229,6 +230,7 @@ pub enum DbValue {
 	String(String),
 	Bytes(Vec<u8>),
 	DateTimeUtc(DateTime<Utc>),
+	IpAddress(Ipv4Network),
 }
 
 /// Defines a field in the Database from a given type, fieldname and message-field name
@@ -243,4 +245,5 @@ pub enum DbField {
 	String { name: String, origin: Option<String> },
 	Bytes { name: String, origin: Option<String> },
 	DateTimeUtc { name: String, origin: Option<String> },
+	IpAddress { name: String, origin: Option<String> },
 }

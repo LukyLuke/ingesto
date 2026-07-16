@@ -18,6 +18,7 @@ clap = { workspace = true }
 chrono = { workspace = true }
 dashmap = { workspace = true }
 dateparser = { workspace = true }
+ipnetwork = { workspace = true }
 jiff = { workspace = true }
 once_cell = { workspace = true }
 opentelemetry = { workspace = true }

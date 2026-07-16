@@ -1,12 +1,13 @@
 pub mod config;
 pub mod db;
 
-use std::{collections::HashMap, sync::{Arc, OnceLock}, thread, time::Duration};
+use std::{collections::HashMap, str::FromStr, sync::{Arc, OnceLock}, thread, time::Duration};
 
 use anyhow::{Result, anyhow};
 use futures::executor::block_on;
 use regex::Regex;
 use shared::{self, init_logging, queue::MessageQueue, receiver::start_otel_listener, types::{DbField, DbValue}, usage};
+use sqlx::types::{chrono::{self, Utc}, ipnetwork::Ipv4Network};
 use tracing::{debug, error, info};
 
 use crate::config::DbTable;
@@ -93,7 +94,7 @@ fn process_queue<DB: db::DbAccess + 'static>(queue: Arc<MessageQueue<String>>, m
 			return Ok(());
 		}
 	};
-	debug!(message="processing message", message=%msg);
+	debug!(message="processing message", msg=%msg);
 
 	match find_matching_table_config(db.tables_config(), &msg) {
 		Ok(table) => {
@@ -117,7 +118,26 @@ fn process_queue<DB: db::DbAccess + 'static>(queue: Arc<MessageQueue<String>>, m
 						String::from(name),
 						DbValue::I64( json.get(origin.as_ref().unwrap_or(name)).unwrap_or_default().as_i64().unwrap_or_default() )
 					)),
-					_ => {}
+					DbField::DateTimeUtc { name, origin } => fields.push((
+						String::from(name),
+						DbValue::DateTimeUtc( {
+							match dateparser::parse(json.get(origin.as_ref().unwrap_or(name)).unwrap_or_default().as_str().unwrap_or_default()) {
+								Ok(dt) => dt.to_utc(),
+								Err(_) => chrono::DateTime::<Utc>::MIN_UTC
+							}
+						} )
+					)),
+					DbField::IpAddress { name, origin } => fields.push((
+						String::from(name),
+						DbValue::IpAddress( Ipv4Network::from_str( json.get(origin.as_ref().unwrap_or(name)).unwrap_or_default().as_str().unwrap_or_default() )
+							.unwrap_or(Ipv4Network::from_str("127.0.0.1/32").unwrap())
+						)
+					)),
+					DbField::Bytes { name, origin } => fields.push((
+						String::from(name),
+						DbValue::Bytes( json.get(origin.as_ref().unwrap_or(name)).unwrap_or_default().as_str().unwrap_or_default().as_bytes().to_vec() )
+					)),
+
 				}
 			}
 			db.insert(&table.name, &fields)
