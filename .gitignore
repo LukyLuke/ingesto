@@ -5,13 +5,28 @@
 *-swp
 *-tmp
 *.log
+*.rs.bk
 
 # Rust
 /target/
 **/target/
+/bin/
+**/bin/
 
 /Cargo.lock
 **/Cargo.lock
+
+# wasm-pack build
+/pkg/
+**/pkg/
+
+# Node (webpack wasm-app)
+/node_modules/
+**/node_modules/
+/dist/
+**/dist/
+/.bin/
+**/.bin/
 
 # Container
 .cargo.toml.*
@@ -23,3 +38,7 @@
 **/*config.toml
 /*config.yaml
 **/*config.yaml
+
+*.log
+**/*.log
+

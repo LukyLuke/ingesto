@@ -1,44 +1,123 @@
 [workspace]
-resolver = "3"
 members = [
+	"confui",
 	"exporter/*",
 	"receiver/*",
-	"shared"
+	"shared",
 ]
+resolver = "3"
 
 [workspace.package]
 version = "0.1.0"
-edition = "2024"
-license = "MIT"
-authors = [ "Ingesto Contributors" ]
-repository = "https://github.com/lukyluke/ingesto"
+authors = ["Ingesto Contributors"]
 homepage = "https://github.com/lukyluke/ingesto"
+license = "MIT or Apache-2.0"
+repository = "https://github.com/lukyluke/ingesto"
+edition = "2024"
 
-[workspace.dependencies]
-anyhow = { version = "1" }
-base64 = { version = "0" }
-bytes = { version = "1" }
-chrono = { version = "0" }
-clap = { version = "4" }
-dateparser = { version = "0" }
-dashmap = { version = "6" }
-futures = { version = "0" }
-ipnetwork = { version = "0" }
-jiff = { version = "0" }
-notify = { version = "8" }
-once_cell = { version = "1" }
-opentelemetry = { version = "0.32" }
-opentelemetry-otlp = { version = "0.32" }
-opentelemetry-proto = { version = "0.32", features = [ "logs", "metrics", "with-serde" ] }
-opentelemetry_sdk = { version = "0.32" }
-parse_datetime = { version = "0" }
-prost = { version = "0" }
-regex = { version = "1" }
-serde = { version = "1", features = ["derive"] }
-serde_json = { version = "1" }
-sqlx = { version = "0", features = [ "tls-rustls", "runtime-async-std", "postgres", "mysql", "sqlite", "json", "chrono", "ipnetwork" ] }
-thiserror = { version = "2" }
-tiny_http = { version = "0" }
-tracing = { version = "0" }
-tracing-subscriber = { version = "0", features = ["json", "env-filter"] }
-uuid = { version = "1", features = [ "v4", "v7", "js", "serde" ] }
+[workspace.dependencies.anyhow]
+version = "1"
+
+[workspace.dependencies.base64]
+version = "0"
+
+[workspace.dependencies.bytes]
+version = "1"
+
+[workspace.dependencies.chrono]
+version = "0"
+
+[workspace.dependencies.clap]
+version = "4"
+
+[workspace.dependencies.dashmap]
+version = "6"
+
+[workspace.dependencies.dateparser]
+version = "0"
+
+[workspace.dependencies.futures]
+version = "0"
+
+[workspace.dependencies.ipnetwork]
+version = "0"
+
+[workspace.dependencies.jiff]
+version = "0"
+
+[workspace.dependencies.notify]
+version = "8"
+
+[workspace.dependencies.once_cell]
+version = "1"
+
+[workspace.dependencies.opentelemetry]
+version = "0.32"
+
+[workspace.dependencies.opentelemetry-otlp]
+version = "0.32"
+
+[workspace.dependencies.opentelemetry-proto]
+version = "0.32"
+features = [
+	"logs",
+	"metrics",
+	"with-serde",
+]
+
+[workspace.dependencies.opentelemetry_sdk]
+version = "0.32"
+
+[workspace.dependencies.parse_datetime]
+version = "0"
+
+[workspace.dependencies.prost]
+version = "0"
+
+[workspace.dependencies.regex]
+version = "1"
+
+[workspace.dependencies.serde]
+version = "1"
+features = ["derive"]
+
+[workspace.dependencies.serde_json]
+version = "1"
+
+[workspace.dependencies.sqlx]
+version = "0"
+features = [
+	"tls-rustls",
+	"runtime-async-std",
+	"postgres",
+	"mysql",
+	"sqlite",
+	"json",
+	"chrono",
+	"ipnetwork",
+]
+
+[workspace.dependencies.thiserror]
+version = "2"
+
+[workspace.dependencies.tiny_http]
+version = "0"
+
+[workspace.dependencies.tracing]
+version = "0"
+
+[workspace.dependencies.tracing-subscriber]
+version = "0"
+features = [
+	"json",
+	"env-filter",
+]
+
+[workspace.dependencies.uuid]
+version = "1"
+features = [
+	"v4",
+	"v7",
+	"js",
+	"serde",
+]

@@ -135,7 +135,7 @@ mod tests {
 
 	#[test]
 	fn test_secrets_string_file() {
-		let res = secrets_string("file:/../LICENSE");
+		let res = secrets_string("file:/../LICENSE-MIT");
 
 		assert!(res.is_ok());
 		assert_eq!(res.unwrap(), "MIT License");
@@ -151,7 +151,7 @@ mod tests {
 
 	#[test]
 	fn test_secrets_string_nok() {
-		let not_a_file = secrets_string("file:/LICENSE");
+		let not_a_file = secrets_string("file:/LICENSE-MIT");
 		let only_string = secrets_string("LICENSE");
 
 		assert!(not_a_file.is_ok());
