@@ -7,16 +7,12 @@ use std::{
 
 use chrono::{Duration, Utc};
 use cron::Schedule;
-use once_cell::sync::Lazy;
 use reqwest::{StatusCode, blocking::{Response, RequestBuilder}};
 use shared::{self, init_logging, parser::MessageParser, queue::MessageQueue, usage, secrets_string};
 use serde_json::{Value, json};
 use tracing::{debug, error, info};
 
 use crate::{config::{Authentication, Method}};
-
-static TEMPLATE_URI_KEY: Lazy<String> = Lazy::new(|| String::from("uri"));
-static TEMPLATE_BODY_KEY: Lazy<String> = Lazy::new(|| String::from("body"));
 
 static MAX_PAGING_REQUESTS: u16 = 1024;
 
@@ -54,27 +50,34 @@ fn main() {
 	}
 }
 
-fn run_scheduler(conf: Arc<config::Endpoint>, cron_expr: &str, queue: Arc<shared::queue::MessageQueue<String>>) -> anyhow::Result<()> {
+fn run_scheduler(conf: Arc<Vec<config::Endpoint>>, cron_expr: &str, queue: Arc<shared::queue::MessageQueue<String>>) -> anyhow::Result<()> {
 	let schedule = Schedule::from_str(cron_expr)?;
 	info!(message="scheduler started", cron=%cron_expr);
 
 	// Prepare Body and Url Template-Cache
-	shared::template::template_string_parse(&TEMPLATE_URI_KEY,  &conf.uri);
-	shared::template::template_string_parse(&TEMPLATE_BODY_KEY, &String::from(conf.body.as_deref().unwrap_or_default()));
+	for c in conf.iter() {
+		let u = c.uri.to_owned();
+		let b = c.body.as_deref().unwrap_or_default().to_owned();
+		shared::template::template_string_parse(&u, &u);
+		shared::template::template_string_parse(&b, &b);
+	}
 
 	loop {
 		// Run if the next schedule would be in the past already on the next run
 		let now = Utc::now();
 		if let Some(upcoming) = schedule.upcoming(Utc).next() {
 			if upcoming < (now + Duration::seconds(1)) {
-				debug!(message="polling api", method=%conf.method, api=%conf.uri, auth=%conf.auth.as_ref().unwrap_or(&Authentication::None));
-
-				let conf_t = Arc::clone(&conf);
 				let queue_t = Arc::clone(&queue);
+				let conf_t = Arc::clone(&conf);
+
 				thread::spawn(move || {
-					// call_api_internal(req) function sends out the real request (dep-injection for test)
-					// queue_message is for adding the received data to the queue (dep-injection for test)
-					let _ = call_api(conf_t, queue_t, call_api_internal, queue_message_internal);
+					for c in conf_t.iter() {
+						debug!(message="polling api", method=%c.method, api=%c.uri, auth=%c.auth.as_ref().unwrap_or(&Authentication::None));
+
+						// call_api_internal(req) function sends out the real request (dep-injection for test)
+						// queue_message is for adding the received data to the queue (dep-injection for test)
+						call_api(Arc::new(c), queue_t.clone(), call_api_internal, queue_message_internal).ok();
+					}
 				});
 			}
 		}
@@ -84,15 +87,15 @@ fn run_scheduler(conf: Arc<config::Endpoint>, cron_expr: &str, queue: Arc<shared
 	}
 }
 
-fn call_api(conf: Arc<config::Endpoint>, queue: Arc<shared::queue::MessageQueue<String>>, send_reqwest: impl Fn(RequestBuilder) -> Result<Response, reqwest::Error>, queue_message: impl Fn(String, Arc<shared::queue::MessageQueue<String>>)) -> anyhow::Result<()> {
+fn call_api(conf: Arc<&config::Endpoint>, queue: Arc<shared::queue::MessageQueue<String>>, send_reqwest: impl Fn(RequestBuilder) -> Result<Response, reqwest::Error>, queue_message: impl Fn(String, Arc<shared::queue::MessageQueue<String>>)) -> anyhow::Result<()> {
 	let mut response = Arc::new( json!({}) );
 	let mut paging = true;
 	let mut pages = 0;
 
 	while paging {
 		// Parse URI and Body
-		let mut uri = shared::template::template_string(&TEMPLATE_URI_KEY, Arc::clone(&response));
-		let send_body = shared::template::template_string(&TEMPLATE_BODY_KEY, Arc::clone(&response));
+		let mut uri = shared::template::template_string(&conf.uri, Arc::clone(&response));
+		let send_body = shared::template::template_string(&conf.body.as_deref().unwrap_or_default().to_owned(), Arc::clone(&response));
 
 		// Append Paging if available
 		if !conf.paging.param.name.is_empty() {
@@ -177,7 +180,7 @@ pub mod test {
 
 	#[test]
 	fn test_call_api() {
-		let conf = Arc::new(config::Endpoint{
+		let conf = config::Endpoint{
 			uri: String::from("http://127.0.0.1/polling/?cursor={{ $response/paging/cursor }}"),
 			body: None,
 			method: Method::GET,
@@ -189,12 +192,12 @@ pub mod test {
 				timeout: 100,
 				max_pages: 2,
 			}
-		});
+		};
 		let queue = Arc::new(shared::queue::MessageQueue::<String>::new());
-		shared::template::template_string_parse(&TEMPLATE_URI_KEY,  &conf.uri);
-		shared::template::template_string_parse(&TEMPLATE_BODY_KEY, &String::from(conf.body.as_deref().unwrap_or_default()));
+		shared::template::template_string_parse(&conf.uri,  &conf.uri);
+		shared::template::template_string_parse(&conf.body.as_deref().unwrap_or_default().to_owned(), &conf.body.as_deref().unwrap_or_default().to_owned());
 
-		let res = call_api(conf.clone(), queue.clone(), call_api_internal, queue_message_internal);
+		let res = call_api(Arc::new(&conf), queue.clone(), call_api_internal, queue_message_internal);
 
 		// Check for two responses (paging requests)
 		assert_eq!(res.is_ok(), true);
@@ -212,7 +215,7 @@ pub mod test {
 
 	#[test]
 	fn test_call_api_nojson() {
-		let conf = Arc::new(config::Endpoint{
+		let conf = config::Endpoint{
 			uri: String::from("http://127.0.0.1/polling/?cursor={{ $response/paging/cursor }}"),
 			body: None,
 			method: Method::GET,
@@ -224,12 +227,12 @@ pub mod test {
 				timeout: 100,
 				max_pages: 2,
 			}
-		});
+		};
 		let queue = Arc::new(shared::queue::MessageQueue::<String>::new());
-		shared::template::template_string_parse(&TEMPLATE_URI_KEY,  &conf.uri);
-		shared::template::template_string_parse(&TEMPLATE_BODY_KEY, &String::from(conf.body.as_deref().unwrap_or_default()));
+		shared::template::template_string_parse(&conf.uri,  &conf.uri);
+		shared::template::template_string_parse(&conf.body.as_deref().unwrap_or_default().to_owned(), &conf.body.as_deref().unwrap_or_default().to_owned());
 
-		let res = call_api(conf.clone(), queue.clone(), call_api_internal_nojson, queue_message_internal);
+		let res = call_api(Arc::new(&conf), queue.clone(), call_api_internal_nojson, queue_message_internal);
 
 		// Check for one response (no paging requests possible due to no json)
 		assert_eq!(res.is_ok(), true);

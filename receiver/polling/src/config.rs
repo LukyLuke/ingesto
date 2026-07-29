@@ -18,7 +18,7 @@ pub struct Polling {
 	pub name: String,
 
 	/// Where to send the requests to
-	pub api: Endpoint,
+	pub api: Vec<Endpoint>,
 
 	/// Timeout between the requests
 	#[serde(default = "default_cron_timer")]

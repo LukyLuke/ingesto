@@ -1,12 +1,12 @@
 # Polling Receiver
 
-The **Polling-Receiver** calls an HTTP-Endpoint, including paging, and parses the received data.
+The **Polling-Receiver** calls one or multiple HTTP-Endpoints, including paging, and parses the received data.
 
-The timer is in cron format with seconds:
+The timer is in cron format with seconds and is for all Endpoints the same:
 
 ```
 sec  min  hour  day  month  weekday  year
- *   */5    *    *     *      *      *
+ 1   */5    *    *     *      *      *
 ```
 
 With the following possible values:
@@ -35,16 +35,16 @@ The Authentication can be one of:
 ### Example Configuration
 
 ```toml
-[config.api.auth.None]
+[[config.api.auth.None]]
 
-[config.api.auth.Basic]
+[[config.api.auth.Basic]]
 user = "username"
 pass = "password"
 
-[config.api.auth.Bearer]
+[[config.api.auth.Bearer]]
 value = "Bearer Token with/out Bearer"
 
-[config.api.auth.Header]
+[[config.api.auth.Header]]
 name = "Auth-Header-Name"
 value = "Auth Header Value"
 ```
@@ -61,7 +61,7 @@ If a call to an API has multiple pages, every page has to be fetched individuall
 ### Paging-Examples:
 
 ```toml
-[config.api.paging]
+[[config.api.paging]]
 param = { name = "page", value = "{{ $response/paging/cursor }}" }
 timeout = 500
 max_pages = 10
@@ -85,7 +85,7 @@ until = { Equals = [ "{{ $response/paging/last }}", "true" ] }
 name = "API-Polling XY"
 timer = "* */5 * * * *"
 
-[config.api]
+[[config.api]]
 uri = "https://exaple.com/api/v2/users"
 method = "POST"
 body = """
@@ -93,16 +93,16 @@ body = """
   "string": "body" }
 """
 
-[config.api.auth.Header]
+[[config.api.auth.Header]]
 name = "X-Auth-Header"
 value = "Auth-Header-Value"
 
-[config.api.paging]
+[[config.api.paging]]
 timeout = 1000
 max_pages = 20
 until = { Equals = [ "{{ $response/paging/page }}", "{{ $response/paging/last }}" ] }
 
-[config.api.paging.param]
+[[config.api.paging.param]]
 name = "page"
 value = "{{ $response/paging/cursor }}"
 
