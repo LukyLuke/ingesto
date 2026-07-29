@@ -186,7 +186,8 @@ impl Db {
 				DbValue::String(v) => values.push_bind(v),
 				DbValue::DateTimeUtc(v) => values.push_bind(v),
 				DbValue::Bytes(v) => values.push_bind(v),
-				DbValue::IpAddress(v) => values.push_bind(v.to_string()),
+				DbValue::IpAddress(v) => values.push_bind(v),
+				DbValue::Json(v) => values.push_bind(v),
 			};
 		}
 		builder.push(")");
@@ -227,6 +228,7 @@ impl Db {
 				DbValue::DateTimeUtc(v) => values.push_bind(v),
 				DbValue::Bytes(v) => values.push_bind(v),
 				DbValue::IpAddress(v) => values.push_bind(v.to_string()),
+				DbValue::Json(v) => values.push_bind(v),
 			};
 		}
 		builder.push(")");
@@ -267,6 +269,7 @@ impl Db {
 				DbValue::DateTimeUtc(v) => values.push_bind(v),
 				DbValue::Bytes(v) => values.push_bind(v),
 				DbValue::IpAddress(v) => values.push_bind(v.to_string()),
+				DbValue::Json(v) => values.push_bind(v),
 			};
 		}
 		builder.push(")");

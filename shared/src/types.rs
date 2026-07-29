@@ -1,7 +1,8 @@
-use std::{fmt, str::FromStr};
+use std::{fmt, net::Ipv4Addr};
 use chrono::{DateTime, Utc};
-use ipnetwork::Ipv4Network;
+use ipnetwork::{IpNetwork, Ipv4Network};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 /// Message-Queue configuration
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -230,7 +231,8 @@ pub enum DbValue {
 	String(String),
 	Bytes(Vec<u8>),
 	DateTimeUtc(DateTime<Utc>),
-	IpAddress(Ipv4Network),
+	IpAddress(IpNetwork),
+	Json(Value),
 }
 impl DbValue {
 	pub fn from(fields: &Vec<DbField>, json: &serde_json::Value) -> Vec<(String, DbValue)> {
@@ -241,24 +243,43 @@ impl DbValue {
 		match val {
 			DbField::String { name, origin } => (
 				String::from(name),
-				Self::String( json.get(origin.as_ref().unwrap_or(name)).unwrap_or_default().as_str().unwrap_or_default().to_string() )
+				Self::String(
+					json.get(origin.as_ref().unwrap_or(name))
+						.unwrap_or_default().as_str()
+						.unwrap_or_default().to_string()
+				)
 			),
 			DbField::Float { name, origin } => (
 				String::from(name),
-				Self::F64( json.get(origin.as_ref().unwrap_or(name)).unwrap_or_default().as_f64().unwrap_or_default() )
+				Self::F64(
+					json.get(origin.as_ref().unwrap_or(name))
+						.unwrap_or_default().as_f64()
+						.unwrap_or_default()
+				)
 			),
 			DbField::Bool { name, origin } => (
 				String::from(name),
-				Self::Bool( json.get(origin.as_ref().unwrap_or(name)).unwrap_or_default().as_bool().unwrap_or_default() )
+				Self::Bool(
+					json.get(origin.as_ref().unwrap_or(name))
+						.unwrap_or_default().as_bool()
+						.unwrap_or_default()
+				)
 			),
 			DbField::Int { name, origin } => (
 				String::from(name),
-				Self::I64( json.get(origin.as_ref().unwrap_or(name)).unwrap_or_default().as_i64().unwrap_or_default() )
+				Self::I64(
+					json.get(origin.as_ref().unwrap_or(name))
+						.unwrap_or_default().as_i64()
+						.unwrap_or_default()
+				)
 			),
 			DbField::DateTimeUtc { name, origin } => (
 				String::from(name),
 				Self::DateTimeUtc( {
-					match dateparser::parse(json.get(origin.as_ref().unwrap_or(name)).unwrap_or_default().as_str().unwrap_or_default()) {
+					let s = json.get(origin.as_ref().unwrap_or(name))
+						.unwrap_or_default().as_str()
+						.unwrap_or_default();
+					match dateparser::parse(s) {
 						Ok(dt) => dt.to_utc(),
 						Err(_) => chrono::DateTime::<Utc>::MIN_UTC
 					}
@@ -266,11 +287,31 @@ impl DbValue {
 			),
 			DbField::IpAddress { name, origin } => (
 				String::from(name),
-				Self::IpAddress( Ipv4Network::from_str( json.get(origin.as_ref().unwrap_or(name)).unwrap_or_default().as_str().unwrap_or_default() ).unwrap_or(Ipv4Network::from_str("127.0.0.1/32").unwrap()) )
+				Self::IpAddress(
+					json.get(origin.as_ref().unwrap_or(name))
+						.unwrap_or_default().as_str()
+						.unwrap_or_default().parse()
+						.unwrap_or(
+							IpNetwork::V4(Ipv4Network::new(Ipv4Addr::new(127, 0, 0, 1), 32).unwrap())
+						)
+				)
 			),
 			DbField::Bytes { name, origin } => (
 				String::from(name),
-				Self::Bytes( json.get(origin.as_ref().unwrap_or(name)).unwrap_or_default().as_str().unwrap_or_default().as_bytes().to_vec() )
+				Self::Bytes(
+					json.get(origin.as_ref().unwrap_or(name))
+						.unwrap_or_default().as_str()
+						.unwrap_or_default().as_bytes()
+						.to_vec()
+				)
+			),
+			DbField::Json { name, origin } => (
+				String::from(name),
+				Self::Json(
+					json.get(origin.as_ref().unwrap_or(name))
+						.unwrap_or_default()
+						.clone()
+				)
 			),
 		}
 	}
@@ -289,4 +330,277 @@ pub enum DbField {
 	Bytes { name: String, origin: Option<String> },
 	DateTimeUtc { name: String, origin: Option<String> },
 	IpAddress { name: String, origin: Option<String> },
+	Json { name: String, origin: Option<String> },
+}
+
+
+#[cfg(test)]
+mod test {
+	use super::*;
+
+	use std::net::Ipv6Addr;
+	use ipnetwork::Ipv6Network;
+	use serde_json::json;
+
+	#[test]
+	fn test_otellogger() {
+		let logger = OtelLogger {
+			endpoint: "endpoint".to_string(),
+			port: 6543,
+			service: "service".to_string(),
+		};
+		assert_eq!(logger.get_endpoint("/path/value"), "http://endpoint:6543/path/value");
+
+		let http = OtelLogger {
+			endpoint: "http://endpoint".to_string(),
+			port: 6543,
+			service: "service".to_string(),
+		};
+		assert_eq!(http.get_endpoint("/path/value"), "http://endpoint:6543/path/value");
+	}
+
+	#[test]
+	fn test_otelreceiver() {
+		let logger = OtelReceiver {
+			address: "endpoint".to_string(),
+			port: 6543,
+			path: "/path/value".to_string(),
+		};
+		assert_eq!(logger.get_address(), "endpoint:6543");
+	}
+
+
+	// DbValue test Values
+	fn json() -> Value {
+		let value: Value = json!({
+			"string": "unknown", // for invalid check all except String-values
+			"number": 123.45,    // for invalid check string values
+
+			"bool_t": true,
+			"bool_f": false,
+			"int_1": 666,
+			"float_1": 666.66,
+			"str": "string value",
+			"json": { "json":"value" },
+			"bytes": "bytes value",
+			"datetime": "2020-01-02T13:14:15.1234Z",
+			"date": "2020-01-02",
+			"time": "13:14:15",
+			"ipv4": "10.11.12.13",
+			"ipv6": "fe80::bad:dead:beef",
+		});
+		value
+	}
+
+	#[test]
+	fn test_dbvalue_bool() {
+		let value = json();
+
+		// valid values
+		{
+			let from = &DbField::Bool { name: "name".to_string(), origin: Some("bool_t".to_string()) };
+			let (field_name, db_value) = DbValue::convert(from, &value);
+			assert_eq!(field_name, "name");
+			assert_eq!(db_value, DbValue::Bool(true));
+		}
+		{
+			let from = &DbField::Bool { name: "name".to_string(), origin: Some("bool_f".to_string()) };
+			let (field_name, db_value) = DbValue::convert(from, &value);
+			assert_eq!(field_name, "name");
+			assert_eq!(db_value, DbValue::Bool(false));
+		}
+
+		// invalid values
+		{
+			let from = &DbField::Bool { name: "name".to_string(), origin: Some("string".to_string()) };
+			let (field_name, db_value) = DbValue::convert(from, &value);
+			assert_eq!(field_name, "name");
+			assert_eq!(db_value, DbValue::Bool(false));
+		}
+
+		// no values
+		{
+			let from = &DbField::Bool { name: "name".to_string(), origin: Some("none".to_string()) };
+			let (field_name, db_value) = DbValue::convert(from, &value);
+			assert_eq!(field_name, "name");
+			assert_eq!(db_value, DbValue::Bool(false));
+		}
+	}
+
+	#[test]
+	fn test_dbvalue_numbers() {
+		let value = json();
+
+		// valid values
+		{
+			let from = &DbField::Int { name: "name".to_string(), origin: Some("int_1".to_string()) };
+			let (field_name, db_value) = DbValue::convert(from, &value);
+			assert_eq!(field_name, "name");
+			assert_eq!(db_value, DbValue::I64(666) );
+		}
+		{
+			let from = &DbField::Float { name: "name".to_string(), origin: Some("float_1".to_string()) };
+			let (field_name, db_value) = DbValue::convert(from, &value);
+			assert_eq!(field_name, "name");
+			assert_eq!(db_value, DbValue::F64(666.66));
+		}
+
+		// invalid values
+		{
+			let from = &DbField::Int { name: "name".to_string(), origin: Some("string".to_string()) };
+			let (field_name, db_value) = DbValue::convert(from, &value);
+			assert_eq!(field_name, "name");
+			assert_eq!(db_value, DbValue::I64(0));
+		}
+		{
+			let from = &DbField::Float { name: "name".to_string(), origin: Some("string".to_string()) };
+			let (field_name, db_value) = DbValue::convert(from, &value);
+			assert_eq!(field_name, "name");
+			assert_eq!(db_value, DbValue::F64(0.0));
+		}
+
+		// no values
+		{
+			let from = &DbField::Int { name: "name".to_string(), origin: Some("none".to_string()) };
+			let (field_name, db_value) = DbValue::convert(from, &value);
+			assert_eq!(field_name, "name");
+			assert_eq!(db_value, DbValue::I64(0));
+		}
+		{
+			let from = &DbField::Float { name: "name".to_string(), origin: Some("none".to_string()) };
+			let (field_name, db_value) = DbValue::convert(from, &value);
+			assert_eq!(field_name, "name");
+			assert_eq!(db_value, DbValue::F64(0.0));
+		}
+	}
+
+	#[test]
+	fn test_dbvalue_strings() {
+		let value = json();
+
+		// valid values
+		{
+			let from = &DbField::String { name: "name".to_string(), origin: Some("str".to_string()) };
+			let (field_name, db_value) = DbValue::convert(from, &value);
+			assert_eq!(field_name, "name");
+			assert_eq!(db_value, DbValue::String("string value".to_string()) );
+		}
+		{
+			let from = &DbField::Json { name: "name".to_string(), origin: Some("json".to_string()) };
+			let (field_name, db_value) = DbValue::convert(from, &value);
+			assert_eq!(field_name, "name");
+			assert_eq!(db_value, DbValue::Json(json!({ "json":"value" })));
+		}
+		{
+			let from = &DbField::Bytes { name: "name".to_string(), origin: Some("bytes".to_string()) };
+			let (field_name, db_value) = DbValue::convert(from, &value);
+			assert_eq!(field_name, "name");
+			assert_eq!(db_value, DbValue::Bytes("bytes value".as_bytes().into()));
+		}
+
+		// invalid values
+		{
+			let from = &DbField::String { name: "name".to_string(), origin: Some("number".to_string()) };
+			let (field_name, db_value) = DbValue::convert(from, &value);
+			assert_eq!(field_name, "name");
+			assert_eq!(db_value, DbValue::String("".to_string()) );
+		}
+		{
+			// There is no "invalid" json possible in a json::Value value
+		}
+		{
+			let from = &DbField::Bytes { name: "name".to_string(), origin: Some("number".to_string()) };
+			let (field_name, db_value) = DbValue::convert(from, &value);
+			assert_eq!(field_name, "name");
+			assert_eq!(db_value, DbValue::Bytes("".as_bytes().into()));
+		}
+
+		// no values
+		{
+			let from = &DbField::String { name: "name".to_string(), origin: Some("none".to_string()) };
+			let (field_name, db_value) = DbValue::convert(from, &value);
+			assert_eq!(field_name, "name");
+			assert_eq!(db_value, DbValue::String("".to_string()) );
+		}
+		{
+			let from = &DbField::Json { name: "name".to_string(), origin: Some("none".to_string()) };
+			let (field_name, db_value) = DbValue::convert(from, &value);
+			assert_eq!(field_name, "name");
+			assert_eq!(db_value, DbValue::Json(Value::Null));
+		}
+		{
+			let from = &DbField::Bytes { name: "name".to_string(), origin: Some("none".to_string()) };
+			let (field_name, db_value) = DbValue::convert(from, &value);
+			assert_eq!(field_name, "name");
+			assert_eq!(db_value, DbValue::Bytes("".as_bytes().into()));
+		}
+	}
+
+	#[test]
+	fn test_dbvalue_dates() {
+		let value = json();
+
+		// valid values
+		{
+			let from = &DbField::DateTimeUtc { name: "name".to_string(), origin: Some("datetime".to_string()) };
+			let (field_name, db_value) = DbValue::convert(from, &value);
+			assert_eq!(field_name, "name");
+			assert_eq!(db_value, DbValue::DateTimeUtc(dateparser::parse("2020-01-02T13:14:15.1234Z").unwrap().to_utc()) );
+		}
+
+		// invalid values
+		{
+			let from = &DbField::DateTimeUtc { name: "name".to_string(), origin: Some("string".to_string()) };
+			let (field_name, db_value) = DbValue::convert(from, &value);
+			assert_eq!(field_name, "name");
+			assert_eq!(db_value, DbValue::DateTimeUtc(chrono::DateTime::<Utc>::MIN_UTC) );
+		}
+
+		// no values
+		{
+			let from = &DbField::DateTimeUtc { name: "name".to_string(), origin: Some("none".to_string()) };
+			let (field_name, db_value) = DbValue::convert(from, &value);
+			assert_eq!(field_name, "name");
+			assert_eq!(db_value, DbValue::DateTimeUtc(chrono::DateTime::<Utc>::MIN_UTC) );
+		}
+	}
+
+	#[test]
+	fn test_dbvalue_ipaddress() {
+		let value = json();
+		let ipv4 = IpNetwork::V4(Ipv4Network::new(Ipv4Addr::new(10, 11, 12, 13), 32).unwrap());
+		let ipv6 = IpNetwork::V6(Ipv6Network::new(Ipv6Addr::new(0xfe80, 0, 0, 0, 0, 0xbad, 0xdead, 0xbeef), 128).unwrap());
+		let localhost = IpNetwork::V4(Ipv4Network::new(Ipv4Addr::new(127, 0, 0, 1), 32).unwrap());
+
+		// valid values
+		{
+			let from = &DbField::IpAddress { name: "name".to_string(), origin: Some("ipv4".to_string()) };
+			let (field_name, db_value) = DbValue::convert(from, &value);
+			assert_eq!(field_name, "name");
+			assert_eq!(db_value, DbValue::IpAddress(ipv4) );
+		}
+		{
+			let from = &DbField::IpAddress { name: "name".to_string(), origin: Some("ipv6".to_string()) };
+			let (field_name, db_value) = DbValue::convert(from, &value);
+			assert_eq!(field_name, "name");
+			assert_eq!(db_value, DbValue::IpAddress(ipv6) );
+		}
+
+		// invalid values
+		{
+			let from = &DbField::IpAddress { name: "name".to_string(), origin: Some("string".to_string()) };
+			let (field_name, db_value) = DbValue::convert(from, &value);
+			assert_eq!(field_name, "name");
+			assert_eq!(db_value, DbValue::IpAddress(localhost) );
+		}
+
+		// no values
+		{
+			let from = &DbField::IpAddress { name: "name".to_string(), origin: Some("none".to_string()) };
+			let (field_name, db_value) = DbValue::convert(from, &value);
+			assert_eq!(field_name, "name");
+			assert_eq!(db_value, DbValue::IpAddress(localhost) );
+		}
+	}
+
 }
