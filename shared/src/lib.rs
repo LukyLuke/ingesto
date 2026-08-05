@@ -7,9 +7,9 @@ pub mod types;
 
 use serde::de::DeserializeOwned;
 use tracing_subscriber::EnvFilter;
-use tracing::{debug};
+use tracing::{debug, error};
 use std::{fs, path::Path, path::PathBuf};
-use anyhow::Context;
+use anyhow::{Context, anyhow};
 use clap::{Arg, Command, builder::{PathBufValueParser}};
 use toml;
 
@@ -43,8 +43,20 @@ pub fn init_logging() {
 pub fn load_config<T: DeserializeOwned, P: AsRef<Path>>(path: P) -> anyhow::Result<T> {
 	let path_ref = path.as_ref();
 	let content = fs::read_to_string(path_ref).with_context(|| format!("reading config file {}", path_ref.display()))?;
-	let conf: T = toml::from_str(&content).with_context(|| format!("parsing config file {}", path_ref.display()))?;
-	Ok(conf)
+
+	let file_ext = path_ref.extension()
+		.and_then(|s| s.to_str())
+		.map(|s| s.to_ascii_lowercase());
+
+	match file_ext.as_deref() {
+		Some("toml") => serde_path_to_error::deserialize(toml::Deserializer::parse(&content)?)
+			.map_err(|err| anyhow!("parsing config at '{}' with error {}", err.path().to_string(), err.inner().message())),
+
+		Some("yaml") | Some("yml") => serde_path_to_error::deserialize(serde_yaml::Deserializer::from_str(&content))
+			.map_err(|err| anyhow!("parsing config at '{}' with error {}", err.path().to_string(), err.inner())),
+
+		_ => Err(anyhow!("Unknown configuration format: {:?}", path_ref.extension())),
+	}
 }
 
 /// Checks a string if it is a file or environment and returns the first line or variable.
@@ -72,18 +84,23 @@ pub fn load_config<T: DeserializeOwned, P: AsRef<Path>>(path: P) -> anyhow::Resu
 /// The first line of the file, the environment value or the requested string as-is
 pub fn secrets_string(val: &str) -> anyhow::Result<String> {
 	if val.starts_with("file:/") && let Some(file) = val.get(6..) {
-		if let Ok(content) = fs::read_to_string(file) && !content.is_empty() {
-			let line = content.lines().next().unwrap_or_default().to_string();
-			debug!(message="secrets_string", variant="file", key=val, val=mask(&line, 3) );
-			return Ok(line);
+		match fs::read_to_string(file) {
+			Ok(content) if !content.is_empty() => {
+				let line = content.lines().next().unwrap_or_default().to_string();
+				debug!(message="secrets_string", variant="file", key=val, val=mask(&line, 3) );
+				return Ok(line);
+			},
+			Err(e) => { error!(message="secrets_string", variant="file", key=val, err=%e ); },
+			_ => { error!(message="secrets_string", variant="file", key=val, err="empty file" ); },
 		}
+
 	} else if val.starts_with("env:") && let Some(env) = val.get(4..) {
 		if let Ok(line) = env::var(env) {
 			debug!(message="secrets_string", variant="env", key=val, val=mask(&line, 3) );
 			return Ok(line.to_string());
 		}
 	}
-	debug!(message="secrets_string", variant="none", key=val, val=mask(&val, 3) );
+	debug!(message="secrets_string", variant="none", key=val );
 	Ok(val.to_owned())
 }
 

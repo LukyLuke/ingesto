@@ -98,12 +98,14 @@ fn call_api(conf: Arc<&config::Endpoint>, queue: Arc<shared::queue::MessageQueue
 		let send_body = shared::template::template_string(&conf.body.as_deref().unwrap_or_default().to_owned(), Arc::clone(&response));
 
 		// Append Paging if available
-		if !conf.paging.param.name.is_empty() {
-			let page_val = shared::template::template_string(&conf.paging.param.value, Arc::clone(&response));
-			let sep = if uri.find('?').is_some() { "&" } else { "?" };
-			uri = format!("{}{}{}={}", uri, sep, conf.paging.param.name.as_str(), page_val.as_str());
+		if let Some(pg) = conf.paging.as_ref() && let Some(param) = pg.param.as_ref() {
+			if !param.name.is_empty() {
+				let page_val = shared::template::template_string(&param.value, Arc::clone(&response));
+				let sep = if uri.find('?').is_some() { "&" } else { "?" };
+				uri = format!("{}{}{}={}", uri, sep, param.name.as_str(), page_val.as_str());
+			}
 		}
-		debug!(message="calling api", uri=%uri);
+		debug!(message="calling api", api=conf.uri, uri=%uri);
 
 		// Create the Request
 		let client = reqwest::blocking::Client::new();
@@ -117,7 +119,9 @@ fn call_api(conf: Arc<&config::Endpoint>, queue: Arc<shared::queue::MessageQueue
 		// Authentication
 		req = match &conf.auth {
 			Some(Authentication::Header(param)) => req.header(&param.name, shared::template::template_string(&secrets_string(&param.value).unwrap_or_default(), Arc::clone(&response))),
+
 			Some(Authentication::Basic { user, pass }) => req.basic_auth(secrets_string(user).unwrap_or_default(), secrets_string(pass).ok()),
+
 			Some(Authentication::Bearer(token)) => {
 				if token.starts_with("Bearer") {
 					req.bearer_auth(secrets_string(token.get(7..).unwrap_or_default()).unwrap_or_default())
@@ -125,6 +129,7 @@ fn call_api(conf: Arc<&config::Endpoint>, queue: Arc<shared::queue::MessageQueue
 					req.bearer_auth(secrets_string(token).unwrap_or_default())
 				}
 			},
+
 			_ => req,
 		};
 
@@ -138,26 +143,31 @@ fn call_api(conf: Arc<&config::Endpoint>, queue: Arc<shared::queue::MessageQueue
 		let status = resp.status();
 		let body = resp.text().unwrap_or_default();
 		if status != StatusCode::OK {
-			error!(message="calling api", status=%status.as_u16(), error=body.to_owned());
+			error!(message="calling api", api=conf.uri, status=%status.as_u16(), error=body.to_owned());
+			break;
 		}
 
 		debug!(message="data received", data=body.to_owned());
 		queue_message(body.to_owned(), queue.clone());
 
 		// Check for paging
-		pages += 1;
-		debug!(message="paging", conf=%conf.paging, pages=pages, max_pages=MAX_PAGING_REQUESTS);
-		if conf.paging.until.is_none() || pages >= conf.paging.max_pages || pages >= MAX_PAGING_REQUESTS {
-			break;
-		}
-
-		paging = conf.paging.until.as_ref().is_some_and(|p| !p.check(status.as_u16(), body.to_owned()));
-		debug!(message="apply paging", apply=paging);
-		if paging {
-			match serde_json::from_str(body.to_owned().as_str()).unwrap_or_default() {
-				Value::Null => break,
-				j => response = Arc::<Value>::new(j)
+		if let Some(pg) = conf.paging.as_ref() {
+			pages += 1;
+			debug!(message="paging", conf=%pg, pages=pages, max_pages=MAX_PAGING_REQUESTS);
+			if pg.until.is_none() || pages >= pg.max_pages || pages >= MAX_PAGING_REQUESTS {
+				break;
 			}
+
+			paging = pg.until.as_ref().is_some_and(|p| !p.check(status.as_u16(), body.to_owned()));
+			debug!(message="apply paging", apply=paging);
+			if paging {
+				match serde_json::from_str(body.to_owned().as_str()).unwrap_or_default() {
+					Value::Null => break,
+					j => response = Arc::<Value>::new(j)
+				}
+			}
+		} else {
+			break;
 		}
 	}
 
@@ -186,12 +196,12 @@ pub mod test {
 			method: Method::GET,
 			auth: None,
 			header: Vec::new(),
-			paging: config::PagingReguest {
-				param: config::Param { name: String::from("page"), value: String::from("{{ $response/paging/page }}")},
+			paging: Some(config::PagingRequest {
+				param: Some(config::Param { name: String::from("page"), value: String::from("{{ $response/paging/page }}")}),
 				until: Some(config::PagingRequestUntil::Empty),
 				timeout: 100,
 				max_pages: 2,
-			}
+			})
 		};
 		let queue = Arc::new(shared::queue::MessageQueue::<String>::new());
 		shared::template::template_string_parse(&conf.uri,  &conf.uri);
@@ -221,12 +231,12 @@ pub mod test {
 			method: Method::GET,
 			auth: None,
 			header: Vec::new(),
-			paging: config::PagingReguest {
-				param: config::Param { name: String::from("page"), value: String::from("{{ $response/paging/page }}")},
+			paging: Some(config::PagingRequest {
+				param: Some(config::Param { name: String::from("page"), value: String::from("{{ $response/paging/page }}")}),
 				until: Some(config::PagingRequestUntil::Empty),
 				timeout: 100,
 				max_pages: 2,
-			}
+			})
 		};
 		let queue = Arc::new(shared::queue::MessageQueue::<String>::new());
 		shared::template::template_string_parse(&conf.uri,  &conf.uri);

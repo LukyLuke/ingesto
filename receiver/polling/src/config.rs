@@ -60,7 +60,7 @@ pub struct Endpoint {
 
 	/// Paging-Request Configuration
 	#[serde(default)]
-	pub paging: PagingReguest,
+	pub paging: Option<PagingRequest>,
 }
 
 /// Request-Methods
@@ -100,9 +100,15 @@ impl fmt::Display for Authentication {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		match self {
 			Authentication::None => write!(f, "None"),
-			Authentication::Basic { user, pass } => write!(f, "Basic '{}: {}****'", user, pass.get(0..3).unwrap_or_default()),
-			Authentication::Bearer(bearer) => write!(f, "Bearer {}****", bearer.get(0..3).unwrap_or_default()),
-			Authentication::Header(param) => write!(f, "Header '{}: {}****'", param.name, param.value.get(0..3).unwrap_or_default()),
+			Authentication::Basic { user, pass } => write!(f, "Basic '{}: {}****'", user, {
+				if let Some(sub) = pass.get(0..4) && sub == "file" { pass } else { pass.get(0..4).unwrap_or_default() }
+			}),
+			Authentication::Bearer(bearer) => write!(f, "Bearer {}****", {
+				if let Some(sub) = bearer.get(0..4) && sub == "file" { bearer } else { bearer.get(0..4).unwrap_or_default() }
+			}),
+			Authentication::Header(param) => write!(f, "Header '{}: {}****'", param.name, {
+				if let Some(sub) = param.value.get(0..4) && sub == "file" { param.value.as_str() } else { param.value.get(0..4).unwrap_or_default() }
+			}),
 		}
 	}
 }
@@ -122,10 +128,10 @@ impl fmt::Display for Param {
 
 /// Paging Requests can be used if an Endpoint sends a lot of data which are split over multiple requests and responses
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct PagingReguest {
+pub struct PagingRequest {
 	/// Name and Value for the parameter which is added on the Endpoints URI
 	/// The Value can/should be a Template-Value which normally contains a value from the response, like: `{{ $response/paging/cursor }}`
-	pub param: Param,
+	pub param: Option<Param>,
 
 	/// Defines how to check if there is no more pages
 	pub until: Option<PagingRequestUntil>,
@@ -139,12 +145,12 @@ pub struct PagingReguest {
 	#[serde(default)]
 	pub max_pages: u16,
 }
-impl Default for PagingReguest {
+impl Default for PagingRequest {
 	fn default() -> Self {
-		Self { param: Param { name: String::new(), value: String::new() }, until: None, timeout: 3600, max_pages: 1 }
+		Self { param: None, until: None, timeout: 3600, max_pages: 1 }
 	}
 }
-impl fmt::Display for PagingReguest {
+impl fmt::Display for PagingRequest {
 	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
 		write!(f, "PagingRequest: [param]={:?}; [timeout]={:?}; [max]={:?}; [until]={:?};", self.param, self.timeout, self.max_pages, self.until.as_ref().unwrap_or(&PagingRequestUntil::None))
 	}
