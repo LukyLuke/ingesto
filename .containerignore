@@ -1,0 +1,10 @@
+.git
+.gitignore
+
+.vscode
+.idea
+*.swp
+*.swo
+*~
+target
+doc
