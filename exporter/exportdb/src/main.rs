@@ -99,7 +99,10 @@ fn process_queue<DB: db::DbAccess + 'static>(queue: Arc<MessageQueue<String>>, m
 		Ok(table) => {
 			let json: serde_json::Value = serde_json::from_str(&msg).unwrap_or_default();
 			let fields = DbValue::from(&table.fields, &json);
-			db.insert(&table.name, &fields)
+			match db.insert(&table.name, &fields) {
+				Ok(_) => Ok(()),
+				Err (e) => Err(anyhow!("{:?} ; fields: {:?}", e, fields))
+			}
 		},
 		Err(e) => Err(e),
 	}
