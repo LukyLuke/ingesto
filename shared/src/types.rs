@@ -241,75 +241,96 @@ impl DbValue {
 
 	fn convert(val: &DbField, json: &serde_json::Value) -> (String, DbValue) {
 		match val {
-			DbField::String { name, origin } => (
+			DbField::String { name, origin, default } => (
 				String::from(name),
 				Self::String(
 					json.get(origin.as_ref().unwrap_or(name))
-						.unwrap_or_default().as_str()
-						.unwrap_or_default().to_string()
+						.unwrap_or(
+							&default.as_ref().map_or_else(|| Value::Null, |s| Value::String(s.to_string()) )
+						).as_str()
+						.unwrap_or(
+							&default.as_ref().map_or_else(|| "", |s| s )
+						).to_string()
 				)
 			),
-			DbField::Float { name, origin } => (
+			DbField::Float { name, origin, default } => (
 				String::from(name),
 				Self::F64(
 					json.get(origin.as_ref().unwrap_or(name))
-						.unwrap_or_default().as_f64()
-						.unwrap_or_default()
+						.unwrap_or(
+							&default.as_ref().map_or_else(|| Value::Null, |s| Value::String(s.to_string()) )
+						).as_f64()
+						.unwrap_or(
+							default.as_ref().map_or_else(|| 0.0, |s| s.parse().unwrap_or_default() )
+						)
 				)
 			),
-			DbField::Bool { name, origin } => (
+			DbField::Bool { name, origin, default } => (
 				String::from(name),
 				Self::Bool(
 					json.get(origin.as_ref().unwrap_or(name))
-						.unwrap_or_default().as_bool()
+						.unwrap_or(
+							&default.as_ref().map_or_else(|| Value::Bool(false), |s| serde_json::from_str(s).unwrap_or_default() )
+						).as_bool()
 						.unwrap_or_default()
 				)
 			),
-			DbField::Int { name, origin } => (
+			DbField::Int { name, origin, default } => (
 				String::from(name),
 				Self::I64(
 					json.get(origin.as_ref().unwrap_or(name))
-						.unwrap_or_default().as_i64()
-						.unwrap_or_default()
+						.unwrap_or(
+							&default.as_ref().map_or_else(|| Value::Null, |s| Value::String(s.to_string()) )
+						).as_i64()
+						.unwrap_or(
+							default.as_ref().map_or_else(|| 0, |s| s.parse().unwrap_or_default() )
+						)
 				)
 			),
-			DbField::DateTimeUtc { name, origin } => (
+			DbField::DateTimeUtc { name, origin, default } => (
 				String::from(name),
 				Self::DateTimeUtc( {
-					let s = json.get(origin.as_ref().unwrap_or(name))
-						.unwrap_or_default().as_str()
+					let def = default.as_ref().map_or_else(|| Value::Null, |s| Value::String(s.to_string()) );
+					let ds = json.get(origin.as_ref().unwrap_or(name))
+						.unwrap_or(&def).as_str()
 						.unwrap_or_default();
-					match dateparser::parse(s) {
+					match dateparser::parse(ds) {
 						Ok(dt) => dt.to_utc(),
 						Err(_) => chrono::DateTime::<Utc>::MIN_UTC
 					}
 				} )
 			),
-			DbField::IpAddress { name, origin } => (
+			DbField::IpAddress { name, origin, default } => (
 				String::from(name),
 				Self::IpAddress(
 					json.get(origin.as_ref().unwrap_or(name))
-						.unwrap_or_default().as_str()
+						.unwrap_or(
+							&default.as_ref().map_or_else(|| Value::Null, |s| Value::String(s.to_string()) )
+						).as_str()
 						.unwrap_or_default().parse()
 						.unwrap_or(
 							IpNetwork::V4(Ipv4Network::new(Ipv4Addr::new(127, 0, 0, 1), 32).unwrap())
 						)
 				)
 			),
-			DbField::Bytes { name, origin } => (
+			DbField::Bytes { name, origin, default } => (
 				String::from(name),
 				Self::Bytes(
 					json.get(origin.as_ref().unwrap_or(name))
-						.unwrap_or_default().as_str()
+						.unwrap_or(
+							&default.as_ref().map_or_else(|| Value::Null, |s| Value::String(s.to_string()) )
+						).as_str()
 						.unwrap_or_default().as_bytes()
 						.to_vec()
 				)
 			),
-			DbField::Json { name, origin } => (
+			DbField::Json { name, origin, default } => (
 				String::from(name),
 				Self::Json(
 					json.get(origin.as_ref().unwrap_or(name))
-						.unwrap_or_default()
+						.unwrap_or(
+							&default.as_ref().map_or_else(|| Value::Null, |s| serde_json::from_str(s).unwrap_or_default() )
+						)
 						.clone()
 				)
 			),
@@ -323,14 +344,14 @@ impl DbValue {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(tag = "kind")]
 pub enum DbField {
-	Bool { name: String, origin: Option<String> },
-	Int { name: String, origin: Option<String> },
-	Float { name: String, origin: Option<String> },
-	String { name: String, origin: Option<String> },
-	Bytes { name: String, origin: Option<String> },
-	DateTimeUtc { name: String, origin: Option<String> },
-	IpAddress { name: String, origin: Option<String> },
-	Json { name: String, origin: Option<String> },
+	Bool { name: String, origin: Option<String>, default: Option<String> },
+	Int { name: String, origin: Option<String>, default: Option<String> },
+	Float { name: String, origin: Option<String>, default: Option<String> },
+	String { name: String, origin: Option<String>, default: Option<String> },
+	Bytes { name: String, origin: Option<String>, default: Option<String> },
+	DateTimeUtc { name: String, origin: Option<String>, default: Option<String> },
+	IpAddress { name: String, origin: Option<String>, default: Option<String> },
+	Json { name: String, origin: Option<String>, default: Option<String> },
 }
 
 
@@ -398,13 +419,13 @@ mod test {
 
 		// valid values
 		{
-			let from = &DbField::Bool { name: "name".to_string(), origin: Some("bool_t".to_string()) };
+			let from = &DbField::Bool { name: "name".to_string(), origin: Some("bool_t".to_string()), default: None };
 			let (field_name, db_value) = DbValue::convert(from, &value);
 			assert_eq!(field_name, "name");
 			assert_eq!(db_value, DbValue::Bool(true));
 		}
 		{
-			let from = &DbField::Bool { name: "name".to_string(), origin: Some("bool_f".to_string()) };
+			let from = &DbField::Bool { name: "name".to_string(), origin: Some("bool_f".to_string()), default: None };
 			let (field_name, db_value) = DbValue::convert(from, &value);
 			assert_eq!(field_name, "name");
 			assert_eq!(db_value, DbValue::Bool(false));
@@ -412,7 +433,7 @@ mod test {
 
 		// invalid values
 		{
-			let from = &DbField::Bool { name: "name".to_string(), origin: Some("string".to_string()) };
+			let from = &DbField::Bool { name: "name".to_string(), origin: Some("string".to_string()), default: None };
 			let (field_name, db_value) = DbValue::convert(from, &value);
 			assert_eq!(field_name, "name");
 			assert_eq!(db_value, DbValue::Bool(false));
@@ -420,10 +441,18 @@ mod test {
 
 		// no values
 		{
-			let from = &DbField::Bool { name: "name".to_string(), origin: Some("none".to_string()) };
+			let from = &DbField::Bool { name: "name".to_string(), origin: Some("none".to_string()), default: None };
 			let (field_name, db_value) = DbValue::convert(from, &value);
 			assert_eq!(field_name, "name");
 			assert_eq!(db_value, DbValue::Bool(false));
+		}
+
+		// no values with default
+		{
+			let from = &DbField::Bool { name: "name".to_string(), origin: Some("none".to_string()), default: Some("true".to_string()) };
+			let (field_name, db_value) = DbValue::convert(from, &value);
+			assert_eq!(field_name, "name");
+			assert_eq!(db_value, DbValue::Bool(true));
 		}
 	}
 
@@ -433,13 +462,13 @@ mod test {
 
 		// valid values
 		{
-			let from = &DbField::Int { name: "name".to_string(), origin: Some("int_1".to_string()) };
+			let from = &DbField::Int { name: "name".to_string(), origin: Some("int_1".to_string()), default: None };
 			let (field_name, db_value) = DbValue::convert(from, &value);
 			assert_eq!(field_name, "name");
 			assert_eq!(db_value, DbValue::I64(666) );
 		}
 		{
-			let from = &DbField::Float { name: "name".to_string(), origin: Some("float_1".to_string()) };
+			let from = &DbField::Float { name: "name".to_string(), origin: Some("float_1".to_string()), default: None };
 			let (field_name, db_value) = DbValue::convert(from, &value);
 			assert_eq!(field_name, "name");
 			assert_eq!(db_value, DbValue::F64(666.66));
@@ -447,13 +476,13 @@ mod test {
 
 		// invalid values
 		{
-			let from = &DbField::Int { name: "name".to_string(), origin: Some("string".to_string()) };
+			let from = &DbField::Int { name: "name".to_string(), origin: Some("string".to_string()), default: None };
 			let (field_name, db_value) = DbValue::convert(from, &value);
 			assert_eq!(field_name, "name");
 			assert_eq!(db_value, DbValue::I64(0));
 		}
 		{
-			let from = &DbField::Float { name: "name".to_string(), origin: Some("string".to_string()) };
+			let from = &DbField::Float { name: "name".to_string(), origin: Some("string".to_string()), default: None };
 			let (field_name, db_value) = DbValue::convert(from, &value);
 			assert_eq!(field_name, "name");
 			assert_eq!(db_value, DbValue::F64(0.0));
@@ -461,16 +490,30 @@ mod test {
 
 		// no values
 		{
-			let from = &DbField::Int { name: "name".to_string(), origin: Some("none".to_string()) };
+			let from = &DbField::Int { name: "name".to_string(), origin: Some("none".to_string()), default: None };
 			let (field_name, db_value) = DbValue::convert(from, &value);
 			assert_eq!(field_name, "name");
 			assert_eq!(db_value, DbValue::I64(0));
 		}
 		{
-			let from = &DbField::Float { name: "name".to_string(), origin: Some("none".to_string()) };
+			let from = &DbField::Float { name: "name".to_string(), origin: Some("none".to_string()), default: None };
 			let (field_name, db_value) = DbValue::convert(from, &value);
 			assert_eq!(field_name, "name");
 			assert_eq!(db_value, DbValue::F64(0.0));
+		}
+
+		// no values with default
+		{
+			let from = &DbField::Int { name: "name".to_string(), origin: Some("none".to_string()), default: Some("666".to_string()) };
+			let (field_name, db_value) = DbValue::convert(from, &value);
+			assert_eq!(field_name, "name");
+			assert_eq!(db_value, DbValue::I64(666));
+		}
+		{
+			let from = &DbField::Float { name: "name".to_string(), origin: Some("none".to_string()), default: Some("666.66".to_string()) };
+			let (field_name, db_value) = DbValue::convert(from, &value);
+			assert_eq!(field_name, "name");
+			assert_eq!(db_value, DbValue::F64(666.66));
 		}
 	}
 
@@ -480,19 +523,19 @@ mod test {
 
 		// valid values
 		{
-			let from = &DbField::String { name: "name".to_string(), origin: Some("str".to_string()) };
+			let from = &DbField::String { name: "name".to_string(), origin: Some("str".to_string()), default: None };
 			let (field_name, db_value) = DbValue::convert(from, &value);
 			assert_eq!(field_name, "name");
 			assert_eq!(db_value, DbValue::String("string value".to_string()) );
 		}
 		{
-			let from = &DbField::Json { name: "name".to_string(), origin: Some("json".to_string()) };
+			let from = &DbField::Json { name: "name".to_string(), origin: Some("json".to_string()), default: None };
 			let (field_name, db_value) = DbValue::convert(from, &value);
 			assert_eq!(field_name, "name");
 			assert_eq!(db_value, DbValue::Json(json!({ "json":"value" })));
 		}
 		{
-			let from = &DbField::Bytes { name: "name".to_string(), origin: Some("bytes".to_string()) };
+			let from = &DbField::Bytes { name: "name".to_string(), origin: Some("bytes".to_string()), default: None };
 			let (field_name, db_value) = DbValue::convert(from, &value);
 			assert_eq!(field_name, "name");
 			assert_eq!(db_value, DbValue::Bytes("bytes value".as_bytes().into()));
@@ -500,7 +543,7 @@ mod test {
 
 		// invalid values
 		{
-			let from = &DbField::String { name: "name".to_string(), origin: Some("number".to_string()) };
+			let from = &DbField::String { name: "name".to_string(), origin: Some("number".to_string()), default: None };
 			let (field_name, db_value) = DbValue::convert(from, &value);
 			assert_eq!(field_name, "name");
 			assert_eq!(db_value, DbValue::String("".to_string()) );
@@ -509,7 +552,7 @@ mod test {
 			// There is no "invalid" json possible in a json::Value value
 		}
 		{
-			let from = &DbField::Bytes { name: "name".to_string(), origin: Some("number".to_string()) };
+			let from = &DbField::Bytes { name: "name".to_string(), origin: Some("number".to_string()), default: None };
 			let (field_name, db_value) = DbValue::convert(from, &value);
 			assert_eq!(field_name, "name");
 			assert_eq!(db_value, DbValue::Bytes("".as_bytes().into()));
@@ -517,22 +560,42 @@ mod test {
 
 		// no values
 		{
-			let from = &DbField::String { name: "name".to_string(), origin: Some("none".to_string()) };
+			let from = &DbField::String { name: "name".to_string(), origin: Some("none".to_string()), default: None };
 			let (field_name, db_value) = DbValue::convert(from, &value);
 			assert_eq!(field_name, "name");
 			assert_eq!(db_value, DbValue::String("".to_string()) );
 		}
 		{
-			let from = &DbField::Json { name: "name".to_string(), origin: Some("none".to_string()) };
+			let from = &DbField::Json { name: "name".to_string(), origin: Some("none".to_string()), default: None };
 			let (field_name, db_value) = DbValue::convert(from, &value);
 			assert_eq!(field_name, "name");
 			assert_eq!(db_value, DbValue::Json(Value::Null));
 		}
 		{
-			let from = &DbField::Bytes { name: "name".to_string(), origin: Some("none".to_string()) };
+			let from = &DbField::Bytes { name: "name".to_string(), origin: Some("none".to_string()), default: None };
 			let (field_name, db_value) = DbValue::convert(from, &value);
 			assert_eq!(field_name, "name");
 			assert_eq!(db_value, DbValue::Bytes("".as_bytes().into()));
+		}
+
+		// no values with default
+		{
+			let from = &DbField::String { name: "name".to_string(), origin: Some("none".to_string()), default: Some("default".to_string()) };
+			let (field_name, db_value) = DbValue::convert(from, &value);
+			assert_eq!(field_name, "name");
+			assert_eq!(db_value, DbValue::String("default".to_string()) );
+		}
+		{
+			let from = &DbField::Json { name: "name".to_string(), origin: Some("none".to_string()), default: Some("{\"json\":\"value\"}".to_string()) };
+			let (field_name, db_value) = DbValue::convert(from, &value);
+			assert_eq!(field_name, "name");
+			assert_eq!(db_value, DbValue::Json(json!({ "json":"value" })));
+		}
+		{
+			let from = &DbField::Bytes { name: "name".to_string(), origin: Some("none".to_string()), default: Some("default".to_string()) };
+			let (field_name, db_value) = DbValue::convert(from, &value);
+			assert_eq!(field_name, "name");
+			assert_eq!(db_value, DbValue::Bytes("default".as_bytes().into()));
 		}
 	}
 
@@ -542,7 +605,7 @@ mod test {
 
 		// valid values
 		{
-			let from = &DbField::DateTimeUtc { name: "name".to_string(), origin: Some("datetime".to_string()) };
+			let from = &DbField::DateTimeUtc { name: "name".to_string(), origin: Some("datetime".to_string()), default: None };
 			let (field_name, db_value) = DbValue::convert(from, &value);
 			assert_eq!(field_name, "name");
 			assert_eq!(db_value, DbValue::DateTimeUtc(dateparser::parse("2020-01-02T13:14:15.1234Z").unwrap().to_utc()) );
@@ -550,7 +613,7 @@ mod test {
 
 		// invalid values
 		{
-			let from = &DbField::DateTimeUtc { name: "name".to_string(), origin: Some("string".to_string()) };
+			let from = &DbField::DateTimeUtc { name: "name".to_string(), origin: Some("string".to_string()), default: None };
 			let (field_name, db_value) = DbValue::convert(from, &value);
 			assert_eq!(field_name, "name");
 			assert_eq!(db_value, DbValue::DateTimeUtc(chrono::DateTime::<Utc>::MIN_UTC) );
@@ -558,10 +621,18 @@ mod test {
 
 		// no values
 		{
-			let from = &DbField::DateTimeUtc { name: "name".to_string(), origin: Some("none".to_string()) };
+			let from = &DbField::DateTimeUtc { name: "name".to_string(), origin: Some("none".to_string()), default: None };
 			let (field_name, db_value) = DbValue::convert(from, &value);
 			assert_eq!(field_name, "name");
 			assert_eq!(db_value, DbValue::DateTimeUtc(chrono::DateTime::<Utc>::MIN_UTC) );
+		}
+
+		// no values with default
+		{
+			let from = &DbField::DateTimeUtc { name: "name".to_string(), origin: Some("none".to_string()), default: Some("2020-01-02T13:14:15.1234Z".to_string()) };
+			let (field_name, db_value) = DbValue::convert(from, &value);
+			assert_eq!(field_name, "name");
+			assert_eq!(db_value, DbValue::DateTimeUtc(dateparser::parse("2020-01-02T13:14:15.1234Z").unwrap().to_utc()) );
 		}
 	}
 
@@ -574,13 +645,13 @@ mod test {
 
 		// valid values
 		{
-			let from = &DbField::IpAddress { name: "name".to_string(), origin: Some("ipv4".to_string()) };
+			let from = &DbField::IpAddress { name: "name".to_string(), origin: Some("ipv4".to_string()), default: None };
 			let (field_name, db_value) = DbValue::convert(from, &value);
 			assert_eq!(field_name, "name");
 			assert_eq!(db_value, DbValue::IpAddress(ipv4) );
 		}
 		{
-			let from = &DbField::IpAddress { name: "name".to_string(), origin: Some("ipv6".to_string()) };
+			let from = &DbField::IpAddress { name: "name".to_string(), origin: Some("ipv6".to_string()), default: None };
 			let (field_name, db_value) = DbValue::convert(from, &value);
 			assert_eq!(field_name, "name");
 			assert_eq!(db_value, DbValue::IpAddress(ipv6) );
@@ -588,7 +659,7 @@ mod test {
 
 		// invalid values
 		{
-			let from = &DbField::IpAddress { name: "name".to_string(), origin: Some("string".to_string()) };
+			let from = &DbField::IpAddress { name: "name".to_string(), origin: Some("string".to_string()), default: None };
 			let (field_name, db_value) = DbValue::convert(from, &value);
 			assert_eq!(field_name, "name");
 			assert_eq!(db_value, DbValue::IpAddress(localhost) );
@@ -596,10 +667,18 @@ mod test {
 
 		// no values
 		{
-			let from = &DbField::IpAddress { name: "name".to_string(), origin: Some("none".to_string()) };
+			let from = &DbField::IpAddress { name: "name".to_string(), origin: Some("none".to_string()), default: None };
 			let (field_name, db_value) = DbValue::convert(from, &value);
 			assert_eq!(field_name, "name");
 			assert_eq!(db_value, DbValue::IpAddress(localhost) );
+		}
+
+		// no values wuth default
+		{
+			let from = &DbField::IpAddress { name: "name".to_string(), origin: Some("none".to_string()), default: Some("10.11.12.13".to_string()) };
+			let (field_name, db_value) = DbValue::convert(from, &value);
+			assert_eq!(field_name, "name");
+			assert_eq!(db_value, DbValue::IpAddress(ipv4) );
 		}
 	}
 

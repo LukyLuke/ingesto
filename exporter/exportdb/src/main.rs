@@ -194,19 +194,19 @@ mod test {
 					name: "first".to_string(),
 					for_messages: "\"match\":\"first\"".to_string(),
 					fields: vec!(
-						DbField::Int    { name: "db_int1".to_string(),   origin: Some("int1".to_string()) },
-						DbField::Bool   { name: "db_bool1".to_string(),  origin: Some("bool1".to_string()) },
-						DbField::Float  { name: "db_float1".to_string(), origin: Some("float1".to_string()) },
-						DbField::String { name: "db_foo1".to_string(),   origin: Some("foo1".to_string()) },
-						DbField::String { name: "db_foo2".to_string(),   origin: Some("foo2".to_string()) },
+						DbField::Int    { name: "db_int1".to_string(),   origin: Some("int1".to_string()), default: None },
+						DbField::Bool   { name: "db_bool1".to_string(),  origin: Some("bool1".to_string()), default: None },
+						DbField::Float  { name: "db_float1".to_string(), origin: Some("float1".to_string()), default: None },
+						DbField::String { name: "db_foo1".to_string(),   origin: Some("foo1".to_string()), default: None },
+						DbField::String { name: "db_foo2".to_string(),   origin: Some("foo2".to_string()), default: None },
 					),
 				},
 				config::DbTable{
 					name: "second".to_string(),
 					for_messages: "\"match\":\"second\"".to_string(),
 					fields: vec!(
-						DbField::String { name: "db_foo1".to_string(),   origin: Some("foo1".to_string()) },
-						DbField::String { name: "db_foo2".to_string(),   origin: Some("foo2".to_string()) },
+						DbField::String { name: "db_foo1".to_string(),   origin: Some("foo1".to_string()), default: None },
+						DbField::String { name: "db_foo2".to_string(),   origin: Some("foo2".to_string()), default: None },
 					),
 				},
 			);
