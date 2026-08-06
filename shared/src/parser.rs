@@ -98,40 +98,47 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 	}
 
 	pub fn run(self: Arc<Self>) {
-		// Do not process any logs if there is no log receiver
-		if self.conf.otel_logger.as_ref().is_none() {
-			info!(message="no log processing due to no otel_logger in queue-configuration");
-			return
-		}
-
 		let me = Arc::clone(&self);
 		let max_msg = self.conf.max_messages;
 		let max_time = Duration::from_secs_f32(self.conf.max_seconds as f32);
 
 		info!(message="start processing", max_time=%max_time.as_secs_f32(), max_messages=%max_msg);
 		thread::spawn(move || {
-			let otlp = me.conf.otel_logger.as_ref().unwrap();
+			if let Some(otlp) = me.conf.otel_logger.as_ref() {
+				loop {
+					let q_msg = match me.queue.pull(max_time) {
+						Some(m) => m.into().trim().to_string(),
+						None => {
+							info!(message="queue empty", waited=%max_time.as_secs_f32());
+							continue;
+						}
+					};
 
-			loop {
-				let q_msg = match me.queue.pull(max_time) {
-					Some(m) => m.into().trim().to_string(),
-					None => {
-						info!(message="queue empty", waited=%max_time.as_secs_f32());
-						continue;
+					// Parse and return Structured JSON-String
+					let msgs = me.parse_message(&q_msg);
+					debug!(message="processed message", original=%q_msg);
+					info!(message="processed message", size=q_msg.len(), messages=msgs.len());
+
+					for msg in msgs {
+						debug!(message="extracted message", msg=%msg);
+						match me.send_message(&otlp, &msg, max_msg, max_time) {
+							Ok(_) => debug!(message="enqueued message for otlp endpoint", endpoint=%otlp.endpoint, port=%otlp.port, service=%otlp.service),
+							Err(e) => {
+								me.queue.push_front(msg.into());
+								error!(message="failed to enqueue message for otlp endpoint", endpoint=%otlp.endpoint, port=%otlp.port, service=%otlp.service, error=%e)
+							}
+						};
 					}
-				};
+				}
 
-				// Parse and return Structured JSON-String
-				let msg = me.parse_message(&q_msg);
-				debug!(message="processed message", original=%q_msg, processed=%msg);
-
-				match me.send_message(&otlp, &msg, max_msg, max_time) {
-					Ok(_) => info!(message="enqueued message for otlp endpoint", endpoint=%otlp.endpoint, port=%otlp.port, service=%otlp.service),
-					Err(e) => {
-						me.queue.push_front(q_msg.into());
-						error!(message="failed to enqueue message for otlp endpoint", endpoint=%otlp.endpoint, port=%otlp.port, service=%otlp.service, error=%e)
-					}
-				};
+			} else {
+				// Do not process any logs if there is no log receiver
+				info!(message="no log processing due to no otel_logger in queue-configuration");
+				loop {
+					// drop all messages and wait
+					self.queue.pull_all();
+					thread::sleep(max_time);
+				}
 			}
 		});
 	}
@@ -219,9 +226,8 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 	///
 	/// # Results
 	///
-	/// Returns the either the parsed or the raw message
-	fn parse_message(&self, raw: &String) -> String {
-		// First find the right parser and apply it
+	/// Returns the either the parsed or the raw message as a list
+	fn parse_message(&self, raw: &String) -> Vec<String> {
 		let parser = self.parser.iter()
 			.find_map(|parser| self.regexes.get(&parser.matcher)
 				.and_then(|re| if re.is_match(raw) { Some(parser) } else { None }) );
@@ -246,9 +252,8 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 		Err(anyhow::anyhow!("no parser found by the name {}", name))
 	}
 
-	/// Tries to apply a parser to a message
-	fn apply_parser(&self, raw: &String, parser: Option<&types::Parser>) -> String {
-		// Parse the Message if possible
+	/// Tries to apply a parser to a message and returns all parsed messages as a list of JSON-serialized messages
+	fn apply_parser(&self, raw: &String, parser: Option<&types::Parser>) -> Vec<String> {
 		match parser {
 			Some(parser) => {
 				debug!(message="parser", parser=%parser.name, matcher=%parser.matcher, kind=%parser.kind, settings=%parser.settings);
@@ -259,8 +264,8 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 							types::ParserSettings::Regex(s) => self.regexes.get(&s),
 							_ => None
 						};
-						re.and_then(|re| Some(self.parse_regex_string(&parser.mapping, raw, re)))
-							.unwrap_or_else(|| raw.to_owned())
+						re.and_then(|re| Some(self.parse_regex_message(&parser.mapping, raw, re)))
+							.unwrap_or_else(|| vec![raw.to_owned()])
 					},
 
 					types::ParserKind::JSON => {
@@ -268,28 +273,28 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 							types::ParserSettings::Jpath(s) => self.jsonpath.get(&s),
 							_ => self.jsonpath.get("$"),
 						};
-						jpath.and_then(|jpath| Some(self.parse_json_string(&parser.mapping, raw, &jpath)))
-							.unwrap_or_else(|| raw.to_owned())
+						jpath.and_then(|jpath| Some(self.parse_json_message(&parser.mapping, raw, &jpath)))
+							.unwrap_or_else(|| vec![raw.to_owned()])
 					},
 
 					types::ParserKind::CSV => {
-						raw.to_owned()
+						vec![raw.to_owned()]
 					},
 
 					types::ParserKind::LEEF => {
-						raw.to_owned()
+						vec![raw.to_owned()]
 					},
 
 					types::ParserKind::CEF => {
-						raw.to_owned()
+						vec![raw.to_owned()]
 					},
 
 					types::ParserKind::STRUCTURED => {
-						raw.to_owned()
+						vec![raw.to_owned()]
 					},
 
 					types::ParserKind::RAW => {
-						raw.to_owned()
+						vec![raw.to_owned()]
 					},
 
 					//_ => {
@@ -300,13 +305,26 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 			},
 			None => {
 				debug!(message="no parser found");
-				raw.to_owned()
+				vec![raw.to_owned()]
 			}
 		}
 	}
 
-	fn parse_regex_string(&self, mapping: &Vec<FieldMapping>, raw: &String, re: &Regex) -> String {
-		// See https://docs.rs/regex/latest/regex/
+	/// Parses the given String with a regular expression and returns a list of structured messages.
+	/// For Regex-Messages there is only one structured message possible for each raw message.
+	///
+	/// See https://docs.rs/regex/latest/regex/ for regex formats and functions
+	///
+	/// # Arguments
+	///
+	/// * `mapping` - All FieldMappings from the Configuration
+	/// * `raw` - The raw message which should be a json string
+	/// * `re` - The regular expression to apply
+	///
+	/// # Returns
+	///
+	/// A list of JSON serialized strings whith all the fields and values as defined in the `mapping` Configuration
+	fn parse_regex_message(&self, mapping: &Vec<FieldMapping>, raw: &String, re: &Regex) -> Vec<String> {
 		let mut results: HashMap<String, String> = HashMap::new();
 		for capture in re.captures_iter(raw) {
 			for fld in mapping {
@@ -318,8 +336,16 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 					val = capture.get(fld.index).map_or("", |v| v.as_str()).to_owned();
 				}
 
-				if !fld.parser.is_empty() {
-					// TODO
+				// Sub-Parser values are returned directly
+				// All other values are checked and added to the hashmap below
+				if !fld.parser.is_empty() && !val.is_empty() {
+					return match self.parser_by_name(fld.parser.as_str()).map(|p| self.apply_parser(&val, Some(p))) {
+						Ok(s) => s,
+						Err(e) => {
+							error!("{:?}", e);
+							Vec::new()
+						},
+					};
 				}
 
 				if !val.is_empty() || fld.empty {
@@ -327,7 +353,13 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 				}
 			}
 		}
-		serde_json::to_string(&results).map_or(String::new(), |s| s)
+
+		// If nothing was parsed/found, return just an empty list
+		if results.is_empty() {
+			vec![]
+		} else {
+			vec![serde_json::to_string(&results).map_or(String::new(), |s| s)]
+		}
 	}
 
 	/// Parses the given String as JSON and applies the JsonPath to get the main object.
@@ -343,60 +375,74 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 	///
 	/// # Returns
 	///
-	/// A JSON serializes string with all the fields and values as defined in the `mapping` Configuration
-	fn parse_json_string(&self, mapping: &Vec<FieldMapping>, raw: &String, jpath: &JsonPath) -> String {
+	/// A list of JSON serialized strings with all the fields and values as defined in the `mapping` Configuration
+	fn parse_json_message(&self, mapping: &Vec<FieldMapping>, raw: &String, jpath: &JsonPath) -> Vec<String> {
 		// See https://docs.rs/serde_json_path/latest/serde_json_path/
 		// Test: https://serdejsonpath.live/
-		let mut results: HashMap<String, String> = HashMap::new();
 		let json_root: Value = serde_json::from_str(raw.as_str()).map_or_else(|e|{
 			error!(message="json parsing error", json=%raw, error=%e);
 			Value::Null
 		}, |v| v);
 
-		for obj in jpath.query(&json_root).iter() {
-			let json = Arc::new((**obj).clone());
-			for fld in mapping {
-				let mut val: String = String::new();
-				if !fld.source.is_empty() {
-					// If the source field nale starts with a / a JsonPointer is given,
-					// Otherwise a direct field name
-					let field_val = match fld.source.get(0..1) {
-						Some(c) if c == "/" => &obj.pointer(&fld.source).unwrap_or_default(),
-						_ => &obj[&fld.source],
-					};
+		jpath.query(&json_root)
+			.iter()
+			.map(|obj| self.parse_json_string(mapping, Arc::new((**obj).clone())))
+			.collect()
+	}
 
-					// Extract the JsonValue form the field
-					val = match field_val {
-						Value::String(s) => String::from(s),
-						Value::Bool(b) => format!("{}", b),
-						Value::Number(n) => format!("{}", n),
-						Value::Array(v) => serde_json::to_string(v).map_or(String::new(), |s| s),
-						Value::Object(v) => serde_json::to_string(v).map_or(String::new(), |s| s),
-						_ => String::new(),
-					};
-				}
+	/// Applies the configured mappings on the given JSON Values
+	///
+	/// # Arguments
+	///
+	/// * `mapping` - All FieldMappings from the Configuration
+	/// * `json` - The JSON-Value to apply the mapping to
+	///
+	/// # Returns
+	///
+	/// A JSON serialized string with all the fields and values as defined in the `mapping` Configuration
+	fn parse_json_string(&self, mapping: &Vec<FieldMapping>, json: Arc<Value>) -> String {
+		let mut results: HashMap<String, String> = HashMap::new();
+		for fld in mapping {
+			let mut val: String = String::new();
+			if !fld.source.is_empty() {
+				// If the source field nale starts with a / a JsonPointer is given,
+				// Otherwise a direct field name
+				let field_val = match fld.source.get(0..1) {
+					Some(c) if c == "/" => &json.pointer(&fld.source).unwrap_or_default(),
+					_ => &json[&fld.source],
+				};
 
-				// Static value via templating
-				// Only apply the template if no value is assigned yet. So the configuration can read a value and apply a static value if no value is evaluated yet
-				if !fld.static_value.is_empty() && val.is_empty() {
-					val = template_string(&fld.static_value, json.clone());
-				}
+				// Extract the JsonValue form the field
+				val = match field_val {
+					Value::String(s) => String::from(s),
+					Value::Bool(b) => format!("{}", b),
+					Value::Number(n) => format!("{}", n),
+					Value::Array(v) => serde_json::to_string(v).map_or(String::new(), |s| s),
+					Value::Object(v) => serde_json::to_string(v).map_or(String::new(), |s| s),
+					_ => String::new(),
+				};
+			}
 
-				// Sub-Parser values are returned directly
-				// All other values are checked and added to the hashmap below
-				if !fld.parser.is_empty() && !val.is_empty() {
-					return match self.parser_by_name(fld.parser.as_str()).map(|p| self.apply_parser(&val, Some(p))) {
-						Ok(s) => s,
-						Err(e) => {
-							error!("{:?}", e);
-							String::new()
-						},
-					};
-				}
+			// Static value via templating
+			// Only apply the template if no value is assigned yet. So the configuration can read a value and apply a static value if no value is evaluated yet
+			if !fld.static_value.is_empty() && val.is_empty() {
+				val = template_string(&fld.static_value, json.clone());
+			}
 
-				if !val.is_empty() || fld.empty {
-					results.insert(fld.name.clone(), val);
-				}
+			// Sub-Parser values are returned directly
+			// All other values are checked and added to the hashmap below
+			if !fld.parser.is_empty() && !val.is_empty() {
+				return match self.parser_by_name(fld.parser.as_str()).map(|p| self.apply_parser(&val, Some(p))) {
+					Ok(s) => s.join(""),
+					Err(e) => {
+						error!("{:?}", e);
+						String::new()
+					},
+				};
+			}
+
+			if !val.is_empty() || fld.empty {
+				results.insert(fld.name.clone(), val);
 			}
 		}
 
@@ -417,7 +463,7 @@ mod tests {
 			FieldMapping {
 				name: String::from("map1"),
 				source: String::from("grp1"),
-				index: 0,
+				index: 1,
 				parser: String::new(),
 				empty: true,
 				static_value: String::new(),
@@ -427,7 +473,7 @@ mod tests {
 			FieldMapping {
 				name: String::from("map2"),
 				source: String::from("grp2"),
-				index: 0,
+				index: 2,
 				parser: String::new(),
 				empty: false,
 				static_value: String::new(),
@@ -529,8 +575,8 @@ mod tests {
 		let message = String::from("{ \"result\": { \"grp0\":\"foobar\" } }");
 		let jpath = JsonPath::parse("$.result").unwrap();
 
-		let res = parser.parse_json_string(&mapping, &message, &jpath);
-		let json: Value = serde_json::from_str(res.as_str()).unwrap();
+		let res = parser.parse_json_message(&mapping, &message, &jpath);
+		let json: Value = serde_json::from_str(res.first().unwrap().as_str()).unwrap();
 
 		assert_eq!(json["map1"], String::from(""));
 	}
@@ -544,10 +590,32 @@ mod tests {
 		let message = String::from("{ \"result\": { \"grp1\":\"foobar\" } }");
 		let jpath = JsonPath::parse("$.result").unwrap();
 
-		let res = parser.parse_json_string(&mapping, &message, &jpath);
-		let json: Value = serde_json::from_str(res.as_str()).unwrap();
+		let res = parser.parse_json_message(&mapping, &message, &jpath);
+		let json: Value = serde_json::from_str(res.first().unwrap().as_str()).unwrap();
 
 		assert_eq!(json["map1"], String::from("foobar"));
+	}
+
+	#[test]
+	fn test_parse_json_string_multiple() {
+		let queue = Arc::new(MessageQueue::<String>::new());
+		let parser = MessageParser::<String>::new(queue.clone(), types::Queue::default(), get_parser());
+		let mapping = prepare_field_mapping();
+
+		let message = String::from("{ \"result\": [ { \"grp1\":\"foobar1\" }, { \"grp1\":\"foobar2\" }, { \"grp1\":\"foobar3\" } ] }");
+		let jpath = JsonPath::parse("$.result.*").unwrap();
+
+		let res = parser.parse_json_message(&mapping, &message, &jpath);
+		assert_eq!(res.len(), 3);
+
+		let mut json: Value = serde_json::from_str(res[0].as_str()).unwrap();
+		assert_eq!(json["map1"], String::from("foobar1"));
+
+		json = serde_json::from_str(res[1].as_str()).unwrap();
+		assert_eq!(json["map1"], String::from("foobar2"));
+
+		json = serde_json::from_str(res[2].as_str()).unwrap();
+		assert_eq!(json["map1"], String::from("foobar3"));
 	}
 
 	#[test]
@@ -559,8 +627,8 @@ mod tests {
 		let message = String::from("{ \"result\": { \"grp1\":\"foobar\" } }");
 		let jpath = JsonPath::parse("$").unwrap();
 
-		let res = parser.parse_json_string(&mapping, &message, &jpath);
-		let json: Value = serde_json::from_str(res.as_str()).unwrap();
+		let res = parser.parse_json_message(&mapping, &message, &jpath);
+		let json: Value = serde_json::from_str(res.first().unwrap().as_str()).unwrap();
 
 		assert_eq!(json["map1"], String::from("foobar"));
 	}
@@ -574,8 +642,8 @@ mod tests {
 		let message = String::from("{ \"result\": { \"grp4\":{\"grp5\":{\"grp2\":\"foobar\"}} } }");
 		let jpath = JsonPath::parse("$.result").unwrap();
 
-		let res = parser.parse_json_string(&mapping, &message, &jpath);
-		let json: Value = serde_json::from_str(res.as_str()).unwrap();
+		let res = parser.parse_json_message(&mapping, &message, &jpath);
+		let json: Value = serde_json::from_str(res.first().unwrap().as_str()).unwrap();
 
 		assert_eq!(json["map1"], String::from(""));
 		assert_eq!(json["map2"], String::from("foobar"));
@@ -590,8 +658,8 @@ mod tests {
 		let message = String::from("{ \"result\": { \"grp4\":{\"grp5\":{\"grp1\":\"foobar\"}} } }");
 		let jpath = JsonPath::parse("$.result").unwrap();
 
-		let res = parser.parse_json_string(&mapping, &message, &jpath);
-		let json: Value = serde_json::from_str(res.as_str()).unwrap();
+		let res = parser.parse_json_message(&mapping, &message, &jpath);
+		let json: Value = serde_json::from_str(res.first().unwrap().as_str()).unwrap();
 
 		assert_eq!(json["map1"], String::from("foobar"));
 	}
@@ -605,8 +673,8 @@ mod tests {
 		let message = String::from("{ \"result\": { \"grp\":{\"grp\":{\"grp\":\"foobar\"}} } }");
 		let jpath = JsonPath::parse("$.result").unwrap();
 
-		let res = parser.parse_json_string(&mapping, &message, &jpath);
-		let json: Value = serde_json::from_str(res.as_str()).unwrap();
+		let res = parser.parse_json_message(&mapping, &message, &jpath);
+		let json: Value = serde_json::from_str(res.first().unwrap().as_str()).unwrap();
 
 		// Check for the static prefix and the length of a result like "UUID: b654bd71-0c3c-4ae1-a32f-662b2d5fb947"
 		assert_eq!(json["static"].as_str().unwrap().starts_with("UUID: "), true);
@@ -622,11 +690,60 @@ mod tests {
 		let message = String::from("{ \"result\": { \"grp\":{\"grp\":{\"grp\":\"foobar\"}} } }");
 		let jpath = JsonPath::parse("$.result").unwrap();
 
-		let res = parser.parse_json_string(&mapping, &message, &jpath);
-		let json: Value = serde_json::from_str(res.as_str()).unwrap();
+		let res = parser.parse_json_message(&mapping, &message, &jpath);
+		let json: Value = serde_json::from_str(res.first().unwrap().as_str()).unwrap();
 
 		assert_eq!(json["static_response"], String::from("Response: foobar"));
 	}
 
+
+	#[test]
+	fn test_parse_regex_message_empty() {
+		let queue = Arc::new(MessageQueue::<String>::new());
+		let parser = MessageParser::<String>::new(queue.clone(), types::Queue::default(), get_parser());
+		let mapping = prepare_field_mapping();
+
+		let message = String::from("");
+		let re = Regex::new(r"^grp1=(?<grp1>\w+) grp2=(?<grp2>\w+) grp3=(?<grp3>\w+)").unwrap();
+
+		let res = parser.parse_regex_message(&mapping, &message, &re);
+		assert_eq!(res.len(), 0);
+	}
+
+	#[test]
+	fn test_parse_regex_message_named() {
+		let queue = Arc::new(MessageQueue::<String>::new());
+		let parser = MessageParser::<String>::new(queue.clone(), types::Queue::default(), get_parser());
+		let mapping = prepare_field_mapping();
+
+		let message = String::from("grp1=foobar1 grp2=foobar2 grp3=foobar3");
+		let re = Regex::new(r"^grp1=(?<grp1>\w+) grp2=(?<grp2>\w+) grp3=(?<grp3>\w+)").unwrap();
+
+		let res = parser.parse_regex_message(&mapping, &message, &re);
+		let json: Value = serde_json::from_str(res.first().unwrap().as_str()).unwrap();
+
+		assert_eq!(res.len(), 1);
+		assert_eq!(json["map1"], String::from("foobar1"));
+		assert_eq!(json["map2"], String::from("foobar2"));
+		assert_eq!(json["map3"], String::from("foobar3"));
+	}
+
+	#[test]
+	fn test_parse_regex_message_indexed() {
+		let queue = Arc::new(MessageQueue::<String>::new());
+		let parser = MessageParser::<String>::new(queue.clone(), types::Queue::default(), get_parser());
+		let mapping = prepare_field_mapping();
+
+		let message = String::from("grp1=foobar1 grp2=foobar2 grp3=foobar3");
+		let re = Regex::new(r"^grp1=(\w+) grp2=(\w+) grp3=(\w+)").unwrap();
+
+		let res = parser.parse_regex_message(&mapping, &message, &re);
+		let json: Value = serde_json::from_str(res.first().unwrap().as_str()).unwrap();
+
+		assert_eq!(res.len(), 1);
+		assert_eq!(json["map1"], String::from("foobar1"));
+		assert_eq!(json["map2"], String::from("foobar2"));
+		assert_eq!(json["map3"], String::from("foobar3"));
+	}
 
 }
