@@ -1,4 +1,4 @@
-require("./main.css");
+require("./output.css");
 
 import * as wasm from "../pkg";
 

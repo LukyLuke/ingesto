@@ -7,8 +7,9 @@
     "create-wasm-app": ".bin/create-wasm-app.js"
   },
   "scripts": {
-    "build": "webpack --config webpack.config.js",
-    "start": "webpack-dev-server"
+    "tailwind:build": "npx @tailwindcss/cli -i ./main.css -o ./output.css --minify",
+    "build": "npm run tailwind:build && webpack --config webpack.config.js",
+    "start": "npm run tailwind:build && webpack-dev-server --config webpack.config.js"
   },
   "repository": {
     "type": "git",
@@ -22,13 +23,17 @@
   "homepage": "https://github.com/LukyLuke/ingesto",
   "devDependencies": {
     "@wasm-tool/wasm-pack-plugin": "^1.7.0",
-    "html-webpack-plugin": "^5.6.7",
+    "css-loader": "7.1.4",
+    "html-loader": "5.1.0",
+    "html-webpack-plugin": "^5.6.8",
     "mini-css-extract-plugin": "^2.10.2",
-    "webpack": "^5.108.4",
-    "webpack-cli": "^7.2.1",
-    "webpack-dev-server": "^6.0.0",
-    "html-loader": "2.1.1",
-    "css-loader": "5.0.1",
-    "style-loader": "2.0.0"
+    "style-loader": "4.0.0",
+    "tailwindcss": "^4.3.3",
+    "webpack": "^5.109.2",
+    "webpack-cli": "^7.2.2",
+    "webpack-dev-server": "^6.0.0"
+  },
+  "dependencies": {
+    "@tailwindcss/cli": "^4.3.3"
   }
 }

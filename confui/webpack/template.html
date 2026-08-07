@@ -3,9 +3,522 @@
   <head>
     <meta charset="utf-8" />
     <title>ingesto ConfUI</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   </head>
-  <body>
-    <img src="../../doc/logo.png" />
+  <body class="bg-slate-50 text-slate-900">
+    <div class="min-h-screen flex flex-col">
+
+      <!-- Header -->
+      <header class="bg-slate-900 text-white border-b border-slate-800">
+        <div class="max-w-6xl mx-auto px-4 py-3">
+          <div class="flex items-center justify-between gap-4">
+            <!-- logo -->
+            <div class="flex items-center gap-3">
+              <img src="../../doc/logo.png" alt="ingesto" class="w-28 h-auto object-contain" />
+            </div>
+
+            <!-- menu -->
+            <nav class="hidden md:flex items-center gap-1">
+              <button type="button"
+                class="px-3 py-2 rounded-md text-sm text-slate-100 hover:bg-slate-800/70 hover:text-white transition"
+                data-action="goHome">Home</button>
+              <button type="button"
+                class="px-3 py-2 rounded-md text-sm text-slate-100 hover:bg-slate-800/70 hover:text-white transition"
+                data-action="openEditor">New XY</button>
+            </nav>
+
+            <!-- Right side: status pill -->
+            <div class="flex items-center gap-2">
+              <!--span
+                class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs bg-slate-800/70 border border-slate-700 text-slate-100"
+                id="appStatus">
+                <span class="h-2 w-2 rounded-full bg-emerald-400" aria-hidden="true"></span>
+                Ready
+              </span-->
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <!-- Main content -->
+      <main class="flex-1">
+        <div class="max-w-6xl mx-auto px-4 py-6">
+          <div class="grid grid-cols-12 gap-4 items-start">
+            <!-- Left: Content pane -->
+            <section class="col-span-7 bg-white rounded-xl border border-slate-200 shadow-sm">
+              <div class="px-4 py-4 border-b border-slate-200">
+                <div class="flex items-center justify-between gap-3">
+                  <div>
+                    <h2 class="text-base font-semibold text-slate-900">
+                      Elements
+                    </h2>
+                    <p class="text-sm text-slate-600">
+                      Expand sections, edit fields, and select an element for documentation.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    class="px-3 py-2 rounded-md bg-teal-600 text-white text-sm hover:bg-teal-700 transition"
+                    data-action="addElement"
+                  >
+                    + Add
+                  </button>
+                </div>
+              </div>
+
+              <div class="p-4 space-y-3">
+                <!-- Accordion Section 1 -->
+                <div class="rounded-lg border border-slate-200 overflow-hidden">
+                  <button
+                    type="button"
+                    class="w-full text-left px-4 py-3 flex items-center justify-between gap-3 hover:bg-slate-50 transition"
+                    data-toggle="section-params"
+                    aria-expanded="true"
+                  >
+                    <div class="flex items-center gap-3">
+                      <span class="inline-flex items-center justify-center h-9 w-9 rounded-md bg-teal-50 border border-teal-200">
+                        <!-- icon -->
+                        <svg class="h-4 w-4 text-teal-700" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <path d="M4 21v-7a2 2 0 0 1 2-2h2" />
+                          <path d="M4 7V5a2 2 0 0 1 2-2h2" />
+                          <path d="M20 17v4" />
+                          <path d="M20 3v14a2 2 0 0 1-2 2h-3" />
+                          <path d="M8 12h10" />
+                        </svg>
+                      </span>
+                      <div>
+                        <div class="font-medium text-slate-900">Parameters</div>
+                        <div class="text-xs text-slate-600">Type-safe inputs & configuration</div>
+                      </div>
+                    </div>
+
+                    <span class="text-slate-500">
+                      <svg class="h-5 w-5 transition-transform" data-chevron class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M9 18l6-6-6-6"/>
+                      </svg>
+                    </span>
+                  </button>
+
+                  <div id="section-params" class="px-4 pb-4">
+                    <!-- Sub-container A -->
+                    <div class="mt-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                      <div class="flex items-center justify-between gap-3 mb-3">
+                        <div>
+                          <div class="text-sm font-semibold text-slate-900">Runtime</div>
+                          <div class="text-xs text-slate-600">Core behavior settings</div>
+                        </div>
+                        <button
+                          type="button"
+                          class="px-2.5 py-1.5 text-xs rounded-md bg-white border border-slate-200 hover:bg-slate-100 transition"
+                          data-select="runtime"
+                        >
+                          Docs
+                        </button>
+                      </div>
+
+                      <div class="grid grid-cols-2 gap-3">
+                        <div>
+                          <label class="text-xs font-medium text-slate-700">Mode</label>
+                          <select
+                            class="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-teal-500"
+                            data-select="runtime.mode"
+                          >
+                            <option value="dev">Development</option>
+                            <option value="prod">Production</option>
+                          </select>
+                        </div>
+
+                        <div>
+                          <label class="text-xs font-medium text-slate-700">Max Iterations</label>
+                          <input
+                            type="number"
+                            min="1"
+                            class="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-teal-500"
+                            placeholder="e.g. 100"
+                            data-select="runtime.max_iterations"
+                          />
+                        </div>
+
+                        <div class="col-span-2">
+                          <label class="text-xs font-medium text-slate-700">Seed (optional)</label>
+                          <input
+                            type="text"
+                            class="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-teal-500"
+                            placeholder="e.g. 42"
+                            data-select="runtime.seed"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Sub-container B -->
+                    <div class="mt-3 rounded-lg border border-slate-200 bg-white p-3">
+                      <div class="flex items-center justify-between gap-3 mb-3">
+                        <div>
+                          <div class="text-sm font-semibold text-slate-900">Networking</div>
+                          <div class="text-xs text-slate-600">Endpoints used by the WASM module</div>
+                        </div>
+                        <button
+                          type="button"
+                          class="px-2.5 py-1.5 text-xs rounded-md bg-white border border-slate-200 hover:bg-slate-100 transition"
+                          data-select="networking"
+                        >
+                          Docs
+                        </button>
+                      </div>
+
+                      <div class="grid grid-cols-2 gap-3">
+                        <div class="col-span-2">
+                          <label class="text-xs font-medium text-slate-700">API Base URL</label>
+                          <input
+                            type="text"
+                            class="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-teal-500"
+                            placeholder="https://example.com/api"
+                            data-select="networking.base_url"
+                          />
+                        </div>
+
+                        <div>
+                          <label class="text-xs font-medium text-slate-700">Timeout (ms)</label>
+                          <input
+                            type="number"
+                            class="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-teal-500"
+                            placeholder="5000"
+                            data-select="networking.timeout_ms"
+                          />
+                        </div>
+
+                        <div>
+                          <label class="text-xs font-medium text-slate-700">Retry Count</label>
+                          <input
+                            type="number"
+                            class="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-teal-500"
+                            placeholder="3"
+                            data-select="networking.retry_count"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Accordion Section 2 -->
+                <div class="rounded-lg border border-slate-200 overflow-hidden">
+                  <button
+                    type="button"
+                    class="w-full text-left px-4 py-3 flex items-center justify-between gap-3 hover:bg-slate-50 transition"
+                    data-toggle="section-visual"
+                    aria-expanded="false"
+                  >
+                    <div class="flex items-center gap-3">
+                      <span class="inline-flex items-center justify-center h-9 w-9 rounded-md bg-teal-50 border border-teal-200">
+                        <svg class="h-4 w-4 text-teal-700" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <path d="M12 2l3 7h7l-5.5 4 2 7L12 17l-6.5 3 2-7L2 9h7z"/>
+                        </svg>
+                      </span>
+                      <div>
+                        <div class="font-medium text-slate-900">UI Behavior</div>
+                        <div class="text-xs text-slate-600">Animations & selection model</div>
+                      </div>
+                    </div>
+                    <span class="text-slate-500">
+                      <svg class="h-5 w-5 transition-transform" data-chevron viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M9 18l6-6-6-6"/>
+                      </svg>
+                    </span>
+                  </button>
+
+                  <div id="section-visual" class="hidden px-4 pb-4">
+                    <div class="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                      <div class="flex items-center justify-between gap-3 mb-3">
+                        <div>
+                          <div class="text-sm font-semibold text-slate-900">Appearance</div>
+                          <div class="text-xs text-slate-600">Visual settings</div>
+                        </div>
+                        <button
+                          type="button"
+                          class="px-2.5 py-1.5 text-xs rounded-md bg-white border border-slate-200 hover:bg-slate-100 transition"
+                          data-select="appearance"
+                        >
+                          Docs
+                        </button>
+                      </div>
+
+                      <div class="grid grid-cols-2 gap-3">
+                        <div class="col-span-2">
+                          <label class="text-xs font-medium text-slate-700">Theme Accent</label>
+                          <input
+                            type="text"
+                            class="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-teal-500"
+                            value="#14b8a6"
+                            data-select="appearance.accent_color"
+                          />
+                        </div>
+
+                        <div>
+                          <label class="text-xs font-medium text-slate-700">Transition (ms)</label>
+                          <input
+                            type="number"
+                            class="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-teal-500"
+                            placeholder="180"
+                            data-select="appearance.transition_ms"
+                          />
+                        </div>
+
+                        <div>
+                          <label class="text-xs font-medium text-slate-700">Reduce Motion</label>
+                          <select
+                            class="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-teal-500"
+                            data-select="appearance.reduce_motion"
+                          >
+                            <option value="false">No</option>
+                            <option value="true">Yes</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="mt-3 flex gap-2">
+                      <button
+                        class="flex-1 px-4 py-2 rounded-md bg-teal-600 text-white text-sm hover:bg-teal-700 transition"
+                        data-action="applyVisualSettings"
+                      >
+                        Apply
+                      </button>
+                      <button
+                        class="px-4 py-2 rounded-md bg-white border border-slate-200 text-slate-800 text-sm hover:bg-slate-50 transition"
+                        data-action="resetVisualSettings"
+                      >
+                        Reset
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <!-- Right: Documentation pane -->
+            <aside class="col-span-5">
+              <div class="bg-slate-900 text-white rounded-xl border border-slate-800 shadow-sm overflow-hidden">
+                <div class="px-4 py-4 border-b border-slate-800">
+                  <div class="flex items-center justify-between gap-3">
+                    <div>
+                      <h2 class="text-base font-semibold">Documentation</h2>
+                      <p class="text-sm text-slate-300">
+                        Selected element details
+                      </p>
+                    </div>
+                    <div class="text-xs text-slate-300">
+                      <span class="inline-flex items-center gap-2">
+                        <span class="h-2 w-2 rounded-full bg-teal-400" aria-hidden="true"></span>
+                        Live
+                      </span>
+                    </div>
+                  </div>
+
+                  <div class="mt-3">
+                    <div class="text-xs text-slate-400">Selection</div>
+                    <div id="docTitle" class="text-sm font-semibold text-teal-200 mt-1">
+                      runtime
+                    </div>
+                  </div>
+                </div>
+
+                <div class="p-4 space-y-4">
+                  <div class="rounded-lg bg-white/5 border border-slate-800 p-3">
+                    <div class="text-sm font-semibold text-teal-200">What it does</div>
+                    <p id="docDescription" class="text-sm text-slate-200 mt-1">
+                      Controls the runtime behavior of the WASM module, including execution mode,
+                      iteration limits, and deterministic seeding.
+                    </p>
+                  </div>
+
+                  <div class="rounded-lg bg-white/5 border border-slate-800 p-3">
+                    <div class="text-sm font-semibold text-teal-200">Inputs</div>
+                    <ul id="docInputs" class="text-sm text-slate-200 mt-2 space-y-2">
+                      <li class="flex items-start gap-2">
+                        <span class="text-teal-200">•</span>
+                        <span><span class="font-semibold">Mode</span> — dev/prod runtime selection.</span>
+                      </li>
+                      <li class="flex items-start gap-2">
+                        <span class="text-teal-200">•</span>
+                        <span><span class="font-semibold">Max Iterations</span> — upper bound for repeated work.</span>
+                      </li>
+                      <li class="flex items-start gap-2">
+                        <span class="text-teal-200">•</span>
+                        <span><span class="font-semibold">Seed</span> — optional deterministic seed.</span>
+                      </li>
+                    </ul>
+                  </div>
+
+                  <div class="rounded-lg bg-white/5 border border-slate-800 p-3">
+                    <div class="text-sm font-semibold text-teal-200">Actions</div>
+                    <div class="mt-2 flex gap-2">
+                      <button
+                        type="button"
+                        class="flex-1 px-3 py-2 rounded-md bg-teal-600 hover:bg-teal-700 transition text-sm"
+                        data-action="docsApply"
+                      >
+                        Apply to WASM
+                      </button>
+                      <button
+                        type="button"
+                        class="px-3 py-2 rounded-md bg-white/10 hover:bg-white/15 transition text-sm border border-white/10"
+                        data-action="docsReset"
+                      >
+                        Reset
+                      </button>
+                    </div>
+                  </div>
+
+                  <div class="text-xs text-slate-400">
+                    Tip: Click <span class="text-slate-200">Docs</span> or focus inputs to update this panel.
+                  </div>
+                </div>
+              </div>
+            </aside>
+          </div>
+        </div>
+      </main>
+
+      <!-- Footer -->
+      <footer class="bg-slate-900 text-slate-300 border-t border-slate-800">
+        <div class="max-w-6xl mx-auto px-4 py-4">
+          <div class="text-sm">
+            © 2026 Your Company. All rights reserved.
+          </div>
+        </div>
+      </footer>
+    </div>
+
+    <script>
+      // Minimal vanilla wiring for selection + accordion + placeholder WASM calls.
+      // Replace wasm call placeholders with your actual glue functions.
+
+      const statusEl = document.getElementById("appStatus");
+      const docTitle = document.getElementById("docTitle");
+      const docDescription = document.getElementById("docDescription");
+      const docInputs = document.getElementById("docInputs");
+
+      function setStatus(text, ok = true) {
+        statusEl.innerText = "";
+        statusEl.classList.add("border");
+        statusEl.classList.toggle("bg-emerald-500/10", ok);
+        statusEl.classList.toggle("bg-rose-500/10", !ok);
+
+        const dot = statusEl.querySelector("span.h-2.w-2") || document.createElement("span");
+        dot.className = "h-2 w-2 rounded-full";
+        dot.style.backgroundColor = ok ? "#34d399" : "#fb7185";
+        statusEl.prepend(dot);
+        statusEl.append(document.createTextNode(" " + text));
+      }
+
+      function wasmCall(action, payload) {
+        // Hook this into wasm-bindgen exports, e.g.:
+        // window.wasm_app?.[action]?.(payload)
+        console.log("WASM call:", action, payload);
+      }
+
+      // Accordion behavior
+      document.querySelectorAll("[data-toggle]").forEach(btn => {
+        btn.addEventListener("click", () => {
+          const id = btn.getAttribute("data-toggle");
+          const panel = document.getElementById(id);
+          const expanded = btn.getAttribute("aria-expanded") === "true";
+
+          btn.setAttribute("aria-expanded", String(!expanded));
+          if (expanded) panel.classList.add("hidden");
+          else panel.classList.remove("hidden");
+
+          const chevron = btn.querySelector("[data-chevron]");
+          if (chevron) chevron.style.transform = expanded ? "rotate(0deg)" : "rotate(180deg)";
+        });
+      });
+
+      function setDocFor(selectionKey) {
+        docTitle.textContent = selectionKey;
+
+        const docs = {
+          runtime: {
+            description:
+              "Controls the runtime behavior of the WASM module, including execution mode, iteration limits, and deterministic seeding.",
+            inputs: [
+              "Mode — dev/prod runtime selection.",
+              "Max Iterations — upper bound for repeated work.",
+              "Seed — optional deterministic seed."
+            ]
+          },
+          "runtime.mode": {
+            description:
+              "Switches how the WASM module behaves: faster diagnostics for development, stricter behavior for production.",
+            inputs: ["dev — optimized for iteration.", "prod — optimized for stable output."]
+          },
+          "runtime.max_iterations": {
+            description:
+              "Limits the maximum number of iterations or retry loops used by the WASM logic to prevent runaway computations.",
+            inputs: ["Higher values may increase accuracy but cost CPU time."]
+          },
+          networking: {
+            description:
+              "Defines networking parameters used by the WASM module when calling your backend services.",
+            inputs: ["API Base URL — base endpoint for requests.", "Timeout (ms) — request time limit.", "Retry Count — retry attempts on failure."]
+          },
+          "networking.base_url": {
+            description:
+              "The base URL used for API requests. Keep this aligned with your backend routing.",
+            inputs: ["Example: https://example.com/api"]
+          },
+          appearance: {
+            description:
+              "Controls visual behavior and animation preferences for the UI layer.",
+            inputs: ["Accent Color — UI accent value.", "Transition (ms) — animation timing.", "Reduce Motion — accessibility-friendly behavior."]
+          }
+        };
+
+        const chosen = docs[selectionKey] || {
+          description:
+            "Documentation for this element will appear here. Wire this selection key to your wasm-bindgen data model.",
+          inputs: ["No inputs listed yet."]
+        };
+
+        docDescription.textContent = chosen.description;
+        docInputs.innerHTML = chosen.inputs
+          .map(
+            item =>
+              `<li class="flex items-start gap-2">
+                <span class="text-teal-200">•</span>
+                <span>${item}</span>
+              </li>`
+          )
+          .join("");
+      }
+
+      // Selection wiring for inputs/buttons
+      document.querySelectorAll("[data-select]").forEach(el => {
+        const key = el.getAttribute("data-select");
+        el.addEventListener("click", (e) => {
+          // avoid accordion clicks if they overlap
+          e.stopPropagation();
+          setDocFor(key);
+          wasmCall("selectElement", { key });
+        });
+        el.addEventListener("focus", () => {
+          setDocFor(key);
+        });
+      });
+
+      // Header / action buttons placeholder calls
+      document.querySelectorAll("[data-action]").forEach(btn => {
+        btn.addEventListener("click", () => {
+          const action = btn.getAttribute("data-action");
+          setStatus("Working...", true);
+          wasmCall(action, { selected: docTitle.textContent });
+          setTimeout(() => setStatus("Ready", true), 250);
+        });
+      });
+
+      // Default docs panel
+      setDocFor("runtime");
+    </script>
   </body>
 </html>

@@ -10,6 +10,7 @@ Follow [WASM-bindgen guide](https://wasm-bindgen.github.io/wasm-bindgen/)
 ### Upgarde all node-modules
 
 ```
+$ cd webpack
 $ npx npm-check-updates -u
 $ npm install
 ```
