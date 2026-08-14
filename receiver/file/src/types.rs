@@ -8,12 +8,14 @@ fn default_interval() -> f32 { 3600.0 }
 
 
 /// The main File-Reader Configuration
+#[cfg(feature = "types")]
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Config {
 	pub config: Reader,
 }
 
 /// A File-Reader Configuration
+#[cfg(feature = "types")]
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Reader {
 	/// Name for this File-Reader
@@ -32,6 +34,7 @@ pub struct Reader {
 }
 
 /// A File-Reader Configuration
+#[cfg(feature = "types")]
 #[derive(Debug, Deserialize, Serialize)]
 pub struct File {
 	/// File name and path to open, read or listen

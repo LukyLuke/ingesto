@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 /// Message-Queue configuration
+#[cfg(feature = "types")]
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Queue {
 	// Max number of message in the queue before the processor (parser) is reading out and clearing the queue
@@ -47,6 +48,7 @@ impl Default for Queue {
 /// Defines a parser which is used for
 /// * Parsing the main message
 /// * Parsing a field value which references the parser by it's name
+#[cfg(feature = "types")]
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Parser {
 	// Name of the parser for referencing in a field mapping
@@ -73,6 +75,7 @@ pub struct Parser {
 }
 
 /// Defines how the message should be parsed
+#[cfg(feature = "types")]
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub enum ParserKind {
 	// Takes the message as-is
@@ -113,6 +116,7 @@ impl Default for Parser {
 }
 
 /// Based on the parser, either a string which represents a RegularExpression or a JsonPath
+#[cfg(feature = "types")]
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub enum ParserSettings {
 	// No Setting
@@ -138,6 +142,7 @@ impl fmt::Display for ParserSettings {
 }
 
 /// Represents a universal mapping of a field from the source message in the final message
+#[cfg(feature = "types")]
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct FieldMapping {
 	/// Name of the field in the final struct
@@ -169,6 +174,7 @@ pub struct FieldMapping {
 }
 
 /// Represents an OpenTelemetry Endpoint, where Metrics and/or Logs can be sent to
+#[cfg(feature = "types")]
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct OtelLogger {
 	pub endpoint: String,
@@ -196,6 +202,7 @@ impl OtelLogger {
 }
 
 /// Represents an OpenTelemetry Endpoint, where Metrics and/or Logs can be received
+#[cfg(feature = "types")]
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct OtelReceiver {
 	pub address: String,
@@ -223,6 +230,7 @@ impl Default for OtelReceiver {
 }
 
 /// Specific internal type for adding and reading values from a database
+#[cfg(feature = "types")]
 #[derive(Debug, Clone, PartialEq)]
 pub enum DbValue {
 	Bool(bool),
@@ -341,6 +349,7 @@ impl DbValue {
 /// Defines a field in the Database from a given type, fieldname and message-field name
 /// * `name` - Field name in the Database
 /// * `origin` - Optional: Field name from the log message; If not defined, the same as `name` is used
+#[cfg(feature = "types")]
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(tag = "kind")]
 pub enum DbField {

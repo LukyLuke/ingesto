@@ -8,12 +8,14 @@ fn default_port() -> u16 { 8080 }
 
 
 // The main configuration for a webhook
+#[cfg(feature = "types")]
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Config {
 	pub config: Webhook,
 }
 
 /// Represents a Webhook Configuration
+#[cfg(feature = "types")]
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Webhook {
 	/// Name of the webhook
@@ -35,6 +37,7 @@ pub struct Webhook {
 }
 
 /// Server Listener Configuration
+#[cfg(feature = "types")]
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Server {
 	/// Address to listen on: '0.0.0.0'
@@ -52,6 +55,7 @@ impl Server {
 }
 
 /// A Route-Configuration for a Webhook/Webserver
+#[cfg(feature = "types")]
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Route {
 	/// Path where to listen
@@ -67,6 +71,7 @@ pub struct Route {
 }
 
 /// Authentication on an Endpoint
+#[cfg(feature = "types")]
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub enum Authentication {
 	/// No Authenticaton

@@ -7,8 +7,13 @@ authors.workspace = true
 repository.workspace = true
 homepage.workspace = true
 
+[features]
+default = [ "runtime" ]
+runtime = [ "types" ]
+types = []
+
 [dependencies]
-shared = { path = "../../shared" }
+shared = { path = "../../shared", features = [ "runtime" ] }
 
 notify = { workspace = true }
 anyhow = { workspace = true }

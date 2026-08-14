@@ -7,12 +7,14 @@ fn u16_default_514() -> u16 { 514 }
 
 
 /// The main network listener Configuraiton
+#[cfg(feature = "types")]
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Config {
 	pub config: Receiver,
 }
 
 /// A network-Receiver Configuraiton
+#[cfg(feature = "types")]
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Receiver {
 	/// Name of the listener
@@ -31,6 +33,7 @@ pub struct Receiver {
 }
 
 /// A Network-Listener Configuraiton
+#[cfg(feature = "types")]
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Server {
 	/// Address to listen on: '0.0.0.0'

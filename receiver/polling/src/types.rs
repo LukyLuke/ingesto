@@ -6,12 +6,14 @@ fn default_method() -> Method { Method::GET }
 fn default_cron_timer() -> String { String::from("* */5 * * * *") }
 
 /// The main Polling-Configuration
+#[cfg(feature = "types")]
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Config {
 	pub config: Polling,
 }
 
 /// A Polling Configuration
+#[cfg(feature = "types")]
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Polling {
 	/// Name of the instance
@@ -34,6 +36,7 @@ pub struct Polling {
 }
 
 /// An Endpoint where and how to send a request to
+#[cfg(feature = "types")]
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Endpoint {
 	/// FQDN where to send a request to.
@@ -64,6 +67,7 @@ pub struct Endpoint {
 }
 
 /// Request-Methods
+#[cfg(feature = "types")]
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub enum Method {
 	GET,
@@ -73,6 +77,7 @@ pub enum Method {
 }
 
 /// Authentication on an Endpoint
+#[cfg(feature = "types")]
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub enum Authentication {
 	/// No Authenticaton
@@ -94,6 +99,7 @@ pub enum Authentication {
 
 /// A simple Key-Value pair used for different representations
 /// The Value can be a Template-Param in most constructs: {{ ... }}
+#[cfg(feature = "types")]
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Param {
 	pub name: String,
@@ -101,6 +107,7 @@ pub struct Param {
 }
 
 /// Paging Requests can be used if an Endpoint sends a lot of data which are split over multiple requests and responses
+#[cfg(feature = "types")]
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct PagingRequest {
 	/// Name and Value for the parameter which is added on the Endpoints URI
@@ -122,6 +129,7 @@ pub struct PagingRequest {
 
 
 /// Defines the paging
+#[cfg(feature = "types")]
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub enum PagingRequestUntil {
 	/// No Paging

@@ -9,12 +9,14 @@ pub(crate) fn default_ssl_mode() -> SslMode { SslMode::Disable }
 
 
 // The main configuration for a Database
+#[cfg(feature = "types")]
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Config {
 	pub config: DbConf,
 }
 
 /// main Configuration to start a Database-Exporter and listen for messages
+#[cfg(feature = "types")]
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct DbConf {
 	/// Just a name for this instance for logging and identification
@@ -34,6 +36,7 @@ pub struct DbConf {
 }
 
 /// A Database Connection Configuration
+#[cfg(feature = "types")]
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Database {
 	/// Name of the Database/Schema
@@ -57,6 +60,7 @@ pub struct Database {
 }
 
 /// How to authenticate against the Database
+#[cfg(feature = "types")]
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub enum Authentication {
 	/// Use the system default passfile (~/.pgpass or ~/.mysql)
@@ -68,6 +72,7 @@ pub enum Authentication {
 }
 
 /// A Database-Connection Configuration
+#[cfg(feature = "types")]
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Connection {
 	/// Host-Name, IP-Address or FileName to use as the database
@@ -95,6 +100,7 @@ pub struct Connection {
 }
 
 /// What kind of Database should be conencted
+#[cfg(feature = "types")]
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub enum DbKind {
 	PostgreSQL,
@@ -104,6 +110,7 @@ pub enum DbKind {
 
 /// SSL-Mode for the Database-Connection
 /// This varries from Postgres to MySQL/MariaDB and SQLite
+#[cfg(feature = "types")]
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub enum SslMode {
 	Disable,
@@ -127,6 +134,7 @@ pub enum SslMode {
 ///   { kind = "Bool",   name = "dbbool", origin = "some_boolean" },
 /// ]
 /// ```
+#[cfg(feature = "types")]
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct DbTable {
 	/// Table-Name

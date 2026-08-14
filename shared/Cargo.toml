@@ -7,13 +7,18 @@ authors.workspace = true
 repository.workspace = true
 homepage.workspace = true
 
+[features]
+default = [ "runtime" ]
+runtime = [ "types" ]
+types = []
+
 [dependencies]
 env = { version = "1" }
 toml = { version = "1" }
 serde_json_path = { version = "0" }
 
 anyhow = { workspace = true }
-bytes = { workspace = true }
+bytes = { workspace = true  }
 clap = { workspace = true }
 chrono = { workspace = true }
 dashmap = { workspace = true }
