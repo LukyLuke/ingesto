@@ -16,13 +16,29 @@ default = ["console_error_panic_hook"]
 
 [dependencies]
 wasm-bindgen = "0.2"
+serde-wasm-bindgen = "0.6"
+web-sys = { version = "0.3", features = [ "Window", "console"] }
 
-[dependencies.web-sys]
-version = "0.3"
-features = [
-	"Window",
-	"console",
-]
+shared = { path = "../shared", default-features = false, features = [ "types" ] }
+
+export_azure = { package = "ingesto-azuredcr-exporter", path = "../exporter/azuredcr", default-features = false, features = [ "types" ] }
+export_database = { package = "ingesto-database-exporter", path = "../exporter/exportdb", default-features = false, features = [ "types" ] }
+
+recv_db = { package = "ingesto-database-reader", path = "../receiver/database", default-features = false, features = [ "types" ] }
+recv_file = { package = "ingesto-file-reader", path = "../receiver/file", default-features = false, features = [ "types" ] }
+recv_network = { package = "ingesto-network-listener", path = "../receiver/network", default-features = false, features = [ "types" ] }
+recv_polling = { package = "ingesto-network-polling", path = "../receiver/polling", default-features = false, features = [ "types" ] }
+recv_webhook = { package = "ingesto-webhook-listener", path = "../receiver/webhook", default-features = false, features = [ "types" ] }
+
+anyhow = { workspace = true }
+chrono = { workspace = true }
+dateparser = { workspace = true }
+ipnetwork = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_path_to_error = { workspace = true }
+serde_yaml = { workspace = true }
+
 
 # The `console_error_panic_hook` crate provides better debugging of panics by
 # logging them with `console.error`. This is great for development, but requires

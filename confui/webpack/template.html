@@ -21,21 +21,13 @@
             <nav class="hidden md:flex items-center gap-1">
               <button type="button"
                 class="px-3 py-2 rounded-md text-sm text-slate-100 hover:bg-slate-800/70 hover:text-white transition"
-                data-action="goHome">Home</button>
+                data-action="goLoad">Load Config</button>
               <button type="button"
                 class="px-3 py-2 rounded-md text-sm text-slate-100 hover:bg-slate-800/70 hover:text-white transition"
-                data-action="openEditor">New XY</button>
-            </nav>
-
-            <!-- Right side: status pill -->
-            <div class="flex items-center gap-2">
-              <!--span
-                class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs bg-slate-800/70 border border-slate-700 text-slate-100"
-                id="appStatus">
-                <span class="h-2 w-2 rounded-full bg-emerald-400" aria-hidden="true"></span>
-                Ready
-              </span-->
-            </div>
+                data-action="goNewX">Create XY</button>
+              <button type="button"
+                class="px-3 py-2 rounded-md text-sm text-slate-100 hover:bg-slate-800/70 hover:text-white transition"
+                data-action="goNewY">Create XY</button>
           </div>
         </div>
       </header>
@@ -50,19 +42,12 @@
                 <div class="flex items-center justify-between gap-3">
                   <div>
                     <h2 class="text-base font-semibold text-slate-900">
-                      Elements
+                      Configuration
                     </h2>
                     <p class="text-sm text-slate-600">
                       Expand sections, edit fields, and select an element for documentation.
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    class="px-3 py-2 rounded-md bg-teal-600 text-white text-sm hover:bg-teal-700 transition"
-                    data-action="addElement"
-                  >
-                    + Add
-                  </button>
                 </div>
               </div>
 
@@ -76,19 +61,12 @@
                     aria-expanded="true"
                   >
                     <div class="flex items-center gap-3">
-                      <span class="inline-flex items-center justify-center h-9 w-9 rounded-md bg-teal-50 border border-teal-200">
-                        <!-- icon -->
-                        <svg class="h-4 w-4 text-teal-700" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                          <path d="M4 21v-7a2 2 0 0 1 2-2h2" />
-                          <path d="M4 7V5a2 2 0 0 1 2-2h2" />
-                          <path d="M20 17v4" />
-                          <path d="M20 3v14a2 2 0 0 1-2 2h-3" />
-                          <path d="M8 12h10" />
-                        </svg>
+                      <span class="inline-flex items-center justify-center h-9 w-9 px-1 py-1 rounded-md bg-teal-50 border border-teal-200">
+                        <img src="../../doc/favicon.png" alt="section" />
                       </span>
                       <div>
-                        <div class="font-medium text-slate-900">Parameters</div>
-                        <div class="text-xs text-slate-600">Type-safe inputs & configuration</div>
+                        <div class="font-medium text-slate-900">Queue</div>
+                        <div class="text-xs text-slate-600">Blubber blah</div>
                       </div>
                     </div>
 
@@ -203,97 +181,7 @@
                 </div>
 
                 <!-- Accordion Section 2 -->
-                <div class="rounded-lg border border-slate-200 overflow-hidden">
-                  <button
-                    type="button"
-                    class="w-full text-left px-4 py-3 flex items-center justify-between gap-3 hover:bg-slate-50 transition"
-                    data-toggle="section-visual"
-                    aria-expanded="false"
-                  >
-                    <div class="flex items-center gap-3">
-                      <span class="inline-flex items-center justify-center h-9 w-9 rounded-md bg-teal-50 border border-teal-200">
-                        <svg class="h-4 w-4 text-teal-700" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                          <path d="M12 2l3 7h7l-5.5 4 2 7L12 17l-6.5 3 2-7L2 9h7z"/>
-                        </svg>
-                      </span>
-                      <div>
-                        <div class="font-medium text-slate-900">UI Behavior</div>
-                        <div class="text-xs text-slate-600">Animations & selection model</div>
-                      </div>
-                    </div>
-                    <span class="text-slate-500">
-                      <svg class="h-5 w-5 transition-transform" data-chevron viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M9 18l6-6-6-6"/>
-                      </svg>
-                    </span>
-                  </button>
 
-                  <div id="section-visual" class="hidden px-4 pb-4">
-                    <div class="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                      <div class="flex items-center justify-between gap-3 mb-3">
-                        <div>
-                          <div class="text-sm font-semibold text-slate-900">Appearance</div>
-                          <div class="text-xs text-slate-600">Visual settings</div>
-                        </div>
-                        <button
-                          type="button"
-                          class="px-2.5 py-1.5 text-xs rounded-md bg-white border border-slate-200 hover:bg-slate-100 transition"
-                          data-select="appearance"
-                        >
-                          Docs
-                        </button>
-                      </div>
-
-                      <div class="grid grid-cols-2 gap-3">
-                        <div class="col-span-2">
-                          <label class="text-xs font-medium text-slate-700">Theme Accent</label>
-                          <input
-                            type="text"
-                            class="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-teal-500"
-                            value="#14b8a6"
-                            data-select="appearance.accent_color"
-                          />
-                        </div>
-
-                        <div>
-                          <label class="text-xs font-medium text-slate-700">Transition (ms)</label>
-                          <input
-                            type="number"
-                            class="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-teal-500"
-                            placeholder="180"
-                            data-select="appearance.transition_ms"
-                          />
-                        </div>
-
-                        <div>
-                          <label class="text-xs font-medium text-slate-700">Reduce Motion</label>
-                          <select
-                            class="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-teal-500"
-                            data-select="appearance.reduce_motion"
-                          >
-                            <option value="false">No</option>
-                            <option value="true">Yes</option>
-                          </select>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div class="mt-3 flex gap-2">
-                      <button
-                        class="flex-1 px-4 py-2 rounded-md bg-teal-600 text-white text-sm hover:bg-teal-700 transition"
-                        data-action="applyVisualSettings"
-                      >
-                        Apply
-                      </button>
-                      <button
-                        class="px-4 py-2 rounded-md bg-white border border-slate-200 text-slate-800 text-sm hover:bg-slate-50 transition"
-                        data-action="resetVisualSettings"
-                      >
-                        Reset
-                      </button>
-                    </div>
-                  </div>
-                </div>
               </div>
             </section>
 
@@ -302,18 +190,7 @@
               <div class="bg-slate-900 text-white rounded-xl border border-slate-800 shadow-sm overflow-hidden">
                 <div class="px-4 py-4 border-b border-slate-800">
                   <div class="flex items-center justify-between gap-3">
-                    <div>
-                      <h2 class="text-base font-semibold">Documentation</h2>
-                      <p class="text-sm text-slate-300">
-                        Selected element details
-                      </p>
-                    </div>
-                    <div class="text-xs text-slate-300">
-                      <span class="inline-flex items-center gap-2">
-                        <span class="h-2 w-2 rounded-full bg-teal-400" aria-hidden="true"></span>
-                        Live
-                      </span>
-                    </div>
+                    <h2 class="text-base font-semibold">Documentation</h2>
                   </div>
 
                   <div class="mt-3">
@@ -326,54 +203,32 @@
 
                 <div class="p-4 space-y-4">
                   <div class="rounded-lg bg-white/5 border border-slate-800 p-3">
-                    <div class="text-sm font-semibold text-teal-200">What it does</div>
+                    <div class="text-sm font-semibold text-teal-200">What is it for</div>
                     <p id="docDescription" class="text-sm text-slate-200 mt-1">
-                      Controls the runtime behavior of the WASM module, including execution mode,
-                      iteration limits, and deterministic seeding.
+                      <!-- Documentation -->
                     </p>
                   </div>
 
                   <div class="rounded-lg bg-white/5 border border-slate-800 p-3">
-                    <div class="text-sm font-semibold text-teal-200">Inputs</div>
+                    <div class="text-sm font-semibold text-teal-200">Values / Types</div>
                     <ul id="docInputs" class="text-sm text-slate-200 mt-2 space-y-2">
-                      <li class="flex items-start gap-2">
+                      <!--li class="flex items-start gap-2">
                         <span class="text-teal-200">•</span>
                         <span><span class="font-semibold">Mode</span> — dev/prod runtime selection.</span>
-                      </li>
-                      <li class="flex items-start gap-2">
-                        <span class="text-teal-200">•</span>
-                        <span><span class="font-semibold">Max Iterations</span> — upper bound for repeated work.</span>
-                      </li>
-                      <li class="flex items-start gap-2">
-                        <span class="text-teal-200">•</span>
-                        <span><span class="font-semibold">Seed</span> — optional deterministic seed.</span>
-                      </li>
+                      </li-->
                     </ul>
                   </div>
 
                   <div class="rounded-lg bg-white/5 border border-slate-800 p-3">
                     <div class="text-sm font-semibold text-teal-200">Actions</div>
                     <div class="mt-2 flex gap-2">
-                      <button
-                        type="button"
-                        class="flex-1 px-3 py-2 rounded-md bg-teal-600 hover:bg-teal-700 transition text-sm"
-                        data-action="docsApply"
-                      >
-                        Apply to WASM
-                      </button>
-                      <button
-                        type="button"
-                        class="px-3 py-2 rounded-md bg-white/10 hover:bg-white/15 transition text-sm border border-white/10"
-                        data-action="docsReset"
-                      >
-                        Reset
+                      <button type="button" data-action="docsApply"
+                        class="flex-1 px-3 py-2 rounded-md bg-teal-600 hover:bg-teal-700 transition text-sm">
+                        Create and Save Configuration
                       </button>
                     </div>
                   </div>
 
-                  <div class="text-xs text-slate-400">
-                    Tip: Click <span class="text-slate-200">Docs</span> or focus inputs to update this panel.
-                  </div>
                 </div>
               </div>
             </aside>
@@ -385,7 +240,7 @@
       <footer class="bg-slate-900 text-slate-300 border-t border-slate-800">
         <div class="max-w-6xl mx-auto px-4 py-4">
           <div class="text-sm">
-            © 2026 Your Company. All rights reserved.
+            © 2026 Lukas LukyLuke_ch Zurschmiede. All rights reserved.
           </div>
         </div>
       </footer>
