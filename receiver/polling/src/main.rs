@@ -1,4 +1,5 @@
 pub mod config;
+pub mod types;
 
 use core::time;
 use std::{
@@ -12,7 +13,7 @@ use shared::{self, init_logging, parser::MessageParser, queue::MessageQueue, usa
 use serde_json::{Value, json};
 use tracing::{debug, error, info};
 
-use crate::{config::{Authentication, Method}};
+use crate::{types::{Authentication, Method}};
 
 static MAX_PAGING_REQUESTS: u16 = 1024;
 
@@ -27,7 +28,7 @@ fn main() {
 		}
 	};
 
-	let r_conf: anyhow::Result<config::Config> = shared::load_config(conf_file);
+	let r_conf: anyhow::Result<types::Config> = shared::load_config(conf_file);
 	let conf = match r_conf {
 		Ok(c) => Arc::new(c.config),
 		Err(e) => {
@@ -50,7 +51,7 @@ fn main() {
 	}
 }
 
-fn run_scheduler(conf: Arc<Vec<config::Endpoint>>, cron_expr: &str, queue: Arc<shared::queue::MessageQueue<String>>) -> anyhow::Result<()> {
+fn run_scheduler(conf: Arc<Vec<types::Endpoint>>, cron_expr: &str, queue: Arc<shared::queue::MessageQueue<String>>) -> anyhow::Result<()> {
 	let schedule = Schedule::from_str(cron_expr)?;
 	info!(message="scheduler started", cron=%cron_expr);
 
@@ -87,7 +88,7 @@ fn run_scheduler(conf: Arc<Vec<config::Endpoint>>, cron_expr: &str, queue: Arc<s
 	}
 }
 
-fn call_api(conf: Arc<&config::Endpoint>, queue: Arc<shared::queue::MessageQueue<String>>, send_reqwest: impl Fn(RequestBuilder) -> Result<Response, reqwest::Error>, queue_message: impl Fn(String, Arc<shared::queue::MessageQueue<String>>)) -> anyhow::Result<()> {
+fn call_api(conf: Arc<&types::Endpoint>, queue: Arc<shared::queue::MessageQueue<String>>, send_reqwest: impl Fn(RequestBuilder) -> Result<Response, reqwest::Error>, queue_message: impl Fn(String, Arc<shared::queue::MessageQueue<String>>)) -> anyhow::Result<()> {
 	let mut response = Arc::new( json!({}) );
 	let mut paging = true;
 	let mut pages = 0;
@@ -190,15 +191,15 @@ pub mod test {
 
 	#[test]
 	fn test_call_api() {
-		let conf = config::Endpoint{
+		let conf = types::Endpoint{
 			uri: String::from("http://127.0.0.1/polling/?cursor={{ $response/paging/cursor }}"),
 			body: None,
 			method: Method::GET,
 			auth: None,
 			header: Vec::new(),
-			paging: Some(config::PagingRequest {
-				param: Some(config::Param { name: String::from("page"), value: String::from("{{ $response/paging/page }}")}),
-				until: Some(config::PagingRequestUntil::Empty),
+			paging: Some(types::PagingRequest {
+				param: Some(types::Param { name: String::from("page"), value: String::from("{{ $response/paging/page }}")}),
+				until: Some(types::PagingRequestUntil::Empty),
 				timeout: 100,
 				max_pages: 2,
 			})
@@ -225,15 +226,15 @@ pub mod test {
 
 	#[test]
 	fn test_call_api_nojson() {
-		let conf = config::Endpoint{
+		let conf = types::Endpoint{
 			uri: String::from("http://127.0.0.1/polling/?cursor={{ $response/paging/cursor }}"),
 			body: None,
 			method: Method::GET,
 			auth: None,
 			header: Vec::new(),
-			paging: Some(config::PagingRequest {
-				param: Some(config::Param { name: String::from("page"), value: String::from("{{ $response/paging/page }}")}),
-				until: Some(config::PagingRequestUntil::Empty),
+			paging: Some(types::PagingRequest {
+				param: Some(types::Param { name: String::from("page"), value: String::from("{{ $response/paging/page }}")}),
+				until: Some(types::PagingRequestUntil::Empty),
 				timeout: 100,
 				max_pages: 2,
 			})

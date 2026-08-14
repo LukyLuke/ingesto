@@ -1,3 +1,4 @@
+
 use std::{collections::HashMap, sync::{Arc, OnceLock}, thread::{self}, time::Duration};
 
 use anyhow::Result;
@@ -9,8 +10,7 @@ use serde_json::Value;
 use serde_json_path::JsonPath;
 use tracing::{debug, info, error};
 
-use crate::{queue, template::template_string, types::FieldMapping};
-use crate::types;
+use crate::{queue, types, template::template_string};
 
 pub struct MessageParser<T> {
 	queue: Arc<queue::MessageQueue<T>>,
@@ -324,7 +324,7 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 	/// # Returns
 	///
 	/// A list of JSON serialized strings whith all the fields and values as defined in the `mapping` Configuration
-	fn parse_regex_message(&self, mapping: &Vec<FieldMapping>, raw: &String, re: &Regex) -> Vec<String> {
+	fn parse_regex_message(&self, mapping: &Vec<types::FieldMapping>, raw: &String, re: &Regex) -> Vec<String> {
 		let mut results: HashMap<String, String> = HashMap::new();
 		for capture in re.captures_iter(raw) {
 			for fld in mapping {
@@ -376,7 +376,7 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 	/// # Returns
 	///
 	/// A list of JSON serialized strings with all the fields and values as defined in the `mapping` Configuration
-	fn parse_json_message(&self, mapping: &Vec<FieldMapping>, raw: &String, jpath: &JsonPath) -> Vec<String> {
+	fn parse_json_message(&self, mapping: &Vec<types::FieldMapping>, raw: &String, jpath: &JsonPath) -> Vec<String> {
 		// See https://docs.rs/serde_json_path/latest/serde_json_path/
 		// Test: https://serdejsonpath.live/
 		let json_root: Value = serde_json::from_str(raw.as_str()).map_or_else(|e|{
@@ -400,7 +400,7 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 	/// # Returns
 	///
 	/// A JSON serialized string with all the fields and values as defined in the `mapping` Configuration
-	fn parse_json_string(&self, mapping: &Vec<FieldMapping>, json: Arc<Value>) -> String {
+	fn parse_json_string(&self, mapping: &Vec<types::FieldMapping>, json: Arc<Value>) -> String {
 		let mut results: HashMap<String, String> = HashMap::new();
 		for fld in mapping {
 			let mut val: String = String::new();
@@ -457,10 +457,10 @@ mod tests {
 	use super::*;
 	use crate::queue::MessageQueue;
 
-	fn prepare_field_mapping() -> Vec<FieldMapping> {
+	fn prepare_field_mapping() -> Vec<types::FieldMapping> {
 		vec![
 			// Empty value in result
-			FieldMapping {
+			types::FieldMapping {
 				name: String::from("map1"),
 				source: String::from("grp1"),
 				index: 1,
@@ -470,7 +470,7 @@ mod tests {
 			},
 
 			// Source Field by name
-			FieldMapping {
+			types::FieldMapping {
 				name: String::from("map2"),
 				source: String::from("grp2"),
 				index: 2,
@@ -480,7 +480,7 @@ mod tests {
 			},
 
 			// Source Field by index
-			FieldMapping {
+			types::FieldMapping {
 				name: String::from("map3"),
 				source: String::new(),
 				index: 3,
@@ -490,7 +490,7 @@ mod tests {
 			},
 
 			// Json Sub-Parser
-			FieldMapping {
+			types::FieldMapping {
 				name: String::from("map4"),
 				source: String::from("grp4"),
 				index: 0,
@@ -498,7 +498,7 @@ mod tests {
 				empty: false,
 				static_value: String::new(),
 			},
-			FieldMapping {
+			types::FieldMapping {
 				name: String::from("map5"),
 				source: String::from("grp5"),
 				index: 0,
@@ -506,7 +506,7 @@ mod tests {
 				empty: false,
 				static_value: String::new(),
 			},
-			FieldMapping {
+			types::FieldMapping {
 				name: String::from("map1"),
 				source: String::from("/result/grp1"),
 				index: 0,
@@ -514,7 +514,7 @@ mod tests {
 				empty: false,
 				static_value: String::new(),
 			},
-			FieldMapping {
+			types::FieldMapping {
 				name: String::from("static"),
 				source: String::new(),
 				index: 0,
@@ -522,7 +522,7 @@ mod tests {
 				empty: false,
 				static_value: String::from("UUID: {{ $uuid }}"),
 			},
-			FieldMapping {
+			types::FieldMapping {
 				name: String::from("static_response"),
 				source: String::new(),
 				index: 0,

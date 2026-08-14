@@ -1,4 +1,4 @@
-use crate::config::{self, DbKind, DbTable};
+use crate::types::{DbConf, DbKind, DbTable};
 
 use std::sync::Arc;
 
@@ -50,7 +50,7 @@ impl Db {
 	/// # Returns
 	///
 	/// A Db Instance
-	pub fn new(conf: Arc<config::DbConf>) -> Self {
+	pub fn new(conf: Arc<DbConf>) -> Self {
 		info!(message="initialize database connection", kind=%conf.database.kind);
 		match conf.database.kind {
 			DbKind::PostgreSQL => {

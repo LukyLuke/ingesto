@@ -1,4 +1,5 @@
 pub mod config;
+pub mod types;
 pub mod db;
 
 use std::{collections::HashMap, sync::{Arc, OnceLock}, thread, time::Duration};
@@ -9,7 +10,6 @@ use regex::Regex;
 use shared::{self, init_logging, queue::MessageQueue, receiver::start_otel_listener, types::DbValue, usage};
 use tracing::{debug, error, info};
 
-use crate::config::DbTable;
 
 fn main() {
 	init_logging();
@@ -22,7 +22,7 @@ fn main() {
 		}
 	};
 
-	let r_conf: anyhow::Result<config::Config> = shared::load_config(conf_file);
+	let r_conf: anyhow::Result<types::Config> = shared::load_config(conf_file);
 	let conf = match r_conf {
 		Ok(c) => Arc::new(c.config),
 		Err(e) => {
@@ -50,7 +50,7 @@ fn main() {
 ///
 /// * `conf` - Database configuration
 /// * `queue` - Queue to fetch messages from
-fn start_exporter(conf: Arc<config::DbConf>, queue: Arc<MessageQueue<String>>) {
+fn start_exporter(conf: Arc<types::DbConf>, queue: Arc<MessageQueue<String>>) {
 	thread::spawn(move || {
 		let max_time = Duration::from_secs_f32(conf.queue.max_seconds as f32);
 		let max_messages = conf.queue.max_messages;
@@ -122,7 +122,7 @@ static TABLES_REGEXES: OnceLock<HashMap<String, Regex>> = OnceLock::new();
 /// # Returns
 ///
 /// The HashMap with all precompiled matches
-fn precompile_regex(tables: &[DbTable]) -> &HashMap<String, Regex> {
+fn precompile_regex(tables: &[types::DbTable]) -> &HashMap<String, Regex> {
 	TABLES_REGEXES.get_or_init(|| {
 		let mut rm = HashMap::new();
 		for table in tables {
@@ -150,7 +150,7 @@ fn precompile_regex(tables: &[DbTable]) -> &HashMap<String, Regex> {
 /// A matching Table Configuration or an Error
 /// * If there is no Regular Expression which matches the emssage
 /// * If the Regular Expressions where not yet cached via `precompile_regex()`
-fn find_matching_table_config(tables: &[DbTable], msg: &str) -> Result<DbTable> {
+fn find_matching_table_config(tables: &[types::DbTable], msg: &str) -> Result<types::DbTable> {
 	if let Some(reg) = TABLES_REGEXES.get() {
 		if let Some(Some(table)) = reg.iter()
 			.find(|(_, re)| re.is_match(msg))
@@ -169,7 +169,7 @@ fn find_matching_table_config(tables: &[DbTable], msg: &str) -> Result<DbTable> 
 mod test {
 	use super::*;
 	use shared::types::{DbField, DbValue};
-	use crate::{config::DbTable, db::DbAccess};
+	use crate::{types::DbTable, db::DbAccess};
 
 	struct DbTest {
 		pub tables: Vec<DbTable>,
@@ -193,7 +193,7 @@ mod test {
 	impl DbTest {
 		fn new(expected: Vec<(String, DbValue)>) -> Self {
 			let tables = vec!(
-				config::DbTable{
+				types::DbTable{
 					name: "first".to_string(),
 					for_messages: "\"match\":\"first\"".to_string(),
 					fields: vec!(
@@ -204,7 +204,7 @@ mod test {
 						DbField::String { name: "db_foo2".to_string(),   origin: Some("foo2".to_string()), default: None },
 					),
 				},
-				config::DbTable{
+				types::DbTable{
 					name: "second".to_string(),
 					for_messages: "\"match\":\"second\"".to_string(),
 					fields: vec!(

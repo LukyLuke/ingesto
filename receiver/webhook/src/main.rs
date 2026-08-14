@@ -1,4 +1,5 @@
 pub mod config;
+pub mod types;
 
 use std::{sync::Arc, thread};
 use anyhow::anyhow;
@@ -17,7 +18,7 @@ fn main() {
 		}
 	};
 
-	let r_conf: anyhow::Result<config::Config> = shared::load_config(conf_file);
+	let r_conf: anyhow::Result<types::Config> = shared::load_config(conf_file);
 	let conf = match r_conf {
 		Ok(c) => Arc::new(c.config),
 		Err(e) => {
@@ -40,7 +41,7 @@ fn main() {
 	}
 }
 
-fn webhook_listener(conf: Arc<config::Webhook>, queue: Arc<shared::queue::MessageQueue<String>>) -> anyhow::Result<()> {
+fn webhook_listener(conf: Arc<types::Webhook>, queue: Arc<shared::queue::MessageQueue<String>>) -> anyhow::Result<()> {
 	let server = match Server::http(conf.listen.get_address()) {
 		Ok(server) => server,
 		Err(e) => return Err(anyhow!("{:#?}", e))
@@ -59,11 +60,11 @@ fn webhook_listener(conf: Arc<config::Webhook>, queue: Arc<shared::queue::Messag
 	Ok(())
 }
 
-fn handle_request(mut req: Request, conf: Arc<config::Webhook>, queue: Arc<shared::queue::MessageQueue<String>>) -> anyhow::Result<()> {
+fn handle_request(mut req: Request, conf: Arc<types::Webhook>, queue: Arc<shared::queue::MessageQueue<String>>) -> anyhow::Result<()> {
 	// As first get the configured route
 	let url = req.url().to_string();
 	let method = req.method().to_string();
-	let mut route_opt: Option<&config::Route> = None;
+	let mut route_opt: Option<&types::Route> = None;
 	for r in &conf.routes {
 		if url == r.path && method == r.kind {
 			route_opt = Some(r);
@@ -80,8 +81,8 @@ fn handle_request(mut req: Request, conf: Arc<config::Webhook>, queue: Arc<share
 	// Check Authentication
 	if let Some(expected) = &route.auth {
 		let header_name = match expected {
-			config::Authentication::Basic { user: _, pass: _ } | config::Authentication::Bearer(_) => "Authorization".to_string(),
-			config::Authentication::Header { name, value: _ } => name.to_owned(),
+			types::Authentication::Basic { user: _, pass: _ } | types::Authentication::Bearer(_) => "Authorization".to_string(),
+			types::Authentication::Header { name, value: _ } => name.to_owned(),
 			_ => String::new()
 		};
 		let auth_header = req.headers()
@@ -125,17 +126,16 @@ mod test {
 	use std::str::FromStr;
 
 	use super::*;
-	use shared::types;
 	use tiny_http::TestRequest;
 
 
 	#[test]
 	fn test_handle_request_no_routes() {
-		let conf = Arc::new(config::Webhook{
+		let conf = Arc::new(types::Webhook{
 			name: "".to_string(),
-			listen: config::Server { address: "0.0.0.0".to_string(), port: 1514 },
+			listen: types::Server { address: "0.0.0.0".to_string(), port: 1514 },
 			routes: vec![],
-			queue: types::Queue::default(),
+			queue: shared::types::Queue::default(),
 			parser: vec![],
 		});
 		let queue = Arc::new(shared::queue::MessageQueue::<String>::new());
@@ -148,15 +148,15 @@ mod test {
 
 	#[test]
 	fn test_handle_request_no_route_match() {
-		let conf = Arc::new(config::Webhook{
+		let conf = Arc::new(types::Webhook{
 			name: "".to_string(),
-			listen: config::Server { address: "0.0.0.0".to_string(), port: 1514 },
-			routes: vec![config::Route{
+			listen: types::Server { address: "0.0.0.0".to_string(), port: 1514 },
+			routes: vec![types::Route{
 				path: "/test".to_string(),
 				kind: "GET".to_string(),
 				auth: None,
 			}],
-			queue: types::Queue::default(),
+			queue: shared::types::Queue::default(),
 			parser: vec![],
 		});
 		let queue = Arc::new(shared::queue::MessageQueue::<String>::new());
@@ -169,15 +169,15 @@ mod test {
 
 	#[test]
 	fn test_handle_request_route_match() {
-		let conf = Arc::new(config::Webhook{
+		let conf = Arc::new(types::Webhook{
 			name: "".to_string(),
-			listen: config::Server { address: "0.0.0.0".to_string(), port: 1514 },
-			routes: vec![config::Route{
+			listen: types::Server { address: "0.0.0.0".to_string(), port: 1514 },
+			routes: vec![types::Route{
 				path: "/test".to_string(),
 				kind: "GET".to_string(),
 				auth: None,
 			}],
-			queue: types::Queue::default(),
+			queue: shared::types::Queue::default(),
 			parser: vec![],
 		});
 		let queue = Arc::new(shared::queue::MessageQueue::<String>::new());
@@ -190,15 +190,15 @@ mod test {
 
 	#[test]
 	fn test_handle_request_auth_bearer_none() {
-		let conf = Arc::new(config::Webhook{
+		let conf = Arc::new(types::Webhook{
 			name: "".to_string(),
-			listen: config::Server { address: "0.0.0.0".to_string(), port: 1514 },
-			routes: vec![config::Route{
+			listen: types::Server { address: "0.0.0.0".to_string(), port: 1514 },
+			routes: vec![types::Route{
 				path: "/test".to_string(),
 				kind: "GET".to_string(),
-				auth: Some(config::Authentication::Bearer("Bearer TEST".to_string())),
+				auth: Some(types::Authentication::Bearer("Bearer TEST".to_string())),
 			}],
-			queue: types::Queue::default(),
+			queue: shared::types::Queue::default(),
 			parser: vec![],
 		});
 		let queue = Arc::new(shared::queue::MessageQueue::<String>::new());
@@ -214,15 +214,15 @@ mod test {
 
 	#[test]
 	fn test_handle_request_auth_bearer() {
-		let conf = Arc::new(config::Webhook{
+		let conf = Arc::new(types::Webhook{
 			name: "".to_string(),
-			listen: config::Server { address: "0.0.0.0".to_string(), port: 1514 },
-			routes: vec![config::Route{
+			listen: types::Server { address: "0.0.0.0".to_string(), port: 1514 },
+			routes: vec![types::Route{
 				path: "/test".to_string(),
 				kind: "GET".to_string(),
-				auth: Some(config::Authentication::Bearer("Bearer TEST".to_string())),
+				auth: Some(types::Authentication::Bearer("Bearer TEST".to_string())),
 			}],
-			queue: types::Queue::default(),
+			queue: shared::types::Queue::default(),
 			parser: vec![],
 		});
 		let queue = Arc::new(shared::queue::MessageQueue::<String>::new());
@@ -239,15 +239,15 @@ mod test {
 
 	#[test]
 	fn test_handle_request_auth_basic() {
-		let conf = Arc::new(config::Webhook{
+		let conf = Arc::new(types::Webhook{
 			name: "".to_string(),
-			listen: config::Server { address: "0.0.0.0".to_string(), port: 1514 },
-			routes: vec![config::Route{
+			listen: types::Server { address: "0.0.0.0".to_string(), port: 1514 },
+			routes: vec![types::Route{
 				path: "/test".to_string(),
 				kind: "GET".to_string(),
-				auth: Some(config::Authentication::Basic{ user: "john@example.com".to_string(), pass: "SecretPassword".to_string() }),
+				auth: Some(types::Authentication::Basic{ user: "john@example.com".to_string(), pass: "SecretPassword".to_string() }),
 			}],
-			queue: types::Queue::default(),
+			queue: shared::types::Queue::default(),
 			parser: vec![],
 		});
 		let queue = Arc::new(shared::queue::MessageQueue::<String>::new());

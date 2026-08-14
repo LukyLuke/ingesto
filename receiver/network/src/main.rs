@@ -1,4 +1,5 @@
 pub mod config;
+pub mod types;
 
 use std::{io::Read, net::{Ipv4Addr, SocketAddrV4, TcpListener, UdpSocket}, sync::Arc};
 
@@ -19,7 +20,7 @@ fn main() {
 		}
 	};
 
-	let r_conf: anyhow::Result<config::Config> = shared::load_config(conf_file);
+	let r_conf: anyhow::Result<types::Config> = shared::load_config(conf_file);
 	let conf = match r_conf {
 		Ok(c) => Arc::new(c.config),
 		Err(e) => {
@@ -47,7 +48,7 @@ fn main() {
 	}
 }
 
-fn start_udp_listener(conf: &config::Server, queue: Arc<shared::queue::MessageQueue<String>>) -> anyhow::Result<()> {
+fn start_udp_listener(conf: &types::Server, queue: Arc<shared::queue::MessageQueue<String>>) -> anyhow::Result<()> {
 	let socket = UdpSocket::bind(conf.get_address()).with_context(|| format!("binding to {}", conf.get_address()))?;
 	let mut buffer: [u8; MAX_PACKET_SIZE] = [0; MAX_PACKET_SIZE];
 	info!(message="listener started", prococol="UDP", address=%conf.address, port=%conf.port);
@@ -60,7 +61,7 @@ fn start_udp_listener(conf: &config::Server, queue: Arc<shared::queue::MessageQu
 	}
 }
 
-fn start_tcp_listener(conf: &config::Server, queue: Arc<shared::queue::MessageQueue<String>>) -> anyhow::Result<()> {
+fn start_tcp_listener(conf: &types::Server, queue: Arc<shared::queue::MessageQueue<String>>) -> anyhow::Result<()> {
 	let socket = TcpListener::bind(conf.get_address()).with_context(|| format!("binding to {}", conf.get_address()))?;
 	let mut buffer: [u8; MAX_PACKET_SIZE] = [0; MAX_PACKET_SIZE];
 	info!(message="listener started", prococol="TCP", address=%conf.address, port=%conf.port);

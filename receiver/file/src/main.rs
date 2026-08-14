@@ -1,4 +1,5 @@
 pub mod config;
+pub mod types;
 
 use std::{
 	fs::{self, File, metadata}, io::{BufRead, BufReader, Seek, SeekFrom}, sync::{Arc, mpsc}, time::Duration
@@ -20,7 +21,7 @@ fn main() {
 		}
 	};
 
-	let r_conf: anyhow::Result<config::Config> = shared::load_config(conf_file);
+	let r_conf: anyhow::Result<types::Config> = shared::load_config(conf_file);
 	let conf = match r_conf {
 		Ok(c) => Arc::new(c.config),
 		Err(e) => {
@@ -47,7 +48,7 @@ fn main() {
 	}
 }
 
-fn start_follow_listener(conf: &config::File, queue: Arc<shared::queue::MessageQueue<String>>) -> anyhow::Result<()> {
+fn start_follow_listener(conf: &types::File, queue: Arc<shared::queue::MessageQueue<String>>) -> anyhow::Result<()> {
 	// open the file and set the position to the end of the file
 	let mut file = File::open(&conf.path)?;
 	let mut pos = metadata(&conf.path)?.len();
@@ -84,7 +85,7 @@ fn start_follow_listener(conf: &config::File, queue: Arc<shared::queue::MessageQ
 	Ok(())
 }
 
-fn start_full_listener(conf: &config::File, queue: Arc<shared::queue::MessageQueue<String>>) -> anyhow::Result<()> {
+fn start_full_listener(conf: &types::File, queue: Arc<shared::queue::MessageQueue<String>>) -> anyhow::Result<()> {
 	let interval = Duration::from_secs_f32(conf.interval);
 	info!(message="listener started", file=conf.path.to_str(), interval=%conf.interval);
 	loop {
