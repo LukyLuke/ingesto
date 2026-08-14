@@ -1,19 +1,17 @@
-pub mod config;
 pub mod types;
+pub mod config;
 
 use core::time;
-use std::{
-	str::FromStr, sync::Arc, thread
-};
+use std::{ str::FromStr, sync::Arc, thread };
 
-use chrono::{Duration, Utc};
+use chrono::{ Duration, Utc };
 use cron::Schedule;
-use reqwest::{StatusCode, blocking::{Response, RequestBuilder}};
-use shared::{self, init_logging, parser::MessageParser, queue::MessageQueue, usage, secrets_string};
+use reqwest::{ StatusCode, blocking::{ Response, RequestBuilder } };
+use shared::{ self, init_logging, parser::MessageParser, queue::MessageQueue, usage, secrets_string };
 use serde_json::{Value, json};
 use tracing::{debug, error, info};
 
-use crate::{types::{Authentication, Method}};
+use crate::{ types::{Authentication, Method} };
 
 static MAX_PAGING_REQUESTS: u16 = 1024;
 

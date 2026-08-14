@@ -1,23 +1,31 @@
 pub mod errors;
-pub mod parser;
-pub mod queue;
-pub mod receiver;
-pub mod template;
 pub mod types;
 
-use serde::de::DeserializeOwned;
-use tracing_subscriber::EnvFilter;
-use tracing::{debug, error};
-use std::{fs, path::Path, path::PathBuf};
-use anyhow::{Context, anyhow};
+#[cfg(feature = "runtime")]
+pub mod parser;
+#[cfg(feature = "runtime")]
+pub mod queue;
+#[cfg(feature = "runtime")]
+pub mod receiver;
+#[cfg(feature = "runtime")]
+pub mod template;
+
+#[cfg(feature = "runtime")]
 use clap::{Arg, Command, builder::{PathBufValueParser}};
+
+use serde::de::DeserializeOwned;
+use tracing::{debug, error};
+use std::{fs, path::Path};
+use anyhow::{Context, anyhow};
 use toml;
+
 
 /// Initialize global logging
 /// Set the environment `RUST_LOG` to `debug|info|error` for the loglevel
+#[cfg(feature = "runtime")]
 pub fn init_logging() {
-	let filter = EnvFilter::try_from_default_env()
-		.unwrap_or_else(|_| EnvFilter::new("debug"));
+	let filter = tracing_subscriber::EnvFilter::try_from_default_env()
+		.unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("debug"));
 
 	tracing_subscriber::fmt()
 		.json()
@@ -105,7 +113,8 @@ pub fn secrets_string(val: &str) -> anyhow::Result<String> {
 }
 
 /// Simply shows the usage of the program and returns the path to a possible given config file
-pub fn usage() -> anyhow::Result<PathBuf> {
+#[cfg(feature = "runtime")]
+pub fn usage() -> anyhow::Result<std::path::PathBuf> {
 	let matches = Command::new("Ingesto")
 		.about("Log-Ingestion from various sources into various destinations in various formats.")
 		.arg(Arg::new("config_file")
@@ -116,7 +125,7 @@ pub fn usage() -> anyhow::Result<PathBuf> {
 			.help("Configuration file to use (toml or yaml)"))
 		.get_matches();
 
-	let f: &PathBuf = matches.get_one("config_file").unwrap();
+	let f: &std::path::PathBuf = matches.get_one("config_file").unwrap();
 	return Ok(f.to_path_buf())
 }
 

@@ -9,11 +9,14 @@ homepage.workspace = true
 
 [features]
 default = [ "runtime" ]
-runtime = [ "types" ]
-types = []
+runtime = [
+	"types",
+	"dep:shared",
+]
+types = [ "dep:shared" ]
 
 [dependencies]
-shared = { path = "../../shared", features = [ "runtime" ] }
+shared = { path = "../../shared", optional = true, default-features = false }
 
 cron = { version = "0" }
 http = { version = "1" }

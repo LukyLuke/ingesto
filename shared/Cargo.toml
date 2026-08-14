@@ -9,8 +9,14 @@ homepage.workspace = true
 
 [features]
 default = [ "runtime" ]
-runtime = [ "types" ]
 types = []
+runtime = [
+	"types",
+	"dep:opentelemetry",
+	"dep:opentelemetry-otlp",
+	"dep:opentelemetry-proto",
+	"dep:opentelemetry_sdk",
+]
 
 [dependencies]
 env = { version = "1" }
@@ -26,10 +32,10 @@ dateparser = { workspace = true }
 ipnetwork = { workspace = true }
 jiff = { workspace = true }
 once_cell = { workspace = true }
-opentelemetry = { workspace = true }
-opentelemetry-otlp = { workspace = true }
-opentelemetry-proto = { workspace = true }
-opentelemetry_sdk = { workspace = true }
+opentelemetry = { workspace = true, optional = true }
+opentelemetry-otlp = { workspace = true, optional = true }
+opentelemetry-proto = { workspace = true, optional = true }
+opentelemetry_sdk = { workspace = true, optional = true }
 parse_datetime = { workspace = true }
 prost = { workspace = true }
 regex = { workspace = true }

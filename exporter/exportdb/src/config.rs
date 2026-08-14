@@ -3,19 +3,7 @@ use std::fmt::Display;
 use shared::{secrets_string};
 use sqlx::{mysql::MySqlConnectOptions, postgres::PgConnectOptions, sqlite::SqliteConnectOptions};
 
-use crate::types::{self, Authentication, Database, DbTable, DbKind, SslMode, Connection};
-
-impl Default for Database {
-	fn default() -> Self {
-		Self {
-			database: String::new(),
-			kind: DbKind::PostgreSQL,
-			tables: Vec::new(),
-			auth: None,
-			connection: Connection::default(),
-		}
-	}
-}
+use crate::types::{Authentication, Database, DbKind, SslMode};
 
 impl Database {
 	/// Returns postgres connection options
@@ -74,19 +62,6 @@ impl Database {
 	}
 }
 
-impl Default for Connection {
-	fn default() -> Self {
-		Self {
-			host: String::new(),
-			port: types::default_postgres_port(),
-			ssl_mode: types::default_ssl_mode(),
-			root_cert: None,
-			ssl_cert: None,
-			ssl_key: None,
-		}
-	}
-}
-
 impl Display for DbKind {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
@@ -96,14 +71,3 @@ impl Display for DbKind {
 		}
 	}
 }
-
-impl Default for DbTable {
-	fn default() -> Self {
-		Self {
-			name: String::from("undefined"),
-			for_messages: types::default_for_messages(),
-			fields: Vec::new(),
-		}
-	}
-}
-

@@ -1,14 +1,12 @@
-pub mod config;
 pub mod types;
+pub mod config;
 
-use std::{
-	fs::{self, File, metadata}, io::{BufRead, BufReader, Seek, SeekFrom}, sync::{Arc, mpsc}, time::Duration
-};
+use anyhow::Context;
 use notify::{self, RecursiveMode, Watcher, Event, Result};
-
-use anyhow::{Context};
 use shared::{self, init_logging, usage, parser::MessageParser, queue::MessageQueue};
+use std::{ fs::{self, File, metadata}, io::{BufRead, BufReader, Seek, SeekFrom}, sync::{Arc, mpsc}, time::Duration };
 use tracing::{debug, error, info};
+
 
 fn main() {
 	init_logging();

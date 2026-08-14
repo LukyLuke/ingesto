@@ -56,7 +56,19 @@ pub struct Database {
 	/// Database-Specific Connection Settings
 	#[serde(default)]
 	pub connection: Connection,
+}
 
+#[cfg(feature = "types")]
+impl Default for Database {
+	fn default() -> Self {
+		Self {
+			database: String::new(),
+			kind: DbKind::PostgreSQL,
+			tables: Vec::new(),
+			auth: None,
+			connection: Connection::default(),
+		}
+	}
 }
 
 /// How to authenticate against the Database
@@ -97,6 +109,20 @@ pub struct Connection {
 	/// An SSL-Key for the connection
 	#[serde(default)]
 	pub ssl_key: Option<String>,
+}
+
+#[cfg(feature = "types")]
+impl Default for Connection {
+	fn default() -> Self {
+		Self {
+			host: String::new(),
+			port: default_postgres_port(),
+			ssl_mode: default_ssl_mode(),
+			root_cert: None,
+			ssl_cert: None,
+			ssl_key: None,
+		}
+	}
 }
 
 /// What kind of Database should be conencted
@@ -149,3 +175,13 @@ pub struct DbTable {
 	pub fields: Vec<DbField>,
 }
 
+#[cfg(feature = "types")]
+impl Default for DbTable {
+	fn default() -> Self {
+		Self {
+			name: String::from("undefined"),
+			for_messages: default_for_messages(),
+				fields: Vec::new(),
+		}
+	}
+}

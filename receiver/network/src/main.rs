@@ -1,10 +1,9 @@
-pub mod config;
 pub mod types;
-
-use std::{io::Read, net::{Ipv4Addr, SocketAddrV4, TcpListener, UdpSocket}, sync::Arc};
+pub mod config;
 
 use anyhow::{Context, anyhow};
 use shared::{self, init_logging, usage, parser::MessageParser, queue::MessageQueue};
+use std::{io::Read, net::{Ipv4Addr, SocketAddrV4, TcpListener, UdpSocket}, sync::Arc};
 use tracing::{debug, error, info};
 
 const MAX_PACKET_SIZE: usize = 67 * 1024;

@@ -1,5 +1,5 @@
-pub mod config;
 pub mod types;
+pub mod config;
 
 use std::{sync::Arc, thread};
 use anyhow::anyhow;

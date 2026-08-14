@@ -1,8 +1,13 @@
-use std::{fmt, net::Ipv4Addr};
 use chrono::{DateTime, Utc};
-use ipnetwork::{IpNetwork, Ipv4Network};
+use ipnetwork::IpNetwork;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+
+#[cfg(feature = "runtime")]
+use {
+	std::{fmt, net::Ipv4Addr},
+	ipnetwork::Ipv4Network,
+};
 
 /// Message-Queue configuration
 #[cfg(feature = "types")]
@@ -98,11 +103,6 @@ pub enum ParserKind {
 	STRUCTURED,
 }
 fn default_parser_kind() ->ParserKind { ParserKind::RAW }
-impl fmt::Display for ParserKind {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		write!(f, "{:?}", self)
-	}
-}
 impl Default for Parser {
 	fn default() -> Self {
 		Self {
@@ -112,6 +112,13 @@ impl Default for Parser {
 			settings: default_parser_setting(),
 			mapping: vec![]
 		}
+	}
+}
+
+#[cfg(feature = "runtime")]
+impl fmt::Display for ParserKind {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		write!(f, "{:?}", self)
 	}
 }
 
@@ -135,6 +142,8 @@ pub enum ParserSettings {
 	Csv(bool),
 }
 fn default_parser_setting() -> ParserSettings { ParserSettings::Nothing }
+
+#[cfg(feature = "runtime")]
 impl fmt::Display for ParserSettings {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		write!(f, "{:?}", self)
@@ -188,6 +197,7 @@ pub struct OtelLogger {
 fn default_otel_service() -> String { String::from("ingesto") }
 fn default_otel_port() -> u16 { 4318 }
 
+#[cfg(feature = "runtime")]
 impl OtelLogger {
 	pub fn get_endpoint(&self, path: &str) -> String {
 		let mut p = path.to_owned();
@@ -214,11 +224,7 @@ pub struct OtelReceiver {
 	pub path: String,
 }
 fn default_logs_path() -> String { String::from("/v1/logs") }
-impl OtelReceiver {
-	pub fn get_address(&self) -> String {
-		format!("{}:{}", self.address, self.port)
-	}
-}
+
 impl Default for OtelReceiver {
 	fn default() -> Self {
 		Self {
@@ -226,6 +232,13 @@ impl Default for OtelReceiver {
 			port: default_otel_port(),
 			path: default_logs_path(),
 		}
+	}
+}
+
+#[cfg(feature = "runtime")]
+impl OtelReceiver {
+	pub fn get_address(&self) -> String {
+		format!("{}:{}", self.address, self.port)
 	}
 }
 
@@ -242,6 +255,8 @@ pub enum DbValue {
 	IpAddress(IpNetwork),
 	Json(Value),
 }
+
+#[cfg(feature = "runtime")]
 impl DbValue {
 	pub fn from(fields: &Vec<DbField>, json: &serde_json::Value) -> Vec<(String, DbValue)> {
 		fields.iter().map(|field| Self::convert(field, &json)).collect()

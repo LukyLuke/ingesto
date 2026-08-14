@@ -1,15 +1,13 @@
-pub mod config;
 pub mod types;
+pub mod config;
 pub mod db;
-
-use std::{collections::HashMap, sync::{Arc, OnceLock}, thread, time::Duration};
 
 use anyhow::{Result, anyhow};
 use futures::executor::block_on;
 use regex::Regex;
 use shared::{self, init_logging, queue::MessageQueue, receiver::start_otel_listener, types::DbValue, usage};
+use std::{collections::HashMap, sync::{Arc, OnceLock}, thread, time::Duration};
 use tracing::{debug, error, info};
-
 
 fn main() {
 	init_logging();
