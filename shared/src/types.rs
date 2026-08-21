@@ -11,20 +11,40 @@ use {
 	ipnetwork::Ipv4Network,
 };
 
+/// The ConfStruct is used to define the config struct format and use it for example in a web ui
+/// Each Configuration Struct should have implemented the "Into" Trait to define all fields and values
 #[cfg(feature = "types")]
 pub type ConfStruct = HashMap<String, ConfType>;
 
+/// A ConfType represents a type which can be used in a struct and configuration file as a value
 #[cfg(feature = "types")]
 #[derive(Debug, Serialize)]
 pub enum ConfType {
+	/// A simple boolean
 	Bool,
+
+	/// Numbers like Integers and Floats
 	UInt, Int, Float,
+
+	/// Strings ad Regular Expressions
 	String, RegEx,
+
+	/// Enumerations
 	Enum(ConfStruct),
+
+	/// A simple Enumeration Value without a value
 	EnumValue,
+
+	/// An Enumeration Value with two string-values
 	EnumParams(&'static str, &'static str),
+
+	/// A Struct
 	Struct(ConfStruct),
+
+	// An Option which contains a ConfType
 	Option(Box<ConfType>),
+
+	// A List of ConfType's
 	Vec(Box<ConfType>),
 }
 impl fmt::Display for ConfType {
