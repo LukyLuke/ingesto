@@ -8,7 +8,6 @@ use recv_polling;
 
 use crate::types::MenuEntry;
 
-
 /// Macro to simplify calls to console.log("", ...) in the browser
 /// Use it like `console_log!("Format String", args...)`
 #[allow(unused_macros)]
@@ -44,15 +43,15 @@ extern "C" {
 /// Return a list with all Configuration-Types
 #[wasm_bindgen]
 pub fn get_config_list() -> Box<[MenuEntry]> {
-	return vec![
-		MenuEntry::new( "Webhook", "recv_webhook" ),
-		MenuEntry::new( "API Polling", "rec_polling" ),
-		MenuEntry::new( "Network Listener", "recv_network" ),
-		MenuEntry::new( "File Reader", "recv_file" ),
-		MenuEntry::new( "Database Reader", "recv_database" ),
-		MenuEntry::new( "Database Export", "exp_database" ),
-		MenuEntry::new( "Azure DCR Export", "exp_azuredcr" ),
-	].into_boxed_slice();
+	vec![
+		MenuEntry::new( "Webhook", "recv_webhook" ).into(),
+		MenuEntry::new( "API Polling", "rec_polling" ).into(),
+		MenuEntry::new( "Network Listener", "recv_network" ).into(),
+		MenuEntry::new( "File Reader", "recv_file" ).into(),
+		MenuEntry::new( "Database Reader", "recv_database" ).into(),
+		MenuEntry::new( "Database Export", "exp_database" ).into(),
+		MenuEntry::new( "Azure DCR Export", "exp_azuredcr" ).into(),
+	].into_boxed_slice()
 }
 
 

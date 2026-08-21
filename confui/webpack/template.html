@@ -21,7 +21,7 @@
             <nav id="main-navigation" class="hidden md:flex items-center gap-1">
               <button type="button"
                 class="px-3 py-2 rounded-md text-sm text-slate-100 hover:bg-slate-800/70 hover:text-white transition"
-                data-action="loadConfig">Load Config</button>
+                data-action="load" data-type="config">Load Config</button>
               </nav>
           </div>
         </div>
@@ -337,6 +337,13 @@
         });
         el.addEventListener("focus", () => {
           setDocFor(key);
+        });
+      });
+
+      // Header / action buttons placeholder calls
+      document.querySelectorAll("#main-navigation>[data-action=loadConfig]").forEach(btn => {
+        btn.addEventListener("click", () => {
+          wasmCall(btn.getAttribute("data-action"), { type: btn.getAttribute("data-type") });
         });
       });
 
