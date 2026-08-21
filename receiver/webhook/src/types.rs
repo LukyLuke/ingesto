@@ -10,7 +10,7 @@ fn default_port() -> u16 { 8080 }
 
 // The main configuration for a webhook
 #[cfg(feature = "types")]
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Default, Debug, Deserialize, Serialize)]
 pub struct Config {
 	pub config: Webhook,
 }

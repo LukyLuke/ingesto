@@ -3,7 +3,7 @@ use shared::types::{ConfStruct, ConfType};
 
 // The main configuration for a Azure DCR Export
 #[cfg(feature = "types")]
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Default, Debug, Deserialize, Serialize)]
 pub struct Config {
 	pub config: String,
 }

@@ -9,7 +9,7 @@ fn default_interval() -> f32 { 3600.0 }
 
 /// The main File-Reader Configuration
 #[cfg(feature = "types")]
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Default, Debug, Deserialize, Serialize)]
 pub struct Config {
 	pub config: Reader,
 }

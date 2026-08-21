@@ -10,7 +10,7 @@ pub(crate) fn default_ssl_mode() -> SslMode { SslMode::Disable }
 
 // The main configuration for a Database
 #[cfg(feature = "types")]
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Default, Debug, Deserialize, Serialize)]
 pub struct Config {
 	pub config: DbConf,
 }

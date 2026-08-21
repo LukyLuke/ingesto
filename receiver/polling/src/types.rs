@@ -9,7 +9,7 @@ fn default_cron_timer() -> String { String::from("* */5 * * * *") }
 
 /// The main Polling-Configuration
 #[cfg(feature = "types")]
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Default, Debug, Deserialize, Serialize)]
 pub struct Config {
 	pub config: Polling,
 }

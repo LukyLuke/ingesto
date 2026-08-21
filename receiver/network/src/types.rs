@@ -9,7 +9,7 @@ fn u16_default_514() -> u16 { 514 }
 
 /// The main network listener Configuraiton
 #[cfg(feature = "types")]
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Default, Debug, Deserialize, Serialize)]
 pub struct Config {
 	pub config: Receiver,
 }

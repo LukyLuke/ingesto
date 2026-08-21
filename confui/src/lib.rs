@@ -1,11 +1,9 @@
 mod utils;
 mod types;
 
-use std::collections::HashMap;
-
-use shared::types::{ConfType, Queue};
 use wasm_bindgen::prelude::*;
 
+use shared::types::ConfStruct;
 use recv_polling;
 
 
@@ -43,17 +41,9 @@ extern "C" {
 
 #[wasm_bindgen]
 pub fn greet(name: &str) {
-	let xx = recv_polling::types::Config{
-		config: recv_polling::types::Polling{
-			name: "Name blubber".to_string(),
-			api: vec![],
-			timer: "".to_string(),
-			queue: Queue::default(),
-			parser: vec![],
-		},
-	};
+	let xx = recv_polling::types::Config::default();
 	console_log!("Hello {} - how is your {}", name, "day");
 
-	let c: HashMap<String, ConfType> = xx.into();
+	let c: ConfStruct = xx.into();
 	console_debug!(c);
 }
