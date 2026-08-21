@@ -18,16 +18,11 @@
             </div>
 
             <!-- menu -->
-            <nav class="hidden md:flex items-center gap-1">
+            <nav id="main-navigation" class="hidden md:flex items-center gap-1">
               <button type="button"
                 class="px-3 py-2 rounded-md text-sm text-slate-100 hover:bg-slate-800/70 hover:text-white transition"
-                data-action="goLoad">Load Config</button>
-              <button type="button"
-                class="px-3 py-2 rounded-md text-sm text-slate-100 hover:bg-slate-800/70 hover:text-white transition"
-                data-action="goNewX">Create XY</button>
-              <button type="button"
-                class="px-3 py-2 rounded-md text-sm text-slate-100 hover:bg-slate-800/70 hover:text-white transition"
-                data-action="goNewY">Create XY</button>
+                data-action="loadConfig">Load Config</button>
+              </nav>
           </div>
         </div>
       </header>
@@ -247,26 +242,9 @@
     </div>
 
     <script>
-      // Minimal vanilla wiring for selection + accordion + placeholder WASM calls.
-      // Replace wasm call placeholders with your actual glue functions.
-
-      const statusEl = document.getElementById("appStatus");
       const docTitle = document.getElementById("docTitle");
       const docDescription = document.getElementById("docDescription");
       const docInputs = document.getElementById("docInputs");
-
-      function setStatus(text, ok = true) {
-        statusEl.innerText = "";
-        statusEl.classList.add("border");
-        statusEl.classList.toggle("bg-emerald-500/10", ok);
-        statusEl.classList.toggle("bg-rose-500/10", !ok);
-
-        const dot = statusEl.querySelector("span.h-2.w-2") || document.createElement("span");
-        dot.className = "h-2 w-2 rounded-full";
-        dot.style.backgroundColor = ok ? "#34d399" : "#fb7185";
-        statusEl.prepend(dot);
-        statusEl.append(document.createTextNode(" " + text));
-      }
 
       function wasmCall(action, payload) {
         // Hook this into wasm-bindgen exports, e.g.:
@@ -362,18 +340,6 @@
         });
       });
 
-      // Header / action buttons placeholder calls
-      document.querySelectorAll("[data-action]").forEach(btn => {
-        btn.addEventListener("click", () => {
-          const action = btn.getAttribute("data-action");
-          setStatus("Working...", true);
-          wasmCall(action, { selected: docTitle.textContent });
-          setTimeout(() => setStatus("Ready", true), 250);
-        });
-      });
-
-      // Default docs panel
-      setDocFor("runtime");
     </script>
   </body>
 </html>
