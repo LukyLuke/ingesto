@@ -9,8 +9,8 @@ impl Database {
 	/// Returns postgres connection options
 	pub(crate) fn get_postgres_options(&self) -> PgConnectOptions {
 		// If authentication is not set to Pgpass
-		let mut opt = match self.auth.as_ref() {
-			Some(Authentication::Passfile) => {
+		let mut opt = match self.auth {
+			Authentication::Passfile => {
 				tracing::info!("Using 'Passfile' requires a '~/.pgpass' file or the env 'PGPASSFILE' pointing to a different loaction.");
 				PgConnectOptions::new()
 			}
@@ -23,16 +23,11 @@ impl Database {
 			.database(&self.database);
 
 		opt = match &self.auth {
-			Some(auth) => {
-				match auth {
-					Authentication::Simple { user, pass } => {
-						opt.username(secrets_string(user).unwrap_or_default().as_ref())
-							.password(secrets_string(pass).unwrap_or_default().as_ref())
-					},
-					_ => opt,
-				}
+			Authentication::Simple { user, pass } => {
+				opt.username(secrets_string(user).unwrap_or_default().as_ref())
+				.password(secrets_string(pass).unwrap_or_default().as_ref())
 			},
-			None => opt,
+			_ => opt,
 		};
 
 		// SSL Related

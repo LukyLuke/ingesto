@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use shared::types::{Parser, Queue};
+use shared::types::{ConfStruct, ConfType};
 
 // Default-Wrapper Functions for Serde::Deserialize
 fn default_udp() -> String { String::from("UDP") }
@@ -13,9 +14,18 @@ pub struct Config {
 	pub config: Receiver,
 }
 
+#[cfg(feature = "types")]
+impl Into<ConfStruct> for Config {
+	fn into(self) -> ConfStruct {
+		ConfStruct::from([
+			("config".to_string(), ConfType::Struct(Receiver::default().into())),
+		])
+	}
+}
+
 /// A network-Receiver Configuraiton
 #[cfg(feature = "types")]
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Default, Debug, Deserialize, Serialize)]
 pub struct Receiver {
 	/// Name of the listener
 	pub name: String,
@@ -28,13 +38,25 @@ pub struct Receiver {
 	pub queue: Queue,
 
 	/// Message-Parser Configuration
-	#[serde(default)]
+	#[serde(default, skip_serializing_if = "Vec::is_empty")]
 	pub parser: Vec<Parser>,
+}
+
+#[cfg(feature = "types")]
+impl Into<ConfStruct> for Receiver {
+	fn into(self) -> ConfStruct {
+		ConfStruct::from([
+			("name".to_string(), ConfType::String),
+			("listen".to_string(), ConfType::Struct(Server::default().into())),
+			("queue".to_string(), ConfType::Struct(Queue::default().into())),
+			("parser".to_string(), ConfType::Struct(Parser::default().into())),
+		])
+	}
 }
 
 /// A Network-Listener Configuraiton
 #[cfg(feature = "types")]
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Default, Debug, Deserialize, Serialize)]
 pub struct Server {
 	/// Address to listen on: '0.0.0.0'
 	pub address: String,
@@ -46,4 +68,15 @@ pub struct Server {
 	/// Listener-Kind: TCP, UDP
 	#[serde(default = "default_udp")]
 	pub kind: String
+}
+
+#[cfg(feature = "types")]
+impl Into<ConfStruct> for Server {
+	fn into(self) -> ConfStruct {
+		ConfStruct::from([
+			("address".to_string(), ConfType::String),
+			("port".to_string(), ConfType::UInt),
+			("kind".to_string(), ConfType::String),
+		])
+	}
 }

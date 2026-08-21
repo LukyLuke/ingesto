@@ -11,7 +11,7 @@ use shared::{ self, init_logging, parser::MessageParser, queue::MessageQueue, us
 use serde_json::{Value, json};
 use tracing::{debug, error, info};
 
-use crate::{ types::{Authentication, Method} };
+use crate::types::{Authentication, Method, PagingRequestUntil};
 
 static MAX_PAGING_REQUESTS: u16 = 1024;
 
@@ -117,7 +117,7 @@ fn call_api(conf: Arc<&types::Endpoint>, queue: Arc<shared::queue::MessageQueue<
 
 		// Authentication
 		req = match &conf.auth {
-			Some(Authentication::Header(param)) => req.header(&param.name, shared::template::template_string(&secrets_string(&param.value).unwrap_or_default(), Arc::clone(&response))),
+			Some(Authentication::Header { header, value }) => req.header(header, shared::template::template_string(&secrets_string(&value).unwrap_or_default(), Arc::clone(&response))),
 
 			Some(Authentication::Basic { user, pass }) => req.basic_auth(secrets_string(user).unwrap_or_default(), secrets_string(pass).ok()),
 
@@ -153,11 +153,11 @@ fn call_api(conf: Arc<&types::Endpoint>, queue: Arc<shared::queue::MessageQueue<
 		if let Some(pg) = conf.paging.as_ref() {
 			pages += 1;
 			debug!(message="paging", conf=%pg, pages=pages, max_pages=MAX_PAGING_REQUESTS);
-			if pg.until.is_none() || pages >= pg.max_pages || pages >= MAX_PAGING_REQUESTS {
+			if pg.until == PagingRequestUntil::None || pages >= pg.max_pages || pages >= MAX_PAGING_REQUESTS {
 				break;
 			}
 
-			paging = pg.until.as_ref().is_some_and(|p| !p.check(status.as_u16(), body.to_owned()));
+			paging = !pg.until.check(status.as_u16(), body.to_owned());
 			debug!(message="apply paging", apply=paging);
 			if paging {
 				match serde_json::from_str(body.to_owned().as_str()).unwrap_or_default() {
@@ -197,7 +197,7 @@ pub mod test {
 			header: Vec::new(),
 			paging: Some(types::PagingRequest {
 				param: Some(types::Param { name: String::from("page"), value: String::from("{{ $response/paging/page }}")}),
-				until: Some(types::PagingRequestUntil::Empty),
+				until: types::PagingRequestUntil::Empty,
 				timeout: 100,
 				max_pages: 2,
 			})
@@ -232,7 +232,7 @@ pub mod test {
 			header: Vec::new(),
 			paging: Some(types::PagingRequest {
 				param: Some(types::Param { name: String::from("page"), value: String::from("{{ $response/paging/page }}")}),
-				until: Some(types::PagingRequestUntil::Empty),
+				until: types::PagingRequestUntil::Empty,
 				timeout: 100,
 				max_pages: 2,
 			})

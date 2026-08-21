@@ -1,6 +1,9 @@
 mod utils;
+mod types;
 
-use shared::types::Queue;
+use std::collections::HashMap;
+
+use shared::types::{ConfType, Queue};
 use wasm_bindgen::prelude::*;
 
 use recv_polling;
@@ -51,5 +54,6 @@ pub fn greet(name: &str) {
 	};
 	console_log!("Hello {} - how is your {}", name, "day");
 
-	console_debug!(xx);
+	let c: HashMap<String, ConfType> = xx.into();
+	console_debug!(c);
 }

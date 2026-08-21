@@ -21,8 +21,8 @@ impl fmt::Display for Authentication {
 			Authentication::Bearer(bearer) => write!(f, "Bearer {}****", {
 				if let Some(sub) = bearer.get(0..4) && sub == "file" { bearer } else { bearer.get(0..4).unwrap_or_default() }
 			}),
-			Authentication::Header(param) => write!(f, "Header '{}: {}****'", param.name, {
-				if let Some(sub) = param.value.get(0..4) && sub == "file" { param.value.as_str() } else { param.value.get(0..4).unwrap_or_default() }
+			Authentication::Header { header, value } => write!(f, "Header '{}: {}****'", header, {
+				if let Some(sub) = value.get(0..4) && sub == "file" { value.as_str() } else { value.get(0..4).unwrap_or_default() }
 			}),
 		}
 	}
@@ -34,14 +34,9 @@ impl fmt::Display for Param {
 	}
 }
 
-impl Default for PagingRequest {
-	fn default() -> Self {
-		Self { param: None, until: None, timeout: 3600, max_pages: 1 }
-	}
-}
 impl fmt::Display for PagingRequest {
 	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-		write!(f, "PagingRequest: [param]={:?}; [timeout]={:?}; [max]={:?}; [until]={:?};", self.param, self.timeout, self.max_pages, self.until.as_ref().unwrap_or(&PagingRequestUntil::None))
+		write!(f, "PagingRequest: [param]={:?}; [timeout]={:?}; [max]={:?}; [until]={:?};", self.param, self.timeout, self.max_pages, self.until)
 	}
 }
 

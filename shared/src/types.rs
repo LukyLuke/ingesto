@@ -1,3 +1,5 @@
+use std::{fmt, collections::HashMap};
+
 use chrono::{DateTime, Utc};
 use ipnetwork::IpNetwork;
 use serde::{Deserialize, Serialize};
@@ -5,9 +7,31 @@ use serde_json::Value;
 
 #[cfg(feature = "runtime")]
 use {
-	std::{fmt, net::Ipv4Addr},
+	std::net::Ipv4Addr,
 	ipnetwork::Ipv4Network,
 };
+
+#[cfg(feature = "types")]
+pub type ConfStruct = HashMap<String, ConfType>;
+
+#[cfg(feature = "types")]
+#[derive(Debug, Serialize)]
+pub enum ConfType {
+	Bool,
+	UInt, Int, Float,
+	String, RegEx,
+	Enum(ConfStruct),
+	EnumValue,
+	EnumParams(&'static str, &'static str),
+	Struct(ConfStruct),
+	Option(Box<ConfType>),
+	Vec(Box<ConfType>),
+}
+impl fmt::Display for ConfType {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		write!(f, "{:?}", self)
+	}
+}
 
 /// Message-Queue configuration
 #[cfg(feature = "types")]
@@ -50,11 +74,24 @@ impl Default for Queue {
 	}
 }
 
+#[cfg(feature = "types")]
+impl Into<ConfStruct> for Queue {
+	fn into(self) -> ConfStruct {
+		ConfStruct::from([
+			("max_messages".to_string(), ConfType::UInt),
+			("max_seconds".to_string(), ConfType::UInt),
+			("max_size".to_string(), ConfType::UInt),
+			("collect_messages".to_string(), ConfType::Bool),
+			("otel_logger".to_string(), ConfType::Option( Box::new(ConfType::Struct(OtelLogger::default().into())) )),
+		])
+	}
+}
+
 /// Defines a parser which is used for
 /// * Parsing the main message
 /// * Parsing a field value which references the parser by it's name
 #[cfg(feature = "types")]
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Default, Debug, Clone, Deserialize, Serialize)]
 pub struct Parser {
 	// Name of the parser for referencing in a field mapping
 	#[serde(default)]
@@ -79,11 +116,25 @@ pub struct Parser {
 	pub mapping: Vec<FieldMapping>,
 }
 
+#[cfg(feature = "types")]
+impl Into<ConfStruct> for Parser {
+	fn into(self) -> ConfStruct {
+		ConfStruct::from([
+			("name".to_string(), ConfType::String),
+			("matcher".to_string(), ConfType::RegEx),
+			("kind".to_string(), ConfType::Enum( ParserKind::RAW.into() )),
+			("setting".to_string(), ConfType::Enum( ParserSettings::Nothing.into() )),
+			("mapping".to_string(), ConfType::Vec( Box::new(ConfType::Struct(FieldMapping::default().into())) )),
+		])
+	}
+}
+
 /// Defines how the message should be parsed
 #[cfg(feature = "types")]
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Default, Debug, Clone, Deserialize, Serialize)]
 pub enum ParserKind {
 	// Takes the message as-is
+	#[default]
 	RAW,
 
 	// Applies a regular expression to extract values
@@ -102,20 +153,23 @@ pub enum ParserKind {
 	// Structured Syslog Messages are similar to CEF/LEEF but have a different Key-Value pair format
 	STRUCTURED,
 }
-fn default_parser_kind() ->ParserKind { ParserKind::RAW }
-impl Default for Parser {
-	fn default() -> Self {
-		Self {
-			name: String::new(),
-			matcher: String::new(),
-			kind: default_parser_kind(),
-			settings: default_parser_setting(),
-			mapping: vec![]
-		}
+fn default_parser_kind() -> ParserKind { ParserKind::default() }
+
+#[cfg(feature = "types")]
+impl Into<ConfStruct> for ParserKind {
+	fn into(self) -> ConfStruct {
+		ConfStruct::from([
+			("RAW".to_string(), ConfType::EnumValue),
+			("REGEX".to_string(), ConfType::EnumValue),
+			("JSON".to_string(), ConfType::EnumValue),
+			("CSV".to_string(), ConfType::EnumValue),
+			("CEF".to_string(), ConfType::EnumValue),
+			("FEEL".to_string(), ConfType::EnumValue),
+			("STRUCTURED".to_string(), ConfType::EnumValue),
+		])
 	}
 }
 
-#[cfg(feature = "runtime")]
 impl fmt::Display for ParserKind {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		write!(f, "{:?}", self)
@@ -124,9 +178,10 @@ impl fmt::Display for ParserKind {
 
 /// Based on the parser, either a string which represents a RegularExpression or a JsonPath
 #[cfg(feature = "types")]
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Default, Debug, Clone, Deserialize, Serialize)]
 pub enum ParserSettings {
 	// No Setting
+	#[default]
 	Nothing,
 
 	// Regular Expression to extract all values from the whole message
@@ -141,9 +196,20 @@ pub enum ParserSettings {
 	// If it is a header, the `source` can be used in the matcher for the column name, otherwise the `index` defines the column number
 	Csv(bool),
 }
-fn default_parser_setting() -> ParserSettings { ParserSettings::Nothing }
+fn default_parser_setting() -> ParserSettings { ParserSettings::default() }
 
-#[cfg(feature = "runtime")]
+#[cfg(feature = "types")]
+impl Into<ConfStruct> for ParserSettings {
+	fn into(self) -> ConfStruct {
+		ConfStruct::from([
+			("Nothing".to_string(), ConfType::EnumValue),
+			("Regex".to_string(), ConfType::String),
+			("Jpath".to_string(), ConfType::String),
+			("Csv".to_string(), ConfType::Bool),
+		])
+	}
+}
+
 impl fmt::Display for ParserSettings {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		write!(f, "{:?}", self)
@@ -152,7 +218,7 @@ impl fmt::Display for ParserSettings {
 
 /// Represents a universal mapping of a field from the source message in the final message
 #[cfg(feature = "types")]
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Default, Debug, Clone, Deserialize, Serialize)]
 pub struct FieldMapping {
 	/// Name of the field in the final struct
 	pub name: String,
@@ -182,6 +248,20 @@ pub struct FieldMapping {
 	pub static_value: String,
 }
 
+#[cfg(feature = "types")]
+impl Into<ConfStruct> for FieldMapping {
+	fn into(self) -> ConfStruct {
+		ConfStruct::from([
+			("name".to_string(), ConfType::String),
+			("source".to_string(), ConfType::String),
+			("index".to_string(), ConfType::UInt),
+			("parser".to_string(), ConfType::Option( Box::new(ConfType::String) )),
+			("empty".to_string(), ConfType::Bool),
+			("static_value".to_string(), ConfType::String),
+		])
+	}
+}
+
 /// Represents an OpenTelemetry Endpoint, where Metrics and/or Logs can be sent to
 #[cfg(feature = "types")]
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -197,7 +277,27 @@ pub struct OtelLogger {
 fn default_otel_service() -> String { String::from("ingesto") }
 fn default_otel_port() -> u16 { 4318 }
 
-#[cfg(feature = "runtime")]
+impl Default for OtelLogger {
+	fn default() -> Self {
+		Self {
+			endpoint: String::from("0.0.0.0"),
+			port: default_otel_port(),
+			service: default_otel_service(),
+		}
+	}
+}
+
+#[cfg(feature = "types")]
+impl Into<ConfStruct> for OtelLogger {
+	fn into(self) -> ConfStruct {
+		ConfStruct::from([
+			("endpoint".to_string(), ConfType::String),
+			("port".to_string(), ConfType::UInt),
+			("service".to_string(), ConfType::String),
+		])
+	}
+}
+
 impl OtelLogger {
 	pub fn get_endpoint(&self, path: &str) -> String {
 		let mut p = path.to_owned();
@@ -235,7 +335,17 @@ impl Default for OtelReceiver {
 	}
 }
 
-#[cfg(feature = "runtime")]
+#[cfg(feature = "types")]
+impl Into<ConfStruct> for OtelReceiver {
+	fn into(self) -> ConfStruct {
+		ConfStruct::from([
+			("address".to_string(), ConfType::String),
+			("port".to_string(), ConfType::UInt),
+			("path".to_string(), ConfType::String),
+		])
+	}
+}
+
 impl OtelReceiver {
 	pub fn get_address(&self) -> String {
 		format!("{}:{}", self.address, self.port)
@@ -376,6 +486,28 @@ pub enum DbField {
 	DateTimeUtc { name: String, origin: Option<String>, default: Option<String> },
 	IpAddress { name: String, origin: Option<String>, default: Option<String> },
 	Json { name: String, origin: Option<String>, default: Option<String> },
+}
+
+impl Default for DbField {
+	fn default() -> Self {
+		Self::String { name: String::new(), origin: None, default: None }
+	}
+}
+
+#[cfg(feature = "types")]
+impl Into<ConfStruct> for DbField {
+	fn into(self) -> ConfStruct {
+		ConfStruct::from([
+			("Bool".to_string(), ConfType::EnumParams("name", "origin")),
+			("Int".to_string(), ConfType::EnumParams("name", "origin")),
+			("Float".to_string(), ConfType::EnumParams("name", "origin")),
+			("String".to_string(), ConfType::EnumParams("name", "origin")),
+			("bytes".to_string(), ConfType::EnumParams("name", "origin")),
+			("DateTimeUtc".to_string(), ConfType::EnumParams("name", "origin")),
+			("IpAddress".to_string(), ConfType::EnumParams("name", "origin")),
+			("Json".to_string(), ConfType::EnumParams("name", "origin")),
+		])
+	}
 }
 
 
