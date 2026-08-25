@@ -4,6 +4,8 @@ mod types;
 use wasm_bindgen::prelude::*;
 use shared::types::{ConfStruct, ConfType};
 
+// Tailwind CSS colors - only accent-color needs inline style (for checkbox hover state)
+// Text colors are handled by Tailwind classes: text-slate-800, text-slate-700
 use exp_azuredcr;
 use exp_exportdb;
 use recv_database;
@@ -127,14 +129,283 @@ pub fn get_config_schema(config_type: &str) -> Result<JsValue, JsValue> {
 		document.get_element_by_id(CONF_SAVE_ID).map(|elem| elem.remove_attribute("disabled"));
 
 		if let Some(container) = document.get_element_by_id(CONF_CONTAINER_ID) {
-			build_conf_form(&container)?;
+			build_conf_form(&container, &config)?;
 		}
 	}
 
 	serde_wasm_bindgen::to_value(&config).map_err(|e| JsValue::from(&e.to_string()))
 }
 
-fn build_conf_form(container: &Element) -> Result<(), &'static str> {
-	container.set_inner_html("ok");
-	Err("not yet")
+/// Build a configuration form dynamically from a ConfStruct schema
+///
+/// This function creates HTML form elements based on the type definitions in the ConfStruct.
+/// It handles:
+/// - String/RegEx: Text input fields with inline styles for contrast
+/// - UInt/Int/Float: Number inputs (with min/max for UInt)
+/// - Bool: Checkbox with accent color styling
+/// - String/RegEx: Text input fields
+/// - UInt/Int/Float: Number inputs (with min/max for UInt)
+/// - Enum: Select dropdown
+/// - Struct: Nested form section with fieldset
+/// - Vec: Array with "Add" button to append new items
+/// - Option: Optional field wrapped in a section that can be expanded
+fn build_conf_form(container: &Element, config: &ConfStruct) -> Result<(), &'static str> {
+	// Start building the form HTML
+	let mut html = String::new();
+	
+	for (field_name, field_type) in config {
+		html.push_str(&render_field(field_name, field_type, "", true)?);
+	}
+	
+	container.set_inner_html(&html);
+	Ok(())
+}
+
+/// Render a single field based on its type
+fn render_field(name: &str, field_type: &ConfType, path: &str, required: bool) -> Result<String, &'static str> {
+	let field_path = if path.is_empty() { name.to_string() } else { format!("{}.{}", path, name) };
+	
+	match field_type {
+		ConfType::String => Ok(render_string_input(name, &field_path, required)),
+		ConfType::RegEx => Ok(render_regex_input(name, &field_path, required)),
+		ConfType::Bool => Ok(render_bool_checkbox(name, &field_path, required)),
+		ConfType::UInt => Ok(render_uint_input(name, &field_path, required)),
+		ConfType::Int => Ok(render_int_input(name, &field_path, required)),
+		ConfType::Float => Ok(render_float_input(name, &field_path, required)),
+		ConfType::Enum(enum_values) => Ok(render_enum_select(name, enum_values, &field_path, required)),
+		ConfType::Struct(struct_values) => render_struct_field(name, struct_values, &field_path, false),
+		ConfType::Vec(inner_type) => Ok(render_vec_array(name, inner_type, path, false)),
+		ConfType::Option(inner_type) => render_option_field(name, inner_type, path, false),
+		_conf_type @ _ => {
+			console_debug!("Unhandled type: {:?}", _conf_type);
+			Ok(format!(r#"<div class="text-red-500">Unsupported type: {:?}</div>"#, _conf_type))
+		}
+	}
+}
+
+/// Create the label HTML with optional "Required" badge
+fn make_label_html(name: &str, required: bool) -> String {
+	if required {
+		format!(r#"<label class="block text-sm font-medium text-slate-700 mb-1">{} {}</label>"#, to_title_case(name), required_badge())
+	} else {
+		format!(r#"<label class="block text-sm font-medium text-slate-700 mb-1">{}</label>"#, to_title_case(name))
+	}
+}
+
+/// Add a "Required" badge to a field label
+fn required_badge() -> &'static str {
+	r#"<span class="inline-flex items-center rounded-md bg-red-50 px-2 py-1 text-xs font-medium text-red-700 ring-inset ring-red-600/10">Required</span>"#
+}
+
+/// Render a string input field with improved contrast using Tailwind classes
+fn render_string_input(name: &str, path: &str, required: bool) -> String {
+	let label_html = make_label_html(name, required);
+	format!(
+		r#"
+		<div class="mb-4">
+			{}
+			<input type="text" data-path="{}" 
+				class="w-full rounded border-gray-300 px-3 py-2 shadow-sm text-slate-800 bg-white"
+			/>
+		</div>
+		"#,
+		label_html,
+		path
+	)
+}
+
+/// Render a regular expression input field with improved contrast
+fn render_regex_input(name: &str, path: &str, required: bool) -> String {
+	let label_html = make_label_html(name, required);
+	format!(
+		r#"
+		<div class="mb-4">
+			{}
+			<input type="text" data-path="{}" 
+				pattern="^.*$"
+				title="Enter a valid regex pattern"
+				class="w-full rounded border-gray-300 px-3 py-2 font-mono text-sm shadow-sm text-slate-800 bg-white"
+			/>
+			<p class="text-xs text-slate-500 mt-1">Enter a regular expression pattern</p>
+		</div>
+		"#,
+		label_html,
+		path
+	)
+}
+
+/// Render an unsigned integer input field with improved contrast
+fn render_uint_input(name: &str, path: &str, required: bool) -> String {
+	let label_html = make_label_html(name, required);
+	format!(
+		r#"
+		<div class="mb-4">
+			{}
+			<input type="number" min="0" max="65535" data-path="{}" 
+				class="w-32 rounded border-gray-300 px-3 py-2 shadow-sm text-slate-800 bg-white"
+			/>
+		</div>
+		"#,
+		label_html,
+		path
+	)
+}
+
+/// Render a signed integer input field with improved contrast
+fn render_int_input(name: &str, path: &str, required: bool) -> String {
+	let label_html = make_label_html(name, required);
+	format!(
+		r#"
+		<div class="mb-4">
+			{}
+			<input type="number" min="-2147483648" max="2147483647" data-path="{}" 
+				class="w-32 rounded border-gray-300 px-3 py-2 shadow-sm text-slate-800 bg-white"
+			/>
+		</div>
+		"#,
+		label_html,
+		path
+	)
+}
+
+/// Render a float input field with improved contrast
+fn render_float_input(name: &str, path: &str, required: bool) -> String {
+	let label_html = make_label_html(name, required);
+	format!(
+		r#"
+		<div class="mb-4">
+			{}
+			<input type="number" step="any" data-path="{}" 
+				class="w-32 rounded border-gray-300 px-3 py-2 shadow-sm text-slate-800 bg-white"
+			/>
+		</div>
+		"#,
+		label_html,
+		path
+	)
+}
+
+/// Render a boolean checkbox with improved contrast using accent-color
+fn render_bool_checkbox(name: &str, path: &str, required: bool) -> String {
+	let label_html = make_label_html(name, required);
+	format!(
+		r#"
+		<div class="mb-4 flex items-center">
+			<input type="checkbox" data-path="{}" 
+				class="h-4 w-4 rounded border-gray-300 text-teal-600 shadow-sm accent-[color-mix(in_lab,teal_500_70%,white)]"
+			/>
+			{}
+		</div>
+		"#,
+		path,
+		label_html
+	)
+}
+
+/// Render an enum select dropdown with improved contrast
+fn render_enum_select(name: &str, enum_values: &ConfStruct, path: &str, required: bool) -> String {
+	let label_html = make_label_html(name, required);
+	let mut options = String::new();
+	
+	for (variant_name, _variant_type) in enum_values {
+		options.push_str(&format!(
+			r#"<option value="{}" class="text-slate-800">{}</option>"#,
+			variant_name,
+			to_title_case(variant_name)
+		));
+	}
+	
+	format!(
+		r#"
+		<div class="mb-4">
+			{}
+			<select data-path="{}" 
+				class="w-full rounded border-gray-300 px-3 py-2 shadow-sm text-slate-800"
+			>
+				<option value="" class="text-slate-500">— Select one —</option>
+				{}
+			</select>
+		</div>
+		"#,
+		label_html,
+		path,
+		options
+	)
+}
+
+/// Render a struct field with nested fields (wrapped in a section)
+fn render_struct_field(name: &str, struct_values: &ConfStruct, path: &str, required: bool) -> Result<String, &'static str> {
+	let label_html = if required {
+		format!(r#"<h3 class="bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-900">{} {}</h3>"#, to_title_case(name), required_badge())
+	} else {
+		format!(r#"<h3 class="bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-900">{}</h3>"#, to_title_case(name))
+	};
+	let mut html = format!(
+		r#"
+		<div class="mb-6 border border-slate-300 rounded-lg shadow-sm">
+			{}
+			<div class="p-4 space-y-4 bg-white">
+		"#,
+		label_html
+	);
+	
+	for (field_name, field_type) in struct_values {
+		html.push_str(&render_field(field_name, field_type, path, true)?);
+	}
+	
+	html.push_str("</div></div>");
+	
+	Ok(html)
+}
+
+/// Render an optional field - renders the inner type directly (Options are truly optional in TOML/YAML)
+fn render_option_field(name: &str, inner_type: &ConfType, path: &str, _required: bool) -> Result<String, &'static str> {
+	// When rendering an option as a top-level field, mark it as optional (false)
+	render_field(name, inner_type, path, false)
+}
+
+/// Render an array/vector field with "Add" button
+fn render_vec_array(name: &str, inner_type: &ConfType, path: &str, _required: bool) -> String {
+	let field_label = to_title_case(name);
+	
+	// Determine what kind of items are in the array
+	let item_label = match inner_type {
+		ConfType::Struct(_) => "Item",
+		ConfType::String | ConfType::RegEx => "Entry",
+		_ => "Item",
+	};
+	
+	format!(
+		r#"
+		<div class="mb-4" data-array-path="{}">
+			<div class="flex items-center justify-between mb-2">
+				<h3 class="text-sm font-semibold text-slate-800">{}</h3>
+				<button type="button" class="add-array-item inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-teal-700 bg-teal-50 hover:bg-teal-100 rounded border border-teal-200 transition">
+					+ Add {}
+				</button>
+			</div>
+			<div class="space-y-3 array-items-container">
+				<div class="text-sm text-slate-500 italic">No items yet. Click "+ Add {}" to add one.</div>
+			</div>
+		</div>
+		"#,
+		path,
+		field_label,
+		item_label,
+		field_label
+	)
+}
+
+/// Convert snake_case or PascalCase to Title Case
+fn to_title_case(input: &str) -> String {
+	input.split('_')
+		.map(|s| {
+			let mut c = s.chars();
+			match c.next() {
+				None => String::new(),
+				Some(f) => f.to_uppercase().collect::<String>() + c.as_str(),
+			}
+		})
+		.collect::<Vec<String>>()
+		.join(" ")
 }

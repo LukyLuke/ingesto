@@ -1,5 +1,28 @@
+@config "./tailwind.config.js";
 @import "tailwindcss";
+
+/* Custom colors matching the theme */
+:root {
+	--color-accent: var(--color-teal-600);
+}
 
 body {
 	background: snow;
+}
+
+input:focus,
+select:focus {
+	outline-color: var(--color-accent);
+}
+
+option:checked,
+option:focus,
+::selection {
+	color: white;
+	background: var(--color-accent);
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+	accent-color: var(--color-accent);
 }

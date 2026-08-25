@@ -98,10 +98,10 @@ impl Default for Queue {
 impl Into<ConfStruct> for Queue {
 	fn into(self) -> ConfStruct {
 		ConfStruct::from([
-			("max_messages".to_string(), ConfType::UInt),
-			("max_seconds".to_string(), ConfType::UInt),
-			("max_size".to_string(), ConfType::UInt),
-			("collect_messages".to_string(), ConfType::Bool),
+			("max_messages".to_string(), ConfType::Option( Box::new(ConfType::UInt))),
+			("max_seconds".to_string(), ConfType::Option( Box::new(ConfType::UInt))),
+			("max_size".to_string(), ConfType::Option( Box::new(ConfType::UInt))),
+			("collect_messages".to_string(), ConfType::Option( Box::new(ConfType::Bool))),
 			("otel_logger".to_string(), ConfType::Option( Box::new(ConfType::Struct(OtelLogger::default().into())) )),
 		])
 	}
@@ -273,11 +273,11 @@ impl Into<ConfStruct> for FieldMapping {
 	fn into(self) -> ConfStruct {
 		ConfStruct::from([
 			("name".to_string(), ConfType::String),
-			("source".to_string(), ConfType::String),
-			("index".to_string(), ConfType::UInt),
+			("source".to_string(), ConfType::Option( Box::new(ConfType::String) )),
+			("index".to_string(), ConfType::Option( Box::new(ConfType::UInt) )),
 			("parser".to_string(), ConfType::Option( Box::new(ConfType::String) )),
-			("empty".to_string(), ConfType::Bool),
-			("static_value".to_string(), ConfType::String),
+			("empty".to_string(), ConfType::Option( Box::new(ConfType::Bool) )),
+			("static_value".to_string(), ConfType::Option( Box::new(ConfType::String) )),
 		])
 	}
 }
@@ -311,9 +311,9 @@ impl Default for OtelLogger {
 impl Into<ConfStruct> for OtelLogger {
 	fn into(self) -> ConfStruct {
 		ConfStruct::from([
-			("endpoint".to_string(), ConfType::String),
-			("port".to_string(), ConfType::UInt),
-			("service".to_string(), ConfType::String),
+			("endpoint".to_string(), ConfType::Option( Box::new(ConfType::String) )),
+			("port".to_string(), ConfType::Option( Box::new(ConfType::UInt) )),
+			("service".to_string(), ConfType::Option( Box::new(ConfType::String) )),
 		])
 	}
 }
@@ -359,9 +359,9 @@ impl Default for OtelReceiver {
 impl Into<ConfStruct> for OtelReceiver {
 	fn into(self) -> ConfStruct {
 		ConfStruct::from([
-			("address".to_string(), ConfType::String),
-			("port".to_string(), ConfType::UInt),
-			("path".to_string(), ConfType::String),
+			("address".to_string(), ConfType::Option( Box::new(ConfType::String) )),
+			("port".to_string(), ConfType::Option( Box::new(ConfType::UInt) )),
+			("path".to_string(), ConfType::Option( Box::new(ConfType::String) )),
 		])
 	}
 }

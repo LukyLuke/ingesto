@@ -48,8 +48,8 @@ impl Into<ConfStruct> for Receiver {
 		ConfStruct::from([
 			("name".to_string(), ConfType::String),
 			("listen".to_string(), ConfType::Struct(Server::default().into())),
-			("queue".to_string(), ConfType::Struct(Queue::default().into())),
-			("parser".to_string(), ConfType::Struct(Parser::default().into())),
+			("queue".to_string(), ConfType::Struct( Queue::default().into() )),
+			("parser".to_string(), ConfType::Vec( Box::new( ConfType::Struct( Parser::default().into() ) ) )),
 		])
 	}
 }
