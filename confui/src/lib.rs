@@ -341,27 +341,30 @@ fn render_enum_select(name: &str, enum_values: &ConfStruct, path: &str, placehol
 	)
 }
 
-/// Render a struct field with nested fields (wrapped in a section)
+/// Render a struct field with nested fields (wrapped in details/summary for collapsible behavior)
 fn render_struct_field(name: &str, struct_values: &ConfStruct, path: &str, required: bool) -> Result<String, &'static str> {
-	let label_html = if required {
-		format!(r#"<h3 class="bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-900">{} {}</h3>"#, to_title_case(name), required_badge())
+	let summary_html = if required {
+		format!(r#"<h3 class="m-0 text-sm font-semibold text-slate-900">{} {}</h3>"#, to_title_case(name), required_badge())
 	} else {
-		format!(r#"<h3 class="bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-900">{}</h3>"#, to_title_case(name))
+		format!(r#"<h3 class="m-0 text-sm font-semibold text-slate-900">{}</h3>"#, to_title_case(name))
 	};
 	let mut html = format!(
 		r#"
 		<div class="mb-6 border border-slate-300 rounded-lg shadow-sm">
-			{}
-			<div class="p-4 space-y-4 bg-white">
+			<details class="border-none p-0">
+				<summary class="bg-slate-50 px-4 py-3 list-none cursor-pointer hover:bg-slate-100 transition-colors">
+					{}
+				</summary>
+				<div class="p-4 space-y-4 bg-white">
 		"#,
-		label_html
+		summary_html
 	);
 	
 	for (field_name, field_type) in struct_values {
 		html.push_str(&render_field(field_name, field_type, path, true)?);
 	}
 	
-	html.push_str("</div></div>");
+	html.push_str("</div></details></div>");
 	
 	Ok(html)
 }
@@ -372,7 +375,7 @@ fn render_option_field(name: &str, inner_type: &ConfType, path: &str, _required:
 	render_field(name, inner_type, path, false)
 }
 
-/// Render an array/vector field with "Add" button
+/// Render an array/vector field with "Add" button (collapsible details/summary)
 fn render_vec_array(name: &str, inner_type: &ConfType, path: &str, _required: bool) -> String {
 	let field_label = to_title_case(name);
 	
@@ -386,15 +389,19 @@ fn render_vec_array(name: &str, inner_type: &ConfType, path: &str, _required: bo
 	format!(
 		r#"
 		<div class="mb-4" data-array-path="{}">
-			<div class="flex items-center justify-between mb-2">
-				<h3 class="text-sm font-semibold text-slate-800">{}</h3>
-				<button type="button" class="add-array-item inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-teal-700 bg-teal-50 hover:bg-teal-100 rounded border border-teal-200 transition">
-					+ Add {}
-				</button>
-			</div>
-			<div class="space-y-3 array-items-container">
-				<div class="text-sm text-slate-500 italic">No items yet. Click "+ Add {}" to add one.</div>
-			</div>
+			<details class="border border-slate-300 rounded-lg shadow-sm p-2">
+				<summary class="bg-slate-50 px-4 py-3 list-none cursor-pointer hover:bg-slate-100 transition-colors rounded-md m-0">
+					<div class="flex items-center justify-between">
+						<h3 class="text-sm font-semibold text-slate-800 m-0">{}</h3>
+						<button type="button" class="add-array-item inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-teal-700 bg-teal-50 hover:bg-teal-100 rounded border border-teal-200 transition">
+							+ Add {}
+						</button>
+					</div>
+				</summary>
+				<div class="p-4 space-y-3 mt-2">
+					<div class="text-sm text-slate-500 italic">No items yet. Click "+ Add {}" to add one.</div>
+				</div>
+			</details>
 		</div>
 		"#,
 		path,
