@@ -18,7 +18,7 @@ pub type ConfStruct = HashMap<String, ConfType>;
 
 /// A ConfType represents a type which can be used in a struct and configuration file as a value
 #[cfg(feature = "types")]
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, PartialEq)]
 pub enum ConfType {
 	/// A simple boolean
 	Bool,
