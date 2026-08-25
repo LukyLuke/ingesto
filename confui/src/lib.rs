@@ -119,7 +119,7 @@ pub fn get_config_schema(config_type: &str) -> Result<JsValue, JsValue> {
 	// If the configuraiton is just a string, the structure is not yet implemented and therefore not valid
 	// If the configuration is valid, enable the buttons and create the containers based on it
 	// If it is not valid, clear the container and disable the buttons
-	if config.is_empty() || config.get("config").is_some_and(|val| val == &ConfType::String) {
+	if config.is_empty() || config.get("config").is_some_and(|val| val == &ConfType::String("")) {
 		document.get_element_by_id(CONF_RESET_ID).map(|elem| elem.set_attribute("disabled", "true"));
 		document.get_element_by_id(CONF_SAVE_ID).map(|elem| elem.set_attribute("disabled", "true"));
 		document.get_element_by_id(CONF_CONTAINER_ID).map(|elem| elem.set_inner_html(DEFAULT_EMPTY_CONTAINER));
@@ -166,13 +166,13 @@ fn render_field(name: &str, field_type: &ConfType, path: &str, required: bool) -
 	let field_path = if path.is_empty() { name.to_string() } else { format!("{}.{}", path, name) };
 	
 	match field_type {
-		ConfType::String(placeholder) => Ok(render_string_input(name, &field_path, required)),
-		ConfType::RegEx(placeholder) => Ok(render_regex_input(name, &field_path, required)),
-		ConfType::Bool(placeholder) => Ok(render_bool_checkbox(name, &field_path, required)),
-		ConfType::UInt(placeholder) => Ok(render_uint_input(name, &field_path, required)),
-		ConfType::Int(placeholder) => Ok(render_int_input(name, &field_path, required)),
-		ConfType::Float(placeholder) => Ok(render_float_input(name, &field_path, required)),
-		ConfType::Enum(enum_values, placeholder) => Ok(render_enum_select(name, enum_values, &field_path, required)),
+		ConfType::String(placeholder) => Ok(render_string_input(name, &field_path, placeholder, required)),
+		ConfType::RegEx(placeholder) => Ok(render_regex_input(name, &field_path, placeholder, required)),
+		ConfType::Bool(placeholder) => Ok(render_bool_checkbox(name, &field_path, *placeholder, required)),
+		ConfType::UInt(placeholder) => Ok(render_uint_input(name, &field_path, *placeholder, required)),
+		ConfType::Int(placeholder) => Ok(render_int_input(name, &field_path, *placeholder, required)),
+		ConfType::Float(placeholder) => Ok(render_float_input(name, &field_path, *placeholder, required)),
+		ConfType::Enum(enum_values, placeholder) => Ok(render_enum_select(name, enum_values, &field_path, placeholder, required)),
 		ConfType::Struct(struct_values) => render_struct_field(name, struct_values, &field_path, false),
 		ConfType::Vec(inner_type) => Ok(render_vec_array(name, inner_type, path, false)),
 		ConfType::Option(inner_type) => render_option_field(name, inner_type, path, false),
@@ -198,30 +198,31 @@ fn required_badge() -> &'static str {
 }
 
 /// Render a string input field with improved contrast using Tailwind classes
-fn render_string_input(name: &str, path: &str, required: bool) -> String {
+fn render_string_input(name: &str, path: &str, placeholder: &str, required: bool) -> String {
 	let label_html = make_label_html(name, required);
 	format!(
 		r#"
 		<div class="mb-4">
 			{}
-			<input type="text" data-path="{}" placeholder="default"
+			<input type="text" data-path="{}" placeholder="{}"
 				class="w-full rounded border-gray-300 px-3 py-2 shadow-sm text-slate-800 bg-white"
 			/>
 		</div>
 		"#,
 		label_html,
-		path
+		path,
+		placeholder
 	)
 }
 
 /// Render a regular expression input field with improved contrast
-fn render_regex_input(name: &str, path: &str, required: bool) -> String {
+fn render_regex_input(name: &str, path: &str, placeholder: &str, required: bool) -> String {
 	let label_html = make_label_html(name, required);
 	format!(
 		r#"
 		<div class="mb-4">
 			{}
-			<input type="text" data-path="{}" placeholder="default"
+			<input type="text" data-path="{}" placeholder="{}"
 				pattern="^.*$"
 				title="Enter a valid regex pattern"
 				class="w-full rounded border-gray-300 px-3 py-2 font-mono text-sm shadow-sm text-slate-800 bg-white"
@@ -230,87 +231,94 @@ fn render_regex_input(name: &str, path: &str, required: bool) -> String {
 		</div>
 		"#,
 		label_html,
-		path
+		path,
+		placeholder
 	)
 }
 
 /// Render an unsigned integer input field with improved contrast
-fn render_uint_input(name: &str, path: &str, required: bool) -> String {
+fn render_uint_input(name: &str, path: &str, placeholder: u64, required: bool) -> String {
 	let label_html = make_label_html(name, required);
 	format!(
 		r#"
 		<div class="mb-4">
 			{}
-			<input type="number" min="0" max="65535" data-path="{}" placeholder="default"
+			<input type="number" min="0" max="65535" data-path="{}" placeholder="{}"
 				class="w-32 rounded border-gray-300 px-3 py-2 shadow-sm text-slate-800 bg-white"
 			/>
 		</div>
 		"#,
 		label_html,
-		path
+		path,
+		placeholder
 	)
 }
 
 /// Render a signed integer input field with improved contrast
-fn render_int_input(name: &str, path: &str, required: bool) -> String {
+fn render_int_input(name: &str, path: &str, placeholder: i64, required: bool) -> String {
 	let label_html = make_label_html(name, required);
 	format!(
 		r#"
 		<div class="mb-4">
 			{}
-			<input type="number" min="-2147483648" max="2147483647" data-path="{}" placeholder="default"
+			<input type="number" min="-2147483648" max="2147483647" data-path="{}" placeholder="{}"
 				class="w-32 rounded border-gray-300 px-3 py-2 shadow-sm text-slate-800 bg-white"
 			/>
 		</div>
 		"#,
 		label_html,
-		path
+		path,
+		placeholder
 	)
 }
 
 /// Render a float input field with improved contrast
-fn render_float_input(name: &str, path: &str, required: bool) -> String {
+fn render_float_input(name: &str, path: &str, placeholder: f64, required: bool) -> String {
 	let label_html = make_label_html(name, required);
 	format!(
 		r#"
 		<div class="mb-4">
 			{}
-			<input type="number" step="any" data-path="{}" 
+			<input type="number" step="any" data-path="{}" placeholder="{}"
 				class="w-32 rounded border-gray-300 px-3 py-2 shadow-sm text-slate-800 bg-white"
 			/>
 		</div>
 		"#,
 		label_html,
-		path
+		path,
+		placeholder
 	)
 }
 
 /// Render a boolean checkbox with improved contrast using accent-color
-fn render_bool_checkbox(name: &str, path: &str, required: bool) -> String {
+fn render_bool_checkbox(name: &str, path: &str, placeholder: bool, required: bool) -> String {
 	let label_html = make_label_html(name, required);
 	format!(
 		r#"
 		<div class="mb-4 flex items-center">
-			<input type="checkbox" data-path="{}" placeholder="false"
+			<input type="checkbox" data-path="{}" {}
 				class="h-4 w-4 rounded border-gray-300 text-teal-600 shadow-sm accent-[color-mix(in_lab,teal_500_70%,white)]"
 			/>
 			{}
 		</div>
 		"#,
 		path,
+		if placeholder { "checked" } else { "" },
 		label_html
 	)
 }
 
 /// Render an enum select dropdown with improved contrast
-fn render_enum_select(name: &str, enum_values: &ConfStruct, path: &str, required: bool) -> String {
+fn render_enum_select(name: &str, enum_values: &ConfStruct, path: &str, placeholder: &str, required: bool) -> String {
 	let label_html = make_label_html(name, required);
 	let mut options = String::new();
 	
 	for (variant_name, _variant_type) in enum_values {
+		let is_selected = if variant_name == placeholder { "selected" } else { "" };
 		options.push_str(&format!(
-			r#"<option value="{}" class="text-slate-800">{}</option>"#,
+			r#"<option value="{}" class="text-slate-800" {}>{}</option>"#,
 			variant_name,
+			is_selected,
 			to_title_case(variant_name)
 		));
 	}
@@ -319,16 +327,16 @@ fn render_enum_select(name: &str, enum_values: &ConfStruct, path: &str, required
 		r#"
 		<div class="mb-4">
 			{}
-			<select data-path="{}" placeholder="default"
+			<select data-path="{}" placeholder="{}"
 				class="w-full rounded border-gray-300 px-3 py-2 shadow-sm text-slate-800"
 			>
-				<option value="" class="text-slate-500">— Select one —</option>
 				{}
 			</select>
 		</div>
 		"#,
 		label_html,
 		path,
+		placeholder,
 		options
 	)
 }
@@ -371,7 +379,7 @@ fn render_vec_array(name: &str, inner_type: &ConfType, path: &str, _required: bo
 	// Determine what kind of items are in the array
 	let item_label = match inner_type {
 		ConfType::Struct(_) => "Item",
-		ConfType::String | ConfType::RegEx => "Entry",
+		ConfType::String(_) | ConfType::RegEx(_) => "Entry",
 		_ => "Item",
 	};
 	
