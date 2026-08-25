@@ -12,7 +12,7 @@ pub struct Config {
 impl Into<ConfStruct> for Config {
 	fn into(self) -> ConfStruct {
 		ConfStruct::from([
-			("config".to_string(), ConfType::String),
+			("config".to_string(), ConfType::String("not yet implemented")),
 		])
 	}
 }

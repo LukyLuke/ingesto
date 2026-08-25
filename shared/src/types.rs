@@ -21,16 +21,16 @@ pub type ConfStruct = HashMap<String, ConfType>;
 #[derive(Debug, Serialize, PartialEq)]
 pub enum ConfType {
 	/// A simple boolean
-	Bool,
+	Bool(bool),
 
 	/// Numbers like Integers and Floats
-	UInt, Int, Float,
+	UInt(u64), Int(i64), Float(f64),
 
 	/// Strings ad Regular Expressions
-	String, RegEx,
+	String(&'static str), RegEx(&'static str),
 
 	/// Enumerations
-	Enum(ConfStruct),
+	Enum(ConfStruct, &'static str),
 
 	/// A simple Enumeration Value without a value
 	EnumValue,
@@ -97,11 +97,13 @@ impl Default for Queue {
 #[cfg(feature = "types")]
 impl Into<ConfStruct> for Queue {
 	fn into(self) -> ConfStruct {
+    use std::u64;
+
 		ConfStruct::from([
-			("max_messages".to_string(), ConfType::Option( Box::new(ConfType::UInt))),
-			("max_seconds".to_string(), ConfType::Option( Box::new(ConfType::UInt))),
-			("max_size".to_string(), ConfType::Option( Box::new(ConfType::UInt))),
-			("collect_messages".to_string(), ConfType::Option( Box::new(ConfType::Bool))),
+			("max_messages".to_string(), ConfType::Option( Box::new(ConfType::UInt( default_messages().into() )))),
+			("max_seconds".to_string(), ConfType::Option( Box::new(ConfType::UInt( default_time().into() )))),
+			("max_size".to_string(), ConfType::Option( Box::new(ConfType::UInt( default_size() as u64 )))),
+			("collect_messages".to_string(), ConfType::Option( Box::new(ConfType::Bool( default_collect() )))),
 			("otel_logger".to_string(), ConfType::Option( Box::new(ConfType::Struct(OtelLogger::default().into())) )),
 		])
 	}
@@ -140,10 +142,10 @@ pub struct Parser {
 impl Into<ConfStruct> for Parser {
 	fn into(self) -> ConfStruct {
 		ConfStruct::from([
-			("name".to_string(), ConfType::String),
-			("matcher".to_string(), ConfType::RegEx),
-			("kind".to_string(), ConfType::Enum( ParserKind::RAW.into() )),
-			("setting".to_string(), ConfType::Enum( ParserSettings::Nothing.into() )),
+			("name".to_string(), ConfType::String("")),
+			("matcher".to_string(), ConfType::RegEx(".*")),
+			("kind".to_string(), ConfType::Enum( ParserKind::RAW.into(), "RAW" )),
+			("setting".to_string(), ConfType::Enum( ParserSettings::Nothing.into(), "Nothing" )),
 			("mapping".to_string(), ConfType::Vec( Box::new(ConfType::Struct(FieldMapping::default().into())) )),
 		])
 	}
@@ -223,9 +225,9 @@ impl Into<ConfStruct> for ParserSettings {
 	fn into(self) -> ConfStruct {
 		ConfStruct::from([
 			("Nothing".to_string(), ConfType::EnumValue),
-			("Regex".to_string(), ConfType::String),
-			("Jpath".to_string(), ConfType::String),
-			("Csv".to_string(), ConfType::Bool),
+			("Regex".to_string(), ConfType::String(".*")),
+			("Jpath".to_string(), ConfType::String("$")),
+			("Csv".to_string(), ConfType::Bool(false)),
 		])
 	}
 }
@@ -272,12 +274,12 @@ pub struct FieldMapping {
 impl Into<ConfStruct> for FieldMapping {
 	fn into(self) -> ConfStruct {
 		ConfStruct::from([
-			("name".to_string(), ConfType::String),
-			("source".to_string(), ConfType::Option( Box::new(ConfType::String) )),
-			("index".to_string(), ConfType::Option( Box::new(ConfType::UInt) )),
-			("parser".to_string(), ConfType::Option( Box::new(ConfType::String) )),
-			("empty".to_string(), ConfType::Option( Box::new(ConfType::Bool) )),
-			("static_value".to_string(), ConfType::Option( Box::new(ConfType::String) )),
+			("name".to_string(), ConfType::String("")),
+			("source".to_string(), ConfType::Option( Box::new(ConfType::String("")) )),
+			("index".to_string(), ConfType::Option( Box::new(ConfType::UInt(0)) )),
+			("parser".to_string(), ConfType::Option( Box::new(ConfType::String("")) )),
+			("empty".to_string(), ConfType::Option( Box::new(ConfType::Bool(false)) )),
+			("static_value".to_string(), ConfType::Option( Box::new(ConfType::String("")) )),
 		])
 	}
 }
@@ -311,9 +313,9 @@ impl Default for OtelLogger {
 impl Into<ConfStruct> for OtelLogger {
 	fn into(self) -> ConfStruct {
 		ConfStruct::from([
-			("endpoint".to_string(), ConfType::Option( Box::new(ConfType::String) )),
-			("port".to_string(), ConfType::Option( Box::new(ConfType::UInt) )),
-			("service".to_string(), ConfType::Option( Box::new(ConfType::String) )),
+			("endpoint".to_string(), ConfType::Option( Box::new(ConfType::String("0.0.0.0")) )),
+			("port".to_string(), ConfType::Option( Box::new(ConfType::UInt(default_otel_port().into())) )),
+			("service".to_string(), ConfType::Option( Box::new(ConfType::String("ingesto")) )),
 		])
 	}
 }
@@ -359,9 +361,9 @@ impl Default for OtelReceiver {
 impl Into<ConfStruct> for OtelReceiver {
 	fn into(self) -> ConfStruct {
 		ConfStruct::from([
-			("address".to_string(), ConfType::Option( Box::new(ConfType::String) )),
-			("port".to_string(), ConfType::Option( Box::new(ConfType::UInt) )),
-			("path".to_string(), ConfType::Option( Box::new(ConfType::String) )),
+			("address".to_string(), ConfType::Option( Box::new(ConfType::String("0.0.0.0")) )),
+			("port".to_string(), ConfType::Option( Box::new(ConfType::UInt(default_otel_port().into())) )),
+			("path".to_string(), ConfType::Option( Box::new(ConfType::String("/v1/logs")) )),
 		])
 	}
 }

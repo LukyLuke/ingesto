@@ -166,13 +166,13 @@ fn render_field(name: &str, field_type: &ConfType, path: &str, required: bool) -
 	let field_path = if path.is_empty() { name.to_string() } else { format!("{}.{}", path, name) };
 	
 	match field_type {
-		ConfType::String => Ok(render_string_input(name, &field_path, required)),
-		ConfType::RegEx => Ok(render_regex_input(name, &field_path, required)),
-		ConfType::Bool => Ok(render_bool_checkbox(name, &field_path, required)),
-		ConfType::UInt => Ok(render_uint_input(name, &field_path, required)),
-		ConfType::Int => Ok(render_int_input(name, &field_path, required)),
-		ConfType::Float => Ok(render_float_input(name, &field_path, required)),
-		ConfType::Enum(enum_values) => Ok(render_enum_select(name, enum_values, &field_path, required)),
+		ConfType::String(placeholder) => Ok(render_string_input(name, &field_path, required)),
+		ConfType::RegEx(placeholder) => Ok(render_regex_input(name, &field_path, required)),
+		ConfType::Bool(placeholder) => Ok(render_bool_checkbox(name, &field_path, required)),
+		ConfType::UInt(placeholder) => Ok(render_uint_input(name, &field_path, required)),
+		ConfType::Int(placeholder) => Ok(render_int_input(name, &field_path, required)),
+		ConfType::Float(placeholder) => Ok(render_float_input(name, &field_path, required)),
+		ConfType::Enum(enum_values, placeholder) => Ok(render_enum_select(name, enum_values, &field_path, required)),
 		ConfType::Struct(struct_values) => render_struct_field(name, struct_values, &field_path, false),
 		ConfType::Vec(inner_type) => Ok(render_vec_array(name, inner_type, path, false)),
 		ConfType::Option(inner_type) => render_option_field(name, inner_type, path, false),
@@ -204,7 +204,7 @@ fn render_string_input(name: &str, path: &str, required: bool) -> String {
 		r#"
 		<div class="mb-4">
 			{}
-			<input type="text" data-path="{}" 
+			<input type="text" data-path="{}" placeholder="default"
 				class="w-full rounded border-gray-300 px-3 py-2 shadow-sm text-slate-800 bg-white"
 			/>
 		</div>
@@ -221,7 +221,7 @@ fn render_regex_input(name: &str, path: &str, required: bool) -> String {
 		r#"
 		<div class="mb-4">
 			{}
-			<input type="text" data-path="{}" 
+			<input type="text" data-path="{}" placeholder="default"
 				pattern="^.*$"
 				title="Enter a valid regex pattern"
 				class="w-full rounded border-gray-300 px-3 py-2 font-mono text-sm shadow-sm text-slate-800 bg-white"
@@ -241,7 +241,7 @@ fn render_uint_input(name: &str, path: &str, required: bool) -> String {
 		r#"
 		<div class="mb-4">
 			{}
-			<input type="number" min="0" max="65535" data-path="{}" 
+			<input type="number" min="0" max="65535" data-path="{}" placeholder="default"
 				class="w-32 rounded border-gray-300 px-3 py-2 shadow-sm text-slate-800 bg-white"
 			/>
 		</div>
@@ -258,7 +258,7 @@ fn render_int_input(name: &str, path: &str, required: bool) -> String {
 		r#"
 		<div class="mb-4">
 			{}
-			<input type="number" min="-2147483648" max="2147483647" data-path="{}" 
+			<input type="number" min="-2147483648" max="2147483647" data-path="{}" placeholder="default"
 				class="w-32 rounded border-gray-300 px-3 py-2 shadow-sm text-slate-800 bg-white"
 			/>
 		</div>
@@ -291,7 +291,7 @@ fn render_bool_checkbox(name: &str, path: &str, required: bool) -> String {
 	format!(
 		r#"
 		<div class="mb-4 flex items-center">
-			<input type="checkbox" data-path="{}" 
+			<input type="checkbox" data-path="{}" placeholder="false"
 				class="h-4 w-4 rounded border-gray-300 text-teal-600 shadow-sm accent-[color-mix(in_lab,teal_500_70%,white)]"
 			/>
 			{}
@@ -319,7 +319,7 @@ fn render_enum_select(name: &str, enum_values: &ConfStruct, path: &str, required
 		r#"
 		<div class="mb-4">
 			{}
-			<select data-path="{}" 
+			<select data-path="{}" placeholder="default"
 				class="w-full rounded border-gray-300 px-3 py-2 shadow-sm text-slate-800"
 			>
 				<option value="" class="text-slate-500">— Select one —</option>

@@ -51,7 +51,7 @@ pub struct Webhook {
 impl Into<ConfStruct> for Webhook {
 	fn into(self) -> ConfStruct {
 		ConfStruct::from([
-			("name".to_string(), ConfType::String),
+			("name".to_string(), ConfType::String("")),
 			("listen".to_string(), ConfType::Struct( Server::default().into() )),
 			("routes".to_string(), ConfType::Vec( Box::new( ConfType::Struct( Route::default().into() ) ) )),
 			("queue".to_string(), ConfType::Struct( Queue::default().into() )),
@@ -83,8 +83,8 @@ impl Server {
 impl Into<ConfStruct> for Server {
 	fn into(self) -> ConfStruct {
 		ConfStruct::from([
-			("address".to_string(), ConfType::String),
-			("port".to_string(), ConfType::UInt),
+			("address".to_string(), ConfType::String("0.0.0.0")),
+			("port".to_string(), ConfType::UInt( default_port().into() )),
 		])
 	}
 }
@@ -111,9 +111,9 @@ pub struct Route {
 impl Into<ConfStruct> for Route {
 	fn into(self) -> ConfStruct {
 		ConfStruct::from([
-			("path".to_string(), ConfType::String),
-			("kind".to_string(), ConfType::String),
-			("auth".to_string(), ConfType::Option( Box::new( ConfType::Enum(Authentication::None.into()) ) )),
+			("path".to_string(), ConfType::String("/")),
+			("kind".to_string(), ConfType::String("POST")),
+			("auth".to_string(), ConfType::Option( Box::new( ConfType::Enum(Authentication::None.into(), "None") ) )),
 		])
 	}
 }
@@ -146,7 +146,7 @@ impl Into<ConfStruct> for Authentication {
 		ConfStruct::from([
 			("None".to_string(), ConfType::EnumValue),
 			("Basic".to_string(), ConfType::EnumParams("user", "pass")),
-			("Bearer".to_string(), ConfType::String),
+			("Bearer".to_string(), ConfType::String("")),
 			("Header".to_string(), ConfType::EnumParams("header", "value")),
 		])
 	}

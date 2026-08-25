@@ -50,9 +50,9 @@ pub struct Polling {
 impl Into<ConfStruct> for Polling {
 	fn into(self) -> ConfStruct {
 		let mut map = ConfStruct::new();
-		map.insert("name".to_string(), ConfType::String);
+		map.insert("name".to_string(), ConfType::String(""));
 		map.insert("api".to_string(), ConfType::Vec( Box::new( ConfType::Struct( Endpoint::default().into() ) ) ));
-		map.insert("timer".to_string(), ConfType::String);
+		map.insert("timer".to_string(), ConfType::String("* */5 * * * *"));
 		map.insert("queue".to_string(), ConfType::Struct( types::Queue::default().into() ));
 		map.insert("parser".to_string(), ConfType::Vec( Box::new( ConfType::Struct( types::Parser::default().into() ) ) ));
 		map
@@ -94,10 +94,10 @@ pub struct Endpoint {
 impl Into<ConfStruct> for Endpoint {
 	fn into(self) -> ConfStruct {
 		let mut map = ConfStruct::new();
-		map.insert("uri".to_string(), ConfType::String);
-		map.insert("body".to_string(), ConfType::Option( Box::new(ConfType::String) ));
-		map.insert("method".to_string(), ConfType::Enum(Method::GET.into()));
-		map.insert("auth".to_string(), ConfType::Enum(Authentication::None.into()));
+		map.insert("uri".to_string(), ConfType::String(""));
+		map.insert("body".to_string(), ConfType::Option( Box::new(ConfType::String("")) ));
+		map.insert("method".to_string(), ConfType::Enum(Method::GET.into(), "GET"));
+		map.insert("auth".to_string(), ConfType::Enum(Authentication::None.into(), "None"));
 		map.insert("header".to_string(), ConfType::Vec( Box::new(ConfType::Struct( Param::default().into() )) ));
 		map.insert("paging".to_string(), ConfType::Option( Box::new(ConfType::Struct( PagingRequest::default().into() )) ));
 		map
@@ -155,7 +155,7 @@ impl Into<ConfStruct> for Authentication {
 		ConfStruct::from([
 			("None".to_string(), ConfType::EnumValue),
 			("Basic".to_string(), ConfType::EnumParams("user", "pass")),
-			("Bearer".to_string(), ConfType::String),
+			("Bearer".to_string(), ConfType::String("")),
 			("Header".to_string(), ConfType::EnumParams("header", "value")),
 		])
 	}
@@ -174,8 +174,8 @@ pub struct Param {
 impl Into<ConfStruct> for Param {
 	fn into(self) -> ConfStruct {
 		ConfStruct::from([
-			("string".to_string(), ConfType::String),
-			("value".to_string(), ConfType::String),
+			("string".to_string(), ConfType::String("")),
+			("value".to_string(), ConfType::String("")),
 		])
 	}
 }
@@ -208,9 +208,9 @@ impl Into<ConfStruct> for PagingRequest {
 	fn into(self) -> ConfStruct {
 		ConfStruct::from([
 			("param".to_string(), ConfType::Option( Box::new(ConfType::Struct( Param::default().into() )) )),
-			("until".to_string(), ConfType::Enum(PagingRequestUntil::None.into())),
-			("timeout".to_string(), ConfType::UInt),
-			("max_pages".to_string(), ConfType::UInt),
+			("until".to_string(), ConfType::Enum(PagingRequestUntil::None.into(), "None")),
+			("timeout".to_string(), ConfType::UInt(0)),
+			("max_pages".to_string(), ConfType::UInt(0)),
 		])
 	}
 }
@@ -242,8 +242,8 @@ impl Into<ConfStruct> for PagingRequestUntil {
 		ConfStruct::from([
 			("None".to_string(), ConfType::EnumValue),
 			("Empty".to_string(), ConfType::EnumValue),
-			("StatusCode".to_string(), ConfType::UInt),
-			("EmptyValue".to_string(), ConfType::String),
+			("StatusCode".to_string(), ConfType::UInt(0)),
+			("EmptyValue".to_string(), ConfType::String("")),
 			("Equals".to_string(), ConfType::EnumParams("left", "right")),
 		])
 	}

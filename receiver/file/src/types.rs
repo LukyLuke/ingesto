@@ -46,7 +46,7 @@ pub struct Reader {
 impl Into<ConfStruct> for Reader {
 	fn into(self) -> ConfStruct {
 		ConfStruct::from([
-			("name".to_string(), ConfType::String),
+			("name".to_string(), ConfType::String("")),
 			("file".to_string(), ConfType::Struct(File::default().into())),
 			("queue".to_string(), ConfType::Struct( Queue::default().into() )),
 			("parser".to_string(), ConfType::Vec( Box::new( ConfType::Struct( Parser::default().into() ) ) )),
@@ -77,9 +77,9 @@ pub struct File {
 impl Into<ConfStruct> for File {
 	fn into(self) -> ConfStruct {
 		ConfStruct::from([
-			("path".to_string(), ConfType::String),
-			("follow".to_string(), ConfType::Bool),
-			("interval".to_string(), ConfType::Float),
+			("path".to_string(), ConfType::String("")),
+			("follow".to_string(), ConfType::Bool(false)),
+			("interval".to_string(), ConfType::Float( default_interval().into() )),
 		])
 	}
 }
