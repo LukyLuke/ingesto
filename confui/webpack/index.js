@@ -7,7 +7,12 @@ function wasmCall(action, payload) {
 	try {
 		if (action == 'newConfig') {
 			let conf = wasm.get_config_schema(payload.type);
-			console.debug(conf);
+			window.document.querySelectorAll("button.add-array-item").forEach((btn) => {
+				btn.addEventListener("click", (evt) => {
+					wasm.add_button_handler(evt.target, conf);
+				});
+			});
+
 		} else {
 			console.debug("Called:", "wasmCall", action, payload);
 			console.error(action, "not yet implemented");
