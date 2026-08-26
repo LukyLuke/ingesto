@@ -13,7 +13,7 @@ use recv_file;
 use recv_network;
 use recv_polling;
 use recv_webhook;
-use web_sys::Element;
+use web_sys::{Element, EventTarget};
 
 use crate::types::MenuEntry;
 
@@ -123,7 +123,6 @@ pub fn get_config_schema(config_type: &str) -> Result<JsValue, JsValue> {
 		document.get_element_by_id(CONF_RESET_ID).map(|elem| elem.set_attribute("disabled", "true"));
 		document.get_element_by_id(CONF_SAVE_ID).map(|elem| elem.set_attribute("disabled", "true"));
 		document.get_element_by_id(CONF_CONTAINER_ID).map(|elem| elem.set_inner_html(DEFAULT_EMPTY_CONTAINER));
-
 	} else {
 		document.get_element_by_id(CONF_RESET_ID).map(|elem| elem.remove_attribute("disabled"));
 		document.get_element_by_id(CONF_SAVE_ID).map(|elem| elem.remove_attribute("disabled"));
@@ -152,12 +151,19 @@ pub fn get_config_schema(config_type: &str) -> Result<JsValue, JsValue> {
 fn build_conf_form(container: &Element, config: &ConfStruct) -> Result<(), &'static str> {
 	// Start building the form HTML
 	let mut html = String::new();
-	
 	for (field_name, field_type) in config {
 		html.push_str(&render_field(field_name, field_type, "", true)?);
 	}
-	
 	container.set_inner_html(&html);
+
+	Ok(())
+}
+
+#[wasm_bindgen]
+pub fn add_button_handler(_btn: EventTarget, js_conf: JsValue) -> Result<(), JsValue> {
+	let conf: ConfStruct = serde_wasm_bindgen::from_value(js_conf).map_err(|e| JsValue::from(&e.to_string()))?;
+	console_debug!(conf);
+
 	Ok(())
 }
 
@@ -168,7 +174,7 @@ fn render_field(name: &str, field_type: &ConfType, path: &str, required: bool) -
 	} else {
 		format!("{}.{}", path, name)
 	};
-	
+
 	match field_type {
 		ConfType::String(placeholder) => Ok(render_string_input(name, &field_path, placeholder, required)),
 		ConfType::RegEx(placeholder) => Ok(render_regex_input(name, &field_path, placeholder, required)),
@@ -269,7 +275,7 @@ fn render_bool_checkbox(name: &str, path: &str, placeholder: bool, required: boo
 fn render_enum_select(name: &str, enum_values: &ConfStruct, path: &str, placeholder: &str, required: bool) -> String {
 	let label_html = make_label_html(name, true, required);
 	let mut options = String::new();
-	
+
 	for (variant_name, _variant_type) in enum_values {
 		let is_selected = if variant_name == placeholder { "selected" } else { "" };
 		options.push_str(&format!(
@@ -279,7 +285,7 @@ fn render_enum_select(name: &str, enum_values: &ConfStruct, path: &str, placehol
 			to_title_case(variant_name)
 		));
 	}
-	
+
 	format!(
 		r#"
 		<div class="mb-4">
@@ -316,16 +322,16 @@ fn render_struct_field(name: &str, struct_values: &ConfStruct, path: &str, requi
 	for (field_name, field_type) in struct_values {
 		html.push_str(&render_field(field_name, field_type, path, true)?);
 	}
-	
+
 	html.push_str("</div></details></div>");
-	
+
 	Ok(html)
 }
 
 /// Render an array/vector field with "Add" button (collapsible details/summary)
 fn render_vec_array(name: &str, _inner_type: &ConfType, path: &str, required: bool) -> String {
 	let label_html = make_label_html(name, false, required);
-	
+
 	format!(
 		r#"
 		<div class="mb-4 border border-slate-300 rounded-lg shadow-sm" data-array-path="{}">
