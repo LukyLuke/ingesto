@@ -1,9 +1,13 @@
+#[cfg(feature = "types")]
+use std::fmt;
+use std::fmt::Display;
+
 use serde::{Deserialize, Serialize};
 use shared::types::{Parser, Queue};
 use shared::types::{ConfStruct, ConfType};
 
 // Default-Wrapper Functions for Serde::Deserialize
-fn default_udp() -> String { String::from("UDP") }
+fn default_udp() -> Protocol { Protocol::UDP }
 fn u16_default_514() -> u16 { 514 }
 
 
@@ -67,7 +71,7 @@ pub struct Server {
 
 	/// Listener-Kind: TCP, UDP
 	#[serde(default = "default_udp")]
-	pub kind: String
+	pub kind: Protocol
 }
 
 #[cfg(feature = "types")]
@@ -76,7 +80,33 @@ impl Into<ConfStruct> for Server {
 		ConfStruct::from([
 			("address".to_string(), ConfType::String("0.0.0.0")),
 			("port".to_string(), ConfType::UInt( u16_default_514().into() )),
-			("kind".to_string(), ConfType::String("UDP")),
+			("kind".to_string(), ConfType::Enum( Protocol::UDP.into(), "UDP" )),
 		])
 	}
 }
+
+#[cfg(feature = "types")]
+#[derive(Default, Debug, Deserialize, Serialize)]
+pub enum Protocol {
+	TCP,
+	#[default]
+	UDP
+}
+
+#[cfg(feature = "types")]
+impl Into<ConfStruct> for Protocol {
+	fn into(self) -> ConfStruct {
+		ConfStruct::from([
+			("UDP".to_string(), ConfType::EnumValue),
+			("TCP".to_string(), ConfType::EnumValue),
+		])
+	}
+}
+
+#[cfg(feature = "types")]
+impl Display for Protocol {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		write!(f, "{:?}", self)
+	}
+}
+

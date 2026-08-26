@@ -1,10 +1,12 @@
 pub mod types;
 pub mod config;
 
-use anyhow::{Context, anyhow};
+use anyhow::Context;
 use shared::{self, init_logging, usage, parser::MessageParser, queue::MessageQueue};
 use std::{io::Read, net::{Ipv4Addr, SocketAddrV4, TcpListener, UdpSocket}, sync::Arc};
 use tracing::{debug, error, info};
+
+use crate::types::Protocol;
 
 const MAX_PACKET_SIZE: usize = 67 * 1024;
 
@@ -34,10 +36,9 @@ fn main() {
 	parser.run();
 
 	let conf_recv = &conf.listen;
-	let res = match conf_recv.kind.as_str() {
-		"udp"|"UDP" => start_udp_listener(conf_recv, queue.clone()),
-		"tcp"|"TCP" => start_tcp_listener(conf_recv, queue.clone()),
-		_ => Err(anyhow!("Invalid listener kind: {}; Must be udp, UDP, tcp, TCP", conf_recv.kind.as_str()))
+	let res = match conf_recv.kind {
+		Protocol::UDP => start_udp_listener(conf_recv, queue.clone()),
+		Protocol::TCP => start_tcp_listener(conf_recv, queue.clone()),
 	};
 	match res {
 		Err(e) => {
