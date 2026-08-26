@@ -33,6 +33,7 @@ main details > summary::before {
 	display: inline-block;
 	float: left;
 	width: 1.2em;
+	margin-top: 0.15em;
 	margin-right: 0.5em;
 	font-size: 0.8em;
 	transition: transform 0.2s ease-out;
