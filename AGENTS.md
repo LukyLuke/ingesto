@@ -52,3 +52,7 @@ Before reporting a task as complete, all of these must pass from the repository 
 - Run the definition-of-done checks before each commit.
 - Never commit without asking.
 - Never push changes!
+
+## Skills
+Load these skills when the task matches:
+- `rust-skills`: working with rust code
