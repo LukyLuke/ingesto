@@ -1,3 +1,5 @@
+ARG INGESTO_VERSION=0.1.0
+
 # Base is to have cargo build with cache
 FROM rust:1.97 as base
 COPY .cargo.toml.* .cargo/config.toml
@@ -37,6 +39,15 @@ RUN --mount=type=cache,target=$SCCACHE_DIR,sharing=locked,uid=1000 \
 
 # Finally: Create an image from scratch with all the binaries
 FROM scratch
+ARG INGESTO_VERSION
+
+LABEL org.opencontainers.image.source=https://github.com/LukyLuke/ingesto
+LABEL org.opencontainers.image.title="inesto"
+LABEL org.opencontainers.image.description="ingesto is a Log-Processing-Pipeline"
+LABEL org.opencontainers.image.licenses="MIT AND Apache-2.0"
+LABEL org.opencontainers.image.authors="Lukas LukyLuke_ch Zurschmiede"
+LABEL org.opencontainers.image.version=${INGESTO_VERSION}
+
 WORKDIR /app
 
 VOLUME /app/config
