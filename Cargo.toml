@@ -45,6 +45,9 @@ version = "0"
 [workspace.dependencies.jiff]
 version = "0"
 
+[workspace.dependencies.js-sys]
+version = "0.3"
+
 [workspace.dependencies.notify]
 version = "8"
 
@@ -109,6 +112,9 @@ version = "2"
 [workspace.dependencies.tiny_http]
 version = "0"
 
+[workspace.dependencies.toml]
+version = "1"
+
 [workspace.dependencies.tracing]
 version = "0"
 
@@ -127,3 +133,6 @@ features = [
 	"js",
 	"serde",
 ]
+
+[workspace.dependencies.wasm-bindgen-futures]
+version = "0.4"

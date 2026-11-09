@@ -52,8 +52,8 @@ impl Into<ConfStruct> for Receiver {
 		ConfStruct::from([
 			("name".to_string(), ConfType::String("")),
 			("listen".to_string(), ConfType::Struct(Server::default().into())),
-			("queue".to_string(), ConfType::Struct( Queue::default().into() )),
-			("parser".to_string(), ConfType::Vec( Box::new( ConfType::Struct( Parser::default().into() ) ) )),
+			("queue".to_string(), ConfType::Option( Box::new( ConfType::Struct( Queue::default().into() ) ) )),
+			("parser".to_string(), ConfType::Option( Box::new( ConfType::Vec( Box::new( ConfType::Struct( Parser::default().into() ) ) ) ) )),
 		])
 	}
 }
@@ -79,8 +79,8 @@ impl Into<ConfStruct> for Server {
 	fn into(self) -> ConfStruct {
 		ConfStruct::from([
 			("address".to_string(), ConfType::String("0.0.0.0")),
-			("port".to_string(), ConfType::UInt( u16_default_514().into() )),
-			("kind".to_string(), ConfType::Enum( Protocol::UDP.into(), "UDP" )),
+			("port".to_string(), ConfType::Option( Box::new( ConfType::UInt( u16_default_514().into() ) ) )),
+			("kind".to_string(), ConfType::Option( Box::new( ConfType::Enum( Protocol::UDP.into(), "UDP" ) ) )),
 		])
 	}
 }

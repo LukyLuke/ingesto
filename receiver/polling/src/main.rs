@@ -71,7 +71,7 @@ fn run_scheduler(conf: Arc<Vec<types::Endpoint>>, cron_expr: &str, queue: Arc<sh
 
 				thread::spawn(move || {
 					for c in conf_t.iter() {
-						debug!(message="polling api", method=%c.method, api=%c.uri, auth=%c.auth.as_ref().unwrap_or(&Authentication::None));
+						debug!(message="polling api", method=%c.method, api=%c.name, auth=%c.auth.as_ref().unwrap_or(&Authentication::None));
 
 						// call_api_internal(req) function sends out the real request (dep-injection for test)
 						// queue_message is for adding the received data to the queue (dep-injection for test)
@@ -190,6 +190,7 @@ pub mod test {
 	#[test]
 	fn test_call_api() {
 		let conf = types::Endpoint{
+			name: String::from("Test API"),
 			uri: String::from("http://127.0.0.1/polling/?cursor={{ $response/paging/cursor }}"),
 			body: None,
 			method: Method::GET,
@@ -225,6 +226,7 @@ pub mod test {
 	#[test]
 	fn test_call_api_nojson() {
 		let conf = types::Endpoint{
+			name: String::from("Test API"),
 			uri: String::from("http://127.0.0.1/polling/?cursor={{ $response/paging/cursor }}"),
 			body: None,
 			method: Method::GET,

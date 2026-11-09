@@ -1,4 +1,4 @@
-use std::{fmt, collections::HashMap};
+use std::fmt;
 
 use chrono::{DateTime, Utc};
 use ipnetwork::IpNetwork;
@@ -13,12 +13,95 @@ use {
 
 /// The ConfStruct is used to define the config struct format and use it for example in a web ui
 /// Each Configuration Struct should have implemented the "Into" Trait to define all fields and values
+///
+/// It is an ordered list of named fields: the order is the order in which the fields are defined
+/// and therefore the order in which a user interface should show them.
 #[cfg(feature = "types")]
-pub type ConfStruct = HashMap<String, ConfType>;
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct ConfStruct(Vec<(String, ConfType)>);
+
+#[cfg(feature = "types")]
+impl ConfStruct {
+	/// Creates an empty ConfStruct
+	pub fn new() -> Self {
+		Self(Vec::new())
+	}
+
+	/// Adds a field at the end, or replaces the type of an already existing field with the same name.
+	/// Returns the replaced type if there was one.
+	pub fn insert(&mut self, name: String, conf_type: ConfType) -> Option<ConfType> {
+		match self.0.iter_mut().find(|(n, _)| *n == name) {
+			Some((_, existing)) => Some(std::mem::replace(existing, conf_type)),
+			None => {
+				self.0.push((name, conf_type));
+				None
+			},
+		}
+	}
+
+	/// Returns the type of a field by it's name
+	pub fn get(&self, name: &str) -> Option<&ConfType> {
+		self.0.iter().find(|(n, _)| n == name).map(|(_, t)| t)
+	}
+
+	/// Returns the position of a field by it's name
+	pub fn position(&self, name: &str) -> Option<usize> {
+		self.0.iter().position(|(n, _)| n == name)
+	}
+
+	/// Number of fields
+	pub fn len(&self) -> usize {
+		self.0.len()
+	}
+
+	/// True if there are no fields
+	pub fn is_empty(&self) -> bool {
+		self.0.is_empty()
+	}
+
+	/// Iterates over all fields in the order they are defined
+	pub fn iter(&self) -> std::slice::Iter<'_, (String, ConfType)> {
+		self.0.iter()
+	}
+}
+
+#[cfg(feature = "types")]
+impl<const N: usize> From<[(String, ConfType); N]> for ConfStruct {
+	fn from(fields: [(String, ConfType); N]) -> Self {
+		let mut conf = Self::new();
+		for (name, conf_type) in fields {
+			conf.insert(name, conf_type);
+		}
+		conf
+	}
+}
+
+#[cfg(feature = "types")]
+impl<'a> IntoIterator for &'a ConfStruct {
+	type Item = &'a (String, ConfType);
+	type IntoIter = std::slice::Iter<'a, (String, ConfType)>;
+
+	fn into_iter(self) -> Self::IntoIter {
+		self.0.iter()
+	}
+}
+
+#[cfg(feature = "types")]
+impl Serialize for ConfStruct {
+	fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+		serializer.collect_map(self.0.iter().map(|(name, conf_type)| (name, conf_type)))
+	}
+}
 
 /// A ConfType represents a type which can be used in a struct and configuration file as a value
+///
+/// A field is **required** unless it is wrapped in an [`ConfType::Option`]. That includes all fields
+/// which have a `#[serde(default)]`, because they can be left out of a configuration file.
+///
+/// The value in `Bool`, `UInt`, `Int`, `Float`, `String` and `RegEx` is a placeholder/default value,
+/// it is never written to a configuration file by itself.
 #[cfg(feature = "types")]
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, PartialEq)]
 pub enum ConfType {
 	/// A simple boolean
 	Bool(bool),
@@ -29,22 +112,28 @@ pub enum ConfType {
 	/// Strings ad Regular Expressions
 	String(&'static str), RegEx(&'static str),
 
-	/// Enumerations
+	/// An externally tagged Enumeration (serde default): All Variants with their value-type and the name of the default variant.
+	/// A Variant without a value is `EnumValue` and is written as a plain string, all others as `{ Variant = value }`.
 	Enum(ConfStruct, &'static str),
 
 	/// A simple Enumeration Value without a value
 	EnumValue,
 
-	/// An Enumeration Value with two string-values
-	EnumParams(&'static str, &'static str),
+	/// An internally tagged Enumeration (`#[serde(tag = "...")]`): The name of the tag-field,
+	/// all Variants with a `Struct` as value-type and the name of the default variant.
+	/// It is written as `{ tag = "Variant", field = value, ... }`.
+	Tagged(&'static str, ConfStruct, &'static str),
 
 	/// A Struct
 	Struct(ConfStruct),
 
-	// An Option which contains a ConfType
+	/// A fixed number of values with different types, like a tuple variant: `Equals(String, String)`.
+	Tuple(Vec<ConfType>),
+
+	/// An Option which contains a ConfType, the value can be left out
 	Option(Box<ConfType>),
 
-	// A List of ConfType's
+	/// A List of ConfType's
 	Vec(Box<ConfType>),
 }
 impl fmt::Display for ConfType {
@@ -142,11 +231,11 @@ pub struct Parser {
 impl Into<ConfStruct> for Parser {
 	fn into(self) -> ConfStruct {
 		ConfStruct::from([
-			("name".to_string(), ConfType::String("")),
-			("matcher".to_string(), ConfType::RegEx(".*")),
-			("kind".to_string(), ConfType::Enum( ParserKind::RAW.into(), "RAW" )),
-			("setting".to_string(), ConfType::Enum( ParserSettings::Nothing.into(), "Nothing" )),
-			("mapping".to_string(), ConfType::Vec( Box::new(ConfType::Struct(FieldMapping::default().into())) )),
+			("name".to_string(), ConfType::Option( Box::new(ConfType::String("")) )),
+			("matcher".to_string(), ConfType::Option( Box::new(ConfType::RegEx(".*")) )),
+			("kind".to_string(), ConfType::Option( Box::new(ConfType::Enum( ParserKind::RAW.into(), "RAW" )) )),
+			("settings".to_string(), ConfType::Option( Box::new(ConfType::Enum( ParserSettings::Nothing.into(), "Nothing" )) )),
+			("mapping".to_string(), ConfType::Option( Box::new(ConfType::Vec( Box::new(ConfType::Struct(FieldMapping::default().into())) )) )),
 		])
 	}
 }
@@ -186,7 +275,7 @@ impl Into<ConfStruct> for ParserKind {
 			("JSON".to_string(), ConfType::EnumValue),
 			("CSV".to_string(), ConfType::EnumValue),
 			("CEF".to_string(), ConfType::EnumValue),
-			("FEEL".to_string(), ConfType::EnumValue),
+			("LEEF".to_string(), ConfType::EnumValue),
 			("STRUCTURED".to_string(), ConfType::EnumValue),
 		])
 	}
@@ -279,7 +368,7 @@ impl Into<ConfStruct> for FieldMapping {
 			("index".to_string(), ConfType::Option( Box::new(ConfType::UInt(0)) )),
 			("parser".to_string(), ConfType::Option( Box::new(ConfType::String("")) )),
 			("empty".to_string(), ConfType::Option( Box::new(ConfType::Bool(false)) )),
-			("static_value".to_string(), ConfType::Option( Box::new(ConfType::String("")) )),
+			("static".to_string(), ConfType::Option( Box::new(ConfType::String("")) )),
 		])
 	}
 }
@@ -313,7 +402,7 @@ impl Default for OtelLogger {
 impl Into<ConfStruct> for OtelLogger {
 	fn into(self) -> ConfStruct {
 		ConfStruct::from([
-			("endpoint".to_string(), ConfType::Option( Box::new(ConfType::String("0.0.0.0")) )),
+			("endpoint".to_string(), ConfType::String("0.0.0.0")),
 			("port".to_string(), ConfType::Option( Box::new(ConfType::UInt(default_otel_port().into())) )),
 			("service".to_string(), ConfType::Option( Box::new(ConfType::String("ingesto")) )),
 		])
@@ -361,7 +450,7 @@ impl Default for OtelReceiver {
 impl Into<ConfStruct> for OtelReceiver {
 	fn into(self) -> ConfStruct {
 		ConfStruct::from([
-			("address".to_string(), ConfType::Option( Box::new(ConfType::String("0.0.0.0")) )),
+			("address".to_string(), ConfType::String("0.0.0.0")),
 			("port".to_string(), ConfType::Option( Box::new(ConfType::UInt(default_otel_port().into())) )),
 			("path".to_string(), ConfType::Option( Box::new(ConfType::String("/v1/logs")) )),
 		])
@@ -517,17 +606,37 @@ impl Default for DbField {
 }
 
 #[cfg(feature = "types")]
+impl DbField {
+	/// The name of the field which defines the variant in a configuration file: `{ kind = "String", ... }`
+	pub const TAG: &'static str = "kind";
+
+	/// The parameters which are the same for all variants
+	fn params() -> ConfStruct {
+		ConfStruct::from([
+			("name".to_string(), ConfType::String("")),
+			("origin".to_string(), ConfType::Option( Box::new(ConfType::String("")) )),
+			("default".to_string(), ConfType::Option( Box::new(ConfType::String("")) )),
+		])
+	}
+
+	/// The complete schema of a database field, the variants are in `Into<ConfStruct>`
+	pub fn conf_type() -> ConfType {
+		ConfType::Tagged(Self::TAG, Self::default().into(), "String")
+	}
+}
+
+#[cfg(feature = "types")]
 impl Into<ConfStruct> for DbField {
 	fn into(self) -> ConfStruct {
 		ConfStruct::from([
-			("Bool".to_string(), ConfType::EnumParams("name", "origin")),
-			("Int".to_string(), ConfType::EnumParams("name", "origin")),
-			("Float".to_string(), ConfType::EnumParams("name", "origin")),
-			("String".to_string(), ConfType::EnumParams("name", "origin")),
-			("bytes".to_string(), ConfType::EnumParams("name", "origin")),
-			("DateTimeUtc".to_string(), ConfType::EnumParams("name", "origin")),
-			("IpAddress".to_string(), ConfType::EnumParams("name", "origin")),
-			("Json".to_string(), ConfType::EnumParams("name", "origin")),
+			("Bool".to_string(), ConfType::Struct(DbField::params())),
+			("Int".to_string(), ConfType::Struct(DbField::params())),
+			("Float".to_string(), ConfType::Struct(DbField::params())),
+			("String".to_string(), ConfType::Struct(DbField::params())),
+			("Bytes".to_string(), ConfType::Struct(DbField::params())),
+			("DateTimeUtc".to_string(), ConfType::Struct(DbField::params())),
+			("IpAddress".to_string(), ConfType::Struct(DbField::params())),
+			("Json".to_string(), ConfType::Struct(DbField::params())),
 		])
 	}
 }
@@ -556,6 +665,86 @@ mod test {
 			service: "service".to_string(),
 		};
 		assert_eq!(http.get_endpoint("/path/value"), "http://endpoint:6543/path/value");
+	}
+
+	#[test]
+	fn test_confstruct_keeps_definition_order() {
+		let conf = ConfStruct::from([
+			("zebra".to_string(), ConfType::EnumValue),
+			("alpha".to_string(), ConfType::Bool(true)),
+			("middle".to_string(), ConfType::UInt(1)),
+		]);
+
+		let names: Vec<&str> = conf.iter().map(|(name, _)| name.as_str()).collect();
+		assert_eq!(names, vec!["zebra", "alpha", "middle"]);
+		assert_eq!(conf.len(), 3);
+		assert_eq!(conf.position("middle"), Some(2));
+		assert_eq!(conf.get("alpha"), Some(&ConfType::Bool(true)));
+		assert_eq!(conf.get("unknown"), None);
+	}
+
+	#[test]
+	fn test_confstruct_insert_replaces_existing() {
+		let mut conf = ConfStruct::new();
+		assert!(conf.is_empty());
+
+		assert_eq!(conf.insert("a".to_string(), ConfType::UInt(1)), None);
+		assert_eq!(conf.insert("b".to_string(), ConfType::UInt(2)), None);
+		assert_eq!(conf.insert("a".to_string(), ConfType::UInt(3)), Some(ConfType::UInt(1)));
+
+		assert_eq!(conf.len(), 2);
+		assert_eq!(conf.iter().next(), Some(&("a".to_string(), ConfType::UInt(3))));
+	}
+
+	#[test]
+	fn test_confstruct_from_array_with_duplicate_keeps_last() {
+		let conf = ConfStruct::from([
+			("a".to_string(), ConfType::UInt(1)),
+			("a".to_string(), ConfType::UInt(2)),
+		]);
+		assert_eq!(conf.len(), 1);
+		assert_eq!(conf.get("a"), Some(&ConfType::UInt(2)));
+	}
+
+	#[test]
+	fn test_confstruct_serializes_as_ordered_map() {
+		let conf = ConfStruct::from([
+			("zebra".to_string(), ConfType::Bool(true)),
+			("alpha".to_string(), ConfType::UInt(1)),
+		]);
+		let json = serde_json::to_string(&conf).unwrap();
+		assert_eq!(json, r#"{"zebra":{"Bool":true},"alpha":{"UInt":1}}"#);
+	}
+
+	#[test]
+	fn test_schema_of_queue_and_parser_are_optional() {
+		let queue: ConfStruct = Queue::default().into();
+		assert!(queue.iter().all(|(_, t)| matches!(t, ConfType::Option(_))));
+
+		let parser: ConfStruct = Parser::default().into();
+		assert!(parser.iter().all(|(_, t)| matches!(t, ConfType::Option(_))));
+		assert!(parser.get("settings").is_some());
+
+		let mapping: ConfStruct = FieldMapping::default().into();
+		assert!(matches!(mapping.get("name"), Some(ConfType::String(_))));
+		assert!(mapping.get("static").is_some());
+	}
+
+	#[test]
+	fn test_dbfield_schema_knows_all_variants() {
+		let ConfType::Tagged(tag, variants, default) = DbField::conf_type() else {
+			panic!("DbField must be a tagged enum");
+		};
+		assert_eq!(tag, "kind");
+		assert_eq!(default, "String");
+		let names: Vec<&str> = variants.iter().map(|(n, _)| n.as_str()).collect();
+		assert_eq!(names, vec!["Bool", "Int", "Float", "String", "Bytes", "DateTimeUtc", "IpAddress", "Json"]);
+
+		// Each variant must be deserializable with exactly what the schema describes
+		for name in names {
+			let json = json!({ "kind": name, "name": "field" });
+			assert!(serde_json::from_value::<DbField>(json).is_ok(), "variant {name}");
+		}
 	}
 
 	#[test]

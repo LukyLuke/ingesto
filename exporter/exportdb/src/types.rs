@@ -49,9 +49,9 @@ impl Into<ConfStruct> for DbConf {
 	fn into(self) -> ConfStruct {
 		ConfStruct::from([
 			("name".to_string(), ConfType::String("")),
-			("listener".to_string(), ConfType::Struct(OtelReceiver::default().into())),
-			("database".to_string(), ConfType::Struct(Database::default().into())),
-			("queue".to_string(), ConfType::Struct(Queue::default().into())),
+			("listener".to_string(), ConfType::Option( Box::new(ConfType::Struct(OtelReceiver::default().into())) )),
+			("database".to_string(), ConfType::Option( Box::new(ConfType::Struct(Database::default().into())) )),
+			("queue".to_string(), ConfType::Option( Box::new(ConfType::Struct(Queue::default().into())) )),
 		])
 	}
 }
@@ -84,10 +84,10 @@ impl Into<ConfStruct> for Database {
 	fn into(self) -> ConfStruct {
 		ConfStruct::from([
 			("database".to_string(), ConfType::String("")),
-			("kind".to_string(), ConfType::Enum( DbKind::default().into(), "PostgreeSQL" )),
-			("tables".to_string(), ConfType::Vec( Box::new(ConfType::Struct( DbTable::default().into() )) )),
-			("auth".to_string(), ConfType::Enum( Authentication::None.into(), "None" )),
-			("connection".to_string(), ConfType::Struct(Connection::default().into())),
+			("kind".to_string(), ConfType::Enum( DbKind::default().into(), "PostgreSQL" )),
+			("tables".to_string(), ConfType::Option( Box::new(ConfType::Vec( Box::new(ConfType::Struct( DbTable::default().into() )) )) )),
+			("auth".to_string(), ConfType::Option( Box::new(ConfType::Enum( Authentication::None.into(), "None" )) )),
+			("connection".to_string(), ConfType::Option( Box::new(ConfType::Struct(Connection::default().into())) )),
 		])
 	}
 }
@@ -113,7 +113,10 @@ impl Into<ConfStruct> for Authentication {
 		ConfStruct::from([
 			("None".to_string(), ConfType::EnumValue),
 			("Passfile".to_string(), ConfType::EnumValue),
-			("Simple".to_string(), ConfType::EnumParams("user", "pass")),
+			("Simple".to_string(), ConfType::Struct(ConfStruct::from([
+				("user".to_string(), ConfType::String("")),
+				("pass".to_string(), ConfType::String("")),
+			]))),
 		])
 	}
 }
@@ -151,8 +154,8 @@ impl Into<ConfStruct> for Connection {
 	fn into(self) -> ConfStruct {
 		ConfStruct::from([
 			("host".to_string(), ConfType::String("")),
-			("port".to_string(), ConfType::UInt( default_postgres_port().into() )),
-			("ssl_mode".to_string(), ConfType::Enum( SslMode::default().into(), "Disabled" )),
+			("port".to_string(), ConfType::Option( Box::new(ConfType::UInt( default_postgres_port().into() )) )),
+			("ssl_mode".to_string(), ConfType::Option( Box::new(ConfType::Enum( SslMode::default().into(), "Disable" )) )),
 			("root_cert".to_string(), ConfType::Option( Box::new(ConfType::String("")) )),
 			("ssl_cert".to_string(), ConfType::Option( Box::new(ConfType::String("")) )),
 			("ssl_key".to_string(), ConfType::Option( Box::new(ConfType::String("")) )),
@@ -253,8 +256,8 @@ impl Into<ConfStruct> for DbTable {
 	fn into(self) -> ConfStruct {
 		ConfStruct::from([
 			("name".to_string(), ConfType::String("")),
-			("for_messages".to_string(), ConfType::RegEx(".*")),
-			("fields".to_string(), ConfType::Vec( Box::new( ConfType::Enum( DbField::default().into(), "String" ) ) )),
+			("for_messages".to_string(), ConfType::Option( Box::new(ConfType::RegEx(".*")) )),
+			("fields".to_string(), ConfType::Option( Box::new(ConfType::Vec( Box::new( DbField::conf_type() )) ) )),
 		])
 	}
 }

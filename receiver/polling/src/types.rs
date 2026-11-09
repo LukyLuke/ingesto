@@ -52,9 +52,9 @@ impl Into<ConfStruct> for Polling {
 		let mut map = ConfStruct::new();
 		map.insert("name".to_string(), ConfType::String(""));
 		map.insert("api".to_string(), ConfType::Vec( Box::new( ConfType::Struct( Endpoint::default().into() ) ) ));
-		map.insert("timer".to_string(), ConfType::String("* */5 * * * *"));
-		map.insert("queue".to_string(), ConfType::Struct( types::Queue::default().into() ));
-		map.insert("parser".to_string(), ConfType::Vec( Box::new( ConfType::Struct( types::Parser::default().into() ) ) ));
+		map.insert("timer".to_string(), ConfType::Option( Box::new( ConfType::String("* */5 * * * *") ) ));
+		map.insert("queue".to_string(), ConfType::Option( Box::new( ConfType::Struct( types::Queue::default().into() ) ) ));
+		map.insert("parser".to_string(), ConfType::Option( Box::new( ConfType::Vec( Box::new( ConfType::Struct( types::Parser::default().into() ) ) ) ) ));
 		map
 	}
 }
@@ -63,6 +63,9 @@ impl Into<ConfStruct> for Polling {
 #[cfg(feature = "types")]
 #[derive(Default, Debug, Clone, Deserialize, Serialize)]
 pub struct Endpoint {
+	/// Name of the API, to know what this endpoint is for. It is used in logs.
+	pub name: String,
+
 	/// FQDN where to send a request to.
 	/// Can contain Template-Parameters: {{ $uuid }}, {{ $date([$response/json/pointer/value]#FORMAT) }}, {{ $response/json/pointer/value }}
 	pub uri: String,
@@ -94,11 +97,12 @@ pub struct Endpoint {
 impl Into<ConfStruct> for Endpoint {
 	fn into(self) -> ConfStruct {
 		let mut map = ConfStruct::new();
+		map.insert("name".to_string(), ConfType::String(""));
 		map.insert("uri".to_string(), ConfType::String(""));
 		map.insert("body".to_string(), ConfType::Option( Box::new(ConfType::String("")) ));
-		map.insert("method".to_string(), ConfType::Enum(Method::GET.into(), "GET"));
-		map.insert("auth".to_string(), ConfType::Enum(Authentication::None.into(), "None"));
-		map.insert("header".to_string(), ConfType::Vec( Box::new(ConfType::Struct( Param::default().into() )) ));
+		map.insert("method".to_string(), ConfType::Option( Box::new(ConfType::Enum(Method::GET.into(), "GET")) ));
+		map.insert("auth".to_string(), ConfType::Option( Box::new(ConfType::Enum(Authentication::None.into(), "None")) ));
+		map.insert("header".to_string(), ConfType::Option( Box::new(ConfType::Vec( Box::new(ConfType::Struct( Param::default().into() )) )) ));
 		map.insert("paging".to_string(), ConfType::Option( Box::new(ConfType::Struct( PagingRequest::default().into() )) ));
 		map
 	}
@@ -154,9 +158,15 @@ impl Into<ConfStruct> for Authentication {
 	fn into(self) -> ConfStruct {
 		ConfStruct::from([
 			("None".to_string(), ConfType::EnumValue),
-			("Basic".to_string(), ConfType::EnumParams("user", "pass")),
+			("Basic".to_string(), ConfType::Struct(ConfStruct::from([
+				("user".to_string(), ConfType::String("")),
+				("pass".to_string(), ConfType::String("")),
+			]))),
 			("Bearer".to_string(), ConfType::String("")),
-			("Header".to_string(), ConfType::EnumParams("header", "value")),
+			("Header".to_string(), ConfType::Struct(ConfStruct::from([
+				("header".to_string(), ConfType::String("")),
+				("value".to_string(), ConfType::String("")),
+			]))),
 		])
 	}
 }
@@ -174,7 +184,7 @@ pub struct Param {
 impl Into<ConfStruct> for Param {
 	fn into(self) -> ConfStruct {
 		ConfStruct::from([
-			("string".to_string(), ConfType::String("")),
+			("name".to_string(), ConfType::String("")),
 			("value".to_string(), ConfType::String("")),
 		])
 	}
@@ -208,9 +218,9 @@ impl Into<ConfStruct> for PagingRequest {
 	fn into(self) -> ConfStruct {
 		ConfStruct::from([
 			("param".to_string(), ConfType::Option( Box::new(ConfType::Struct( Param::default().into() )) )),
-			("until".to_string(), ConfType::Enum(PagingRequestUntil::None.into(), "None")),
-			("timeout".to_string(), ConfType::UInt(0)),
-			("max_pages".to_string(), ConfType::UInt(0)),
+			("until".to_string(), ConfType::Option( Box::new(ConfType::Enum(PagingRequestUntil::None.into(), "None")) )),
+			("timeout".to_string(), ConfType::Option( Box::new(ConfType::UInt(0)) )),
+			("max_pages".to_string(), ConfType::Option( Box::new(ConfType::UInt(0)) )),
 		])
 	}
 }
@@ -244,7 +254,40 @@ impl Into<ConfStruct> for PagingRequestUntil {
 			("Empty".to_string(), ConfType::EnumValue),
 			("StatusCode".to_string(), ConfType::UInt(0)),
 			("EmptyValue".to_string(), ConfType::String("")),
-			("Equals".to_string(), ConfType::EnumParams("left", "right")),
+			("Equals".to_string(), ConfType::Tuple(vec![ ConfType::String(""), ConfType::String("") ])),
 		])
+	}
+}
+
+#[cfg(all(test, feature = "types"))]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn endpoint_name_is_read_from_the_config() {
+		let endpoint: Endpoint = serde_json::from_str(r#"{ "name": "SentinelOne Agents", "uri": "http://x" }"#).unwrap_or_default();
+		assert_eq!(endpoint.name, "SentinelOne Agents");
+		assert_eq!(endpoint.uri, "http://x");
+	}
+
+	#[test]
+	fn endpoint_name_is_required() {
+		assert!(serde_json::from_str::<Endpoint>(r#"{ "uri": "http://x" }"#).is_err());
+		assert!(serde_json::from_str::<Endpoint>(r#"{ "name": "x" }"#).is_err());
+	}
+
+	#[test]
+	fn endpoint_name_may_be_empty_or_special() {
+		for name in ["", "Ünï \"quoted\" # 日本"] {
+			let json = serde_json::json!({ "name": name, "uri": "http://x" });
+			let endpoint: Endpoint = serde_json::from_value(json).unwrap_or_default();
+			assert_eq!(endpoint.name, name);
+		}
+	}
+
+	#[test]
+	fn endpoint_schema_has_a_required_name_first() {
+		let schema: ConfStruct = Endpoint::default().into();
+		assert_eq!(schema.iter().next().map(|(name, ty)| (name.as_str(), matches!(ty, ConfType::String(_)))), Some(("name", true)));
 	}
 }
