@@ -17,6 +17,8 @@ Run inside the confui directory.
 - Run the project: `npm start`
 
 ## Rules
+- When adding or remove CSS classes, run the wasm build.
 - Keep the UI dynamic with WASM-Calls.
 - Use WASM-Calls and avoid Javascript where possible.
 - Use CSS-Classes and try to avoid inline CSS.
+
