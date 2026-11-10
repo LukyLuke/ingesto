@@ -9,10 +9,27 @@ pub struct Config {
 }
 
 #[cfg(feature = "types")]
-impl Into<ConfStruct> for Config {
-	fn into(self) -> ConfStruct {
+impl From<Config> for ConfStruct {
+	fn from(val: Config) -> Self {
 		ConfStruct::from([
-			("config".to_string(), ConfType::String("Not implemented yet")),
+			("config".to_string(), ConfType::String(Box::leak(val.config.into_boxed_str()))),
 		])
+	}
+}
+
+#[cfg(all(test, feature = "types"))]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn test_config_uses_value() {
+		let conf: ConfStruct = Config { config: "some value".to_string() }.into();
+		assert_eq!(conf.get("config"), Some(&ConfType::String("some value")));
+	}
+
+	#[test]
+	fn test_config_empty_value() {
+		let conf: ConfStruct = Config::default().into();
+		assert_eq!(conf.get("config"), Some(&ConfType::String("")));
 	}
 }
