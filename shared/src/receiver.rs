@@ -13,7 +13,7 @@ use tracing::{debug, error, info};
 use crate::{queue::MessageQueue, types::OtelReceiver};
 
 pub fn start_otel_listener(conf: Arc<OtelReceiver>, queue: Arc<MessageQueue::<String>>) ->  anyhow::Result<()> {
-	let server = match Server::http(&conf.get_address()) {
+	let server = match Server::http(conf.get_address()) {
 		Ok(server) => server,
 		Err(e) => return Err(anyhow::anyhow!("{:#?}", e))
 	};
@@ -129,7 +129,7 @@ fn convert_tonic(val: &Value) -> serde_json::Value {
 				let val = if let Some(v) = kv.value.as_ref() {
 					let def = StringValue("".to_owned());
 					let inner = v.value.as_ref().unwrap_or(&def);
-					convert_tonic(&inner)
+					convert_tonic(inner)
 				} else {
 					serde_json::Value::Null
 				};

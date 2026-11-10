@@ -9,7 +9,7 @@ use tracing::warn;
 use uuid::Uuid;
 
 /// Static Lazy-Loaded template cache
-static TEMPLATE_CACHE: Lazy<DashMap<String, Template>> = Lazy::new(|| DashMap::new());
+static TEMPLATE_CACHE: Lazy<DashMap<String, Template>> = Lazy::new(DashMap::new);
 
 // ISO-8601 Date-Format in UTC
 // "%+" is equal to "%FT%T%.6f%:z" is equal to "%Y-%m-%dT%H:%M:%S%.6f%:z"
@@ -32,7 +32,7 @@ static FORMAT_ISO8601: &str = "%FT%T%.6f%:z";
 /// let key = String::from("fixed_key");
 /// shared::template::template_string_parse(&key, &tpl);
 /// ```
-pub fn template_string_parse(key: &String, value: &String) {
+pub fn template_string_parse(key: &String, value: &str) {
 	TEMPLATE_CACHE.insert(key.to_owned(), Template::parse(value));
 }
 
@@ -67,7 +67,7 @@ pub fn template_string(tpl: &String, values: Arc<Value>) -> String {
 	}
 
 	warn!("Template-Cache for '{}' not found and not able to build. Using EMPTY String.", tpl);
-	return String::from("");
+	String::from("")
 }
 
 /// Represents the Template-Parsing engine.
@@ -121,7 +121,7 @@ impl Template {
 				while let Some(end) = iter.position(|x| x == '}') {
 					if let Some(end_end) = iter.next() && end_end == '}' {
 						// Update start position
-						pos = last_end + pos;
+						pos += last_end;
 
 						// save static string
 						let static_token = String::from(&s[last_end..pos]);
@@ -130,7 +130,7 @@ impl Template {
 						}
 
 						// Update Param-End Position, which is before the '}}'
-						pos = pos + 2;
+						pos += 2;
 						last_end = pos + end;
 
 						// save param
@@ -140,7 +140,7 @@ impl Template {
 						}
 
 						// Update next start position, which is after '}}'
-						last_end = last_end + 2;
+						last_end += 2;
 
 						// break the inner loop to find the next '{{' position within the outer loop
 						num_param += 1;
@@ -155,10 +155,10 @@ impl Template {
 			tokens.push(TemplateToken::Static( String::from(&s[last_end..]) ));
 		}
 
-		return Self {
+		Self {
 			tokens,
 			capacity: (s.len() + (num_param * 24)) // Predict each param is max 24 chars long
-		};
+		}
 	}
 
 	/// Renders the Template based on the JSON-Value.
@@ -196,29 +196,27 @@ impl Template {
 			match token {
 				// Append the static string value
 				TemplateToken::Static(val) => {
-					out.push_str(&val)
+					out.push_str(val)
 				},
 				// Append the 'PARAM-Value' or '{{PARAM}}' if no value is set
 				TemplateToken::Param(val) => {
-					let v = match &val {
+					let v = match val {
 						// UUIDs
-						&ParamParser::Uuid => {
-							let uuid = Uuid::new_v4().to_string();
-							&format!("{}", uuid)
+						ParamParser::Uuid => {
+							Uuid::new_v4().to_string()
 						},
 
 						// Current Date-Time Values
-						&ParamParser::Now(format) => {
-							let formatted = if format.is_empty() {
+						ParamParser::Now(format) => {
+							if format.is_empty() {
 								Zoned::now().with_time_zone(TimeZone::UTC).strftime("%Y-%m-%d").to_string()
 							} else {
 								Zoned::now().with_time_zone(TimeZone::UTC).strftime(if format == "iso8601" {FORMAT_ISO8601} else {format}).to_string()
-							};
-							&format!("{}", formatted)
+							}
 						},
 
 						// Any DateTime formats, including relative dates like "-5 days"
-						&ParamParser::Date(d, format) => {
+						ParamParser::Date(d, format) => {
 							let date = if d == "$now" {
 								Zoned::now().with_time_zone(TimeZone::UTC)
 
@@ -248,35 +246,34 @@ impl Template {
 								}
 							};
 
-							let formatted = if format.is_empty() {
+							// Return the formatted date
+							if format.is_empty() {
 								date.strftime("%Y-%m-%d").to_string()
 							} else {
 								date.strftime(if format == "iso8601" {FORMAT_ISO8601} else {format}).to_string()
-							};
-							&format!("{}", formatted)
+							}
 						},
 
 						// Value from the last response
-						&ParamParser::Response(json_path) => {
-							let v = match &value.pointer(json_path.as_str()).unwrap_or(&Value::Null) {
-								&Value::Bool(v) => format!("{}", v),
-								&Value::Number(v) => format!("{}", v.as_f64().unwrap_or(0.0)),
-								&Value::String(v) => if v == "null" { "".to_string() } else { v.clone() },
+						ParamParser::Response(json_path) => {
+							match value.pointer(json_path.as_str()).unwrap_or(&Value::Null) {
+								Value::Bool(v) => v.to_string(),
+								Value::Number(v) => v.as_f64().unwrap_or(0.0).to_string(),
+								Value::String(v) => if v == "null" { String::new() } else { v.clone() },
 								_ => String::new()
-							};
-							&format!("{}", v)
+							}
 						},
 
 						// Just a static value
-						&ParamParser::Static(token) => {
-							&format!("{{{{{}}}}}", token)
+						ParamParser::Static(token) => {
+							format!("{{{{{}}}}}", token)
 						},
 					};
-					out.push_str(v);
+					out.push_str(&v);
 				}
 			}
 		}
-		return out;
+		out
 	}
 }
 
@@ -334,7 +331,7 @@ impl ParamParser {
 	/// * [JSON-Pointer RFC6901](https://datatracker.ietf.org/doc/html/rfc6901)
 	/// * [Date Time Formatting](https://docs.rs/chrono/latest/chrono/format/strftime/index.html)
 	pub fn from(val: String) -> Self {
-		return match &val[..4] {
+		match &val[..4] {
 			// A simple UUID
 			"$uui" => Self::Uuid,
 

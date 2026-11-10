@@ -57,15 +57,10 @@ impl<T: Into<String>> MessageQueue<T> {
 
 		let max = if num == 0 { guard.len() } else { num };
 		let mut values: Vec<T> = Vec::new();
-		loop {
-			match guard.pop_front() {
-				Some(val) => {
-					values.push(val);
-					if values.len() >= max {
-						break;
-					}
-				},
-				None => { break; }
+		while let Some(val) = guard.pop_front() {
+			values.push(val);
+			if values.len() >= max {
+				break;
 			}
 		}
 		values

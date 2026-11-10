@@ -186,14 +186,7 @@ impl Default for Queue {
 #[cfg(feature = "types")]
 impl From<Queue> for ConfStruct {
 	fn from(val: Queue) -> Self {
-		let otel_logger = match val.otel_logger {
-			Some(logger) => ConfStruct::from([
-				("endpoint".to_string(), ConfType::String(Box::leak(Box::new(String::from(&logger.endpoint))))),
-				("port".to_string(), ConfType::Option( Box::new(ConfType::UInt(logger.port.into())) )),
-				("service".to_string(), ConfType::Option( Box::new(ConfType::String(Box::leak(Box::new(String::from(&logger.service))))))),
-			]),
-			None => ConfStruct::from([]),
-		};
+		let otel_logger: ConfStruct = val.otel_logger.unwrap_or_default().into();
 
 		ConfStruct::from([
 			("max_messages".to_string(), ConfType::Option( Box::new(ConfType::UInt( val.max_messages.into() )))),

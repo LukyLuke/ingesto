@@ -57,10 +57,10 @@ pub fn load_config<T: DeserializeOwned, P: AsRef<Path>>(path: P) -> anyhow::Resu
 
 	match file_ext.as_deref() {
 		Some("toml") => serde_path_to_error::deserialize(toml::Deserializer::parse(&content)?)
-			.map_err(|err| anyhow!("parsing config at '{}' with error {}", err.path().to_string(), err.inner().message())),
+			.map_err(|err| anyhow!("parsing config at '{}' with error {}", err.path(), err.inner().message())),
 
 		Some("yaml") | Some("yml") => serde_path_to_error::deserialize(serde_yaml::Deserializer::from_str(&content))
-			.map_err(|err| anyhow!("parsing config at '{}' with error {}", err.path().to_string(), err.inner())),
+			.map_err(|err| anyhow!("parsing config at '{}' with error {}", err.path(), err.inner())),
 
 		_ => Err(anyhow!("Unknown configuration format: {:?}", path_ref.extension())),
 	}
@@ -101,11 +101,9 @@ pub fn secrets_string(val: &str) -> anyhow::Result<String> {
 			_ => { error!(message="secrets_string", variant="file", key=val, err="empty file" ); },
 		}
 
-	} else if val.starts_with("env:") && let Some(env) = val.get(4..) {
-		if let Ok(line) = env::var(env) {
-			debug!(message="secrets_string", variant="env", key=val, val=mask(&line, 3) );
-			return Ok(line.to_string());
-		}
+	} else if val.starts_with("env:") && let Some(env) = val.get(4..) && let Ok(line) = env::var(env) {
+		debug!(message="secrets_string", variant="env", key=val, val=mask(&line, 3) );
+		return Ok(line.to_string());
 	}
 	debug!(message="secrets_string", variant="none", key=val );
 	Ok(val.to_owned())
@@ -124,8 +122,10 @@ pub fn usage() -> anyhow::Result<std::path::PathBuf> {
 			.help("Configuration file to use (toml or yaml)"))
 		.get_matches();
 
-	let f: &std::path::PathBuf = matches.get_one("config_file").unwrap();
-	return Ok(f.to_path_buf())
+	matches
+		.get_one::<std::path::PathBuf>("config_file")
+		.ok_or_else(|| anyhow::anyhow!("missing config_file argument"))
+		.cloned()
 }
 
 /// Masks a string with '*' and only shows the first couple chars
