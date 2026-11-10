@@ -1,10 +1,10 @@
-use std::sync::{Condvar, Mutex};
 use std::collections::VecDeque;
+use std::sync::{Condvar, Mutex};
 use std::time::Duration;
 
 pub struct MessageQueue<T> {
 	m: Mutex<VecDeque<T>>,
-	cv: Condvar
+	cv: Condvar,
 }
 
 impl<T: Into<String>> MessageQueue<T> {
@@ -42,18 +42,18 @@ impl<T: Into<String>> MessageQueue<T> {
 	}
 
 	pub fn pull(&self, timeout: Duration) -> Option<T> {
-		let (mut guard, _res) = self.cv.wait_timeout_while(
-				self.m.lock().unwrap(),
-				timeout,
-				|queue| queue.is_empty()
-			).unwrap();
+		let (mut guard, _res) = self
+			.cv
+			.wait_timeout_while(self.m.lock().unwrap(), timeout, |queue| queue.is_empty())
+			.unwrap();
 		guard.pop_front()
 	}
 
 	pub fn pull_num(&self, num: usize) -> Vec<T> {
-		let mut guard = self.cv.wait_while(
-				self.m.lock().unwrap(), |queue| queue.is_empty()
-			).unwrap();
+		let mut guard = self
+			.cv
+			.wait_while(self.m.lock().unwrap(), |queue| queue.is_empty())
+			.unwrap();
 
 		let max = if num == 0 { guard.len() } else { num };
 		let mut values: Vec<T> = Vec::new();

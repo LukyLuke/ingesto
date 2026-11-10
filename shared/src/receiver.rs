@@ -1,9 +1,11 @@
-
 use std::{sync::Arc, thread};
 
-use opentelemetry_proto::tonic::collector::logs::v1::{ExportLogsServiceRequest, ExportLogsServiceResponse};
+use opentelemetry_proto::tonic::collector::logs::v1::{
+	ExportLogsServiceRequest, ExportLogsServiceResponse,
+};
 use opentelemetry_proto::tonic::common::v1::any_value::Value::{
-	self, ArrayValue, BoolValue, BytesValue, DoubleValue, IntValue, KvlistValue, StringValue, StringValueStrindex
+	self, ArrayValue, BoolValue, BytesValue, DoubleValue, IntValue, KvlistValue, StringValue,
+	StringValueStrindex,
 };
 use prost::Message;
 use serde_json::{Map, json};
@@ -12,10 +14,13 @@ use tracing::{debug, error, info};
 
 use crate::{queue::MessageQueue, types::OtelReceiver};
 
-pub fn start_otel_listener(conf: Arc<OtelReceiver>, queue: Arc<MessageQueue::<String>>) ->  anyhow::Result<()> {
+pub fn start_otel_listener(
+	conf: Arc<OtelReceiver>,
+	queue: Arc<MessageQueue<String>>,
+) -> anyhow::Result<()> {
 	let server = match Server::http(conf.get_address()) {
 		Ok(server) => server,
-		Err(e) => return Err(anyhow::anyhow!("{:#?}", e))
+		Err(e) => return Err(anyhow::anyhow!("{:#?}", e)),
 	};
 	info!(message="http server started", address=%conf.address, port=%conf.port);
 
@@ -60,10 +65,10 @@ fn handle_request(mut req: Request, conf: Arc<OtelReceiver>, queue: Arc<MessageQ
 		};
 
 		// Process logs and insert into queue
-		let num = logs.resource_logs.iter()
-			.flat_map(|log| log.scope_logs.iter()
-				.flat_map(|log| log.log_records.iter())
-			)
+		let num = logs
+			.resource_logs
+			.iter()
+			.flat_map(|log| log.scope_logs.iter().flat_map(|log| log.log_records.iter()))
 			.filter_map(|line| line.body.as_ref())
 			.filter_map(|line| line.value.as_ref())
 			.map(convert_tonic)
@@ -73,15 +78,16 @@ fn handle_request(mut req: Request, conf: Arc<OtelReceiver>, queue: Arc<MessageQ
 						queue.push(jstr.clone());
 						debug!(message="log received", log=%jstr);
 						Ok(())
-					},
+					}
 					Err(e) => {
 						error!(message="log not in json format", value=%val, error=%e);
 						Err(e)
 					}
-				}.ok()
+				}
+				.ok()
 			})
 			.count();
-		info!(message="received logs", num=num);
+		info!(message = "received logs", num = num);
 
 		// Send back a default OK-Response
 		let resp_msg = ExportLogsServiceResponse::default();
@@ -91,14 +97,13 @@ fn handle_request(mut req: Request, conf: Arc<OtelReceiver>, queue: Arc<MessageQ
 		let resp = Response::from_data(out)
 			.with_status_code(StatusCode(200))
 			.with_header(Header::from_bytes("content-type", "application/x-protobuf").unwrap());
-			req.respond(resp).ok();
-
+		req.respond(resp).ok();
 	} else {
-		debug!(message="invalid request", url=url, method=method);
+		debug!(message = "invalid request", url = url, method = method);
 
 		let resp = Response::from_string("invalid request")
-		.with_status_code(StatusCode(500))
-		.with_header(Header::from_bytes("content-type", "text/plain").unwrap());
+			.with_status_code(StatusCode(500))
+			.with_header(Header::from_bytes("content-type", "text/plain").unwrap());
 		req.respond(resp).ok();
 	}
 }
@@ -112,17 +117,23 @@ fn convert_tonic(val: &Value) -> serde_json::Value {
 				Ok(jv) => jv,
 				Err(_) => json!(v.to_string()),
 			}
-		},
-		StringValueStrindex(v) => { error!("type 'StringValueStrindex' received which shold not be used: {}", v); json!(v.to_string()) },
+		}
+		StringValueStrindex(v) => {
+			error!(
+				"type 'StringValueStrindex' received which shold not be used: {}",
+				v
+			);
+			json!(v.to_string())
+		}
 		IntValue(v) => json!(v),
 		DoubleValue(v) => json!(v),
 		BytesValue(v) => json!(String::from_utf8(v.clone()).unwrap_or_default()),
-		ArrayValue(v) => {
-			v.values.iter()
-				.filter_map(|v| v.value.as_ref())
-				.map(convert_tonic)
-				.collect()
-		},
+		ArrayValue(v) => v
+			.values
+			.iter()
+			.filter_map(|v| v.value.as_ref())
+			.map(convert_tonic)
+			.collect(),
 		KvlistValue(v) => {
 			let mut map = Map::new();
 			v.values.iter().for_each(|kv| {
@@ -136,6 +147,6 @@ fn convert_tonic(val: &Value) -> serde_json::Value {
 				map.insert(kv.key.to_owned(), val);
 			});
 			serde_json::Value::Object(map)
-		},
+		}
 	}
 }
