@@ -184,16 +184,23 @@ impl Default for Queue {
 }
 
 #[cfg(feature = "types")]
-impl Into<ConfStruct> for Queue {
-	fn into(self) -> ConfStruct {
-    use std::u64;
+impl From<Queue> for ConfStruct {
+	fn from(val: Queue) -> Self {
+		let otel_logger = match val.otel_logger {
+			Some(logger) => ConfStruct::from([
+				("endpoint".to_string(), ConfType::String(Box::leak(Box::new(String::from(&logger.endpoint))))),
+				("port".to_string(), ConfType::Option( Box::new(ConfType::UInt(logger.port.into())) )),
+				("service".to_string(), ConfType::Option( Box::new(ConfType::String(Box::leak(Box::new(String::from(&logger.service))))))),
+			]),
+			None => ConfStruct::from([]),
+		};
 
 		ConfStruct::from([
-			("max_messages".to_string(), ConfType::Option( Box::new(ConfType::UInt( default_messages().into() )))),
-			("max_seconds".to_string(), ConfType::Option( Box::new(ConfType::UInt( default_time().into() )))),
-			("max_size".to_string(), ConfType::Option( Box::new(ConfType::UInt( default_size() as u64 )))),
-			("collect_messages".to_string(), ConfType::Option( Box::new(ConfType::Bool( default_collect() )))),
-			("otel_logger".to_string(), ConfType::Option( Box::new(ConfType::Struct(OtelLogger::default().into())) )),
+			("max_messages".to_string(), ConfType::Option( Box::new(ConfType::UInt( val.max_messages.into() )))),
+			("max_seconds".to_string(), ConfType::Option( Box::new(ConfType::UInt( val.max_seconds.into() )))),
+			("max_size".to_string(), ConfType::Option( Box::new(ConfType::UInt( val.max_size as u64 )))),
+			("collect_messages".to_string(), ConfType::Option( Box::new(ConfType::Bool( val.collect_messages )))),
+			("otel_logger".to_string(), ConfType::Option( Box::new(ConfType::Struct( otel_logger )) )),
 		])
 	}
 }
@@ -228,13 +235,13 @@ pub struct Parser {
 }
 
 #[cfg(feature = "types")]
-impl Into<ConfStruct> for Parser {
-	fn into(self) -> ConfStruct {
+impl From<Parser> for ConfStruct {
+	fn from(val: Parser) -> ConfStruct {
 		ConfStruct::from([
-			("name".to_string(), ConfType::Option( Box::new(ConfType::String("")) )),
-			("matcher".to_string(), ConfType::Option( Box::new(ConfType::RegEx(".*")) )),
-			("kind".to_string(), ConfType::Option( Box::new(ConfType::Enum( ParserKind::RAW.into(), "RAW" )) )),
-			("settings".to_string(), ConfType::Option( Box::new(ConfType::Enum( ParserSettings::Nothing.into(), "Nothing" )) )),
+			("name".to_string(), ConfType::Option( Box::new(ConfType::String(Box::leak(Box::new(String::from(&val.name))))))),
+			("matcher".to_string(), ConfType::Option( Box::new(ConfType::RegEx(Box::leak(Box::new(String::from(&val.matcher))))))),
+			("kind".to_string(), ConfType::Option( Box::new(ConfType::Enum( val.kind.clone().into(), Box::leak(Box::new(val.kind.to_string())))) )),
+			("settings".to_string(), ConfType::Option( Box::new(ConfType::Enum( val.settings.clone().into(), Box::leak(Box::new(val.settings.to_string())))) )),
 			("mapping".to_string(), ConfType::Option( Box::new(ConfType::Vec( Box::new(ConfType::Struct(FieldMapping::default().into())) )) )),
 		])
 	}
@@ -267,8 +274,8 @@ pub enum ParserKind {
 fn default_parser_kind() -> ParserKind { ParserKind::default() }
 
 #[cfg(feature = "types")]
-impl Into<ConfStruct> for ParserKind {
-	fn into(self) -> ConfStruct {
+impl From<ParserKind> for ConfStruct {
+	fn from(_val: ParserKind) -> ConfStruct {
 		ConfStruct::from([
 			("RAW".to_string(), ConfType::EnumValue),
 			("REGEX".to_string(), ConfType::EnumValue),
@@ -310,8 +317,8 @@ pub enum ParserSettings {
 fn default_parser_setting() -> ParserSettings { ParserSettings::default() }
 
 #[cfg(feature = "types")]
-impl Into<ConfStruct> for ParserSettings {
-	fn into(self) -> ConfStruct {
+impl From<ParserSettings> for ConfStruct {
+	fn from(_val: ParserSettings) -> ConfStruct {
 		ConfStruct::from([
 			("Nothing".to_string(), ConfType::EnumValue),
 			("Regex".to_string(), ConfType::String(".*")),
@@ -360,15 +367,15 @@ pub struct FieldMapping {
 }
 
 #[cfg(feature = "types")]
-impl Into<ConfStruct> for FieldMapping {
-	fn into(self) -> ConfStruct {
+impl From<FieldMapping> for ConfStruct {
+	fn from(val: FieldMapping) -> ConfStruct {
 		ConfStruct::from([
-			("name".to_string(), ConfType::String("")),
-			("source".to_string(), ConfType::Option( Box::new(ConfType::String("")) )),
-			("index".to_string(), ConfType::Option( Box::new(ConfType::UInt(0)) )),
-			("parser".to_string(), ConfType::Option( Box::new(ConfType::String("")) )),
-			("empty".to_string(), ConfType::Option( Box::new(ConfType::Bool(false)) )),
-			("static".to_string(), ConfType::Option( Box::new(ConfType::String("")) )),
+			("name".to_string(), ConfType::String(Box::leak(Box::new(String::from(&val.name))))),
+			("source".to_string(), ConfType::Option( Box::new(ConfType::String(Box::leak(Box::new(String::from(&val.source))))))),
+			("index".to_string(), ConfType::Option( Box::new(ConfType::UInt(val.index as u64)) )),
+			("parser".to_string(), ConfType::Option( Box::new(ConfType::String(Box::leak(Box::new(String::from(&val.parser))))))),
+			("empty".to_string(), ConfType::Option( Box::new(ConfType::Bool(val.empty)) )),
+			("static".to_string(), ConfType::Option( Box::new(ConfType::String(Box::leak(Box::new(String::from(&val.static_value))))))),
 		])
 	}
 }
@@ -399,12 +406,12 @@ impl Default for OtelLogger {
 }
 
 #[cfg(feature = "types")]
-impl Into<ConfStruct> for OtelLogger {
-	fn into(self) -> ConfStruct {
+impl From<OtelLogger> for ConfStruct {
+	fn from(val: OtelLogger) -> Self {
 		ConfStruct::from([
-			("endpoint".to_string(), ConfType::String("0.0.0.0")),
-			("port".to_string(), ConfType::Option( Box::new(ConfType::UInt(default_otel_port().into())) )),
-			("service".to_string(), ConfType::Option( Box::new(ConfType::String("ingesto")) )),
+			("endpoint".to_string(), ConfType::String(Box::leak(Box::new(String::from(&val.endpoint))))),
+			("port".to_string(), ConfType::Option( Box::new(ConfType::UInt(val.port.into())) )),
+			("service".to_string(), ConfType::Option( Box::new(ConfType::String(Box::leak(Box::new(String::from(&val.service))))))),
 		])
 	}
 }
@@ -413,7 +420,7 @@ impl OtelLogger {
 	pub fn get_endpoint(&self, path: &str) -> String {
 		let mut p = path.to_owned();
 		if let Some(s) = p.get(0..1) && s !=  "/" {
-			p.insert_str(0, "/");
+			p.insert(0, '/');
 		};
 		if self.endpoint.starts_with("http") {
 			return format!("{}:{}{}", self.endpoint, self.port, p);
@@ -447,12 +454,12 @@ impl Default for OtelReceiver {
 }
 
 #[cfg(feature = "types")]
-impl Into<ConfStruct> for OtelReceiver {
-	fn into(self) -> ConfStruct {
+impl From<OtelReceiver> for ConfStruct {
+	fn from(val: OtelReceiver) -> ConfStruct {
 		ConfStruct::from([
-			("address".to_string(), ConfType::String("0.0.0.0")),
-			("port".to_string(), ConfType::Option( Box::new(ConfType::UInt(default_otel_port().into())) )),
-			("path".to_string(), ConfType::Option( Box::new(ConfType::String("/v1/logs")) )),
+			("address".to_string(), ConfType::String(Box::leak(Box::new(String::from(&val.address))))),
+			("port".to_string(), ConfType::Option( Box::new(ConfType::UInt(val.port.into())) )),
+			("path".to_string(), ConfType::Option( Box::new(ConfType::String(Box::leak(Box::new(String::from(&val.path))))))),
 		])
 	}
 }
@@ -479,8 +486,8 @@ pub enum DbValue {
 
 #[cfg(feature = "runtime")]
 impl DbValue {
-	pub fn from(fields: &Vec<DbField>, json: &serde_json::Value) -> Vec<(String, DbValue)> {
-		fields.iter().map(|field| Self::convert(field, &json)).collect()
+	pub fn from(fields: &[DbField], json: &serde_json::Value) -> Vec<(String, DbValue)> {
+		fields.iter().map(|field| Self::convert(field, json)).collect()
 	}
 
 	fn convert(val: &DbField, json: &serde_json::Value) -> (String, DbValue) {
@@ -493,7 +500,7 @@ impl DbValue {
 							&default.as_ref().map_or_else(|| Value::Null, |s| Value::String(s.to_string()) )
 						).as_str()
 						.unwrap_or(
-							&default.as_ref().map_or_else(|| "", |s| s )
+							default.as_ref().map_or_else(|| "", |s| s )
 						).to_string()
 				)
 			),
@@ -626,8 +633,8 @@ impl DbField {
 }
 
 #[cfg(feature = "types")]
-impl Into<ConfStruct> for DbField {
-	fn into(self) -> ConfStruct {
+impl From<DbField> for ConfStruct {
+	fn from(_val: DbField) -> ConfStruct {
 		ConfStruct::from([
 			("Bool".to_string(), ConfType::Struct(DbField::params())),
 			("Int".to_string(), ConfType::Struct(DbField::params())),

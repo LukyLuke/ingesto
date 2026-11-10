@@ -17,7 +17,6 @@ use serde::de::DeserializeOwned;
 use tracing::{debug, error};
 use std::{fs, path::Path};
 use anyhow::{Context, anyhow};
-use toml;
 
 
 /// Initialize global logging

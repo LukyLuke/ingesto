@@ -14,19 +14,24 @@ impl<T: Into<String>> MessageQueue<T> {
 			cv: Condvar::new(),
 		}
 	}
+}
 
+impl<T: Into<String>> Default for MessageQueue<T> {
+	fn default() -> Self {
+		Self::new()
+	}
+}
+
+impl<T: Into<String>> MessageQueue<T> {
 	pub fn push(&self, val: T)
 	where
-		T: Clone + TryInto<String>,
+		T: Clone + Into<String>,
 	{
-		match val.clone().try_into() {
-			Ok(s) if !s.is_empty() => {
-				let mut guard = self.m.lock().unwrap();
-				guard.push_back(val);
-				self.cv.notify_one();
-			},
-			// empty values or not strings
-			_ => {}
+		let s = val.clone().into();
+		if !s.is_empty() {
+			let mut guard = self.m.lock().unwrap();
+			guard.push_back(val);
+			self.cv.notify_one();
 		}
 	}
 

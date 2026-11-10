@@ -37,6 +37,7 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 
 	fn precompile_regex(parser: &Vec<types::Parser>) -> HashMap<String, Regex> {
 		let mut regexes: HashMap<String, Regex> = HashMap::new();
+		let empty_regex = Regex::new("^$").unwrap();
 		for p in parser {
 			// Precompile the matcher Regex
 			let re = match Regex::new(&p.matcher) {
@@ -46,27 +47,24 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 				},
 				Err(e) => {
 					error!(message="regex compile", regex=%p.matcher, error=%e);
-					Regex::new("^$").unwrap()
+					empty_regex.clone()
 				}
 			};
 			regexes.insert(p.matcher.to_owned(), re);
 
 			// Precompile the Parser-Regex
-			match p.settings.clone() {
-				types::ParserSettings::Regex(setting) => {
-					let re = match Regex::new(&setting) {
-						Ok(re) => {
-							info!(message="regex compile", regex=%setting);
-							re
-						},
-						Err(e) => {
-							error!(message="regex compile", regex=%setting, error=%e);
-							Regex::new("^$").unwrap()
-						}
-					};
-					regexes.insert(setting.to_owned(), re);
-				},
-				_ => {},
+			if let types::ParserSettings::Regex(setting) = p.settings.clone() {
+				let re = match Regex::new(&setting) {
+					Ok(re) => {
+						info!(message="regex compile", regex=%setting);
+						re
+					},
+					Err(e) => {
+						error!(message="regex compile", regex=%setting, error=%e);
+						empty_regex.clone()
+					}
+				};
+				regexes.insert(setting.to_owned(), re);
 			};
 		}
 		regexes
@@ -77,21 +75,18 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 		jsonpath.insert(String::from("$"), JsonPath::parse("$").unwrap());
 
 		for p in parser {
-			match p.settings.clone() {
-				types::ParserSettings::Jpath(setting) => {
-					let jpath = match JsonPath::parse(&setting) {
-						Ok(jpath) => {
-							info!(message="json path compile", jsonpath=%setting);
-							jpath
-						},
-						Err(e) => {
-							error!(message="json path compile", jsonpath=%setting, error=%e);
-							JsonPath::parse("$").unwrap()
-						}
-					};
-					jsonpath.insert(setting.to_owned(), jpath);
-				},
-				_ => {},
+			if let types::ParserSettings::Jpath(setting) = p.settings.clone() {
+				let jpath = match JsonPath::parse(&setting) {
+					Ok(jpath) => {
+						info!(message="json path compile", jsonpath=%setting);
+						jpath
+					},
+					Err(e) => {
+						error!(message="json path compile", jsonpath=%setting, error=%e);
+						JsonPath::parse("$").unwrap()
+					}
+				};
+				jsonpath.insert(setting.to_owned(), jpath);
 			};
 		}
 		jsonpath
@@ -121,7 +116,7 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 
 					for msg in msgs {
 						debug!(message="extracted message", msg=%msg);
-						match me.send_message(&otlp, &msg, max_msg, max_time) {
+						match me.send_message(otlp, &msg, max_msg, max_time) {
 							Ok(_) => debug!(message="enqueued message for otlp endpoint", endpoint=%otlp.endpoint, port=%otlp.port, service=%otlp.service),
 							Err(e) => {
 								me.queue.push_front(msg.into());
@@ -187,7 +182,7 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 			let exporter = LogExporter::builder()
 			.with_http()
 			.with_protocol(Protocol::HttpBinary)
-			.with_endpoint(&conf.get_endpoint("/v1/logs"))
+			.with_endpoint(conf.get_endpoint("/v1/logs"))
 			.build()?;
 
 			// Queue size and time handled by OTEL
@@ -246,7 +241,7 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 	fn parser_by_name(&self, name: &str) -> Result<&types::Parser> {
 		for p in &self.parser {
 			if p.name.as_str() == name {
-				return Ok(&p);
+				return Ok(p);
 			}
 		}
 		Err(anyhow::anyhow!("no parser found by the name {}", name))
@@ -264,7 +259,7 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 							types::ParserSettings::Regex(s) => self.regexes.get(&s),
 							_ => None
 						};
-						re.and_then(|re| Some(self.parse_regex_message(&parser.mapping, raw, re)))
+						re.map(|re| self.parse_regex_message(&parser.mapping, raw, re))
 							.unwrap_or_else(|| vec![raw.to_owned()])
 					},
 
@@ -273,7 +268,7 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 							types::ParserSettings::Jpath(s) => self.jsonpath.get(&s),
 							_ => self.jsonpath.get("$"),
 						};
-						jpath.and_then(|jpath| Some(self.parse_json_message(&parser.mapping, raw, &jpath)))
+						jpath.map(|jpath| self.parse_json_message(&parser.mapping, raw, jpath))
 							.unwrap_or_else(|| vec![raw.to_owned()])
 					},
 
@@ -324,7 +319,7 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 	/// # Returns
 	///
 	/// A list of JSON serialized strings whith all the fields and values as defined in the `mapping` Configuration
-	fn parse_regex_message(&self, mapping: &Vec<types::FieldMapping>, raw: &String, re: &Regex) -> Vec<String> {
+	fn parse_regex_message(&self, mapping: &[types::FieldMapping], raw: &str, re: &Regex) -> Vec<String> {
 		let mut results: HashMap<String, String> = HashMap::new();
 		for capture in re.captures_iter(raw) {
 			for fld in mapping {
@@ -376,13 +371,13 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 	/// # Returns
 	///
 	/// A list of JSON serialized strings with all the fields and values as defined in the `mapping` Configuration
-	fn parse_json_message(&self, mapping: &Vec<types::FieldMapping>, raw: &String, jpath: &JsonPath) -> Vec<String> {
+	fn parse_json_message(&self, mapping: &[types::FieldMapping], raw: &str, jpath: &JsonPath) -> Vec<String> {
 		// See https://docs.rs/serde_json_path/latest/serde_json_path/
 		// Test: https://serdejsonpath.live/
-		let json_root: Value = serde_json::from_str(raw.as_str()).map_or_else(|e|{
+		let json_root: Value = serde_json::from_str(raw).unwrap_or_else(|e|{
 			error!(message="json parsing error", json=%raw, error=%e);
 			Value::Null
-		}, |v| v);
+		});
 
 		jpath.query(&json_root)
 			.iter()
@@ -400,7 +395,7 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 	/// # Returns
 	///
 	/// A JSON serialized string with all the fields and values as defined in the `mapping` Configuration
-	fn parse_json_string(&self, mapping: &Vec<types::FieldMapping>, json: Arc<Value>) -> String {
+	fn parse_json_string(&self, mapping: &[types::FieldMapping], json: Arc<Value>) -> String {
 		let mut results: HashMap<String, String> = HashMap::new();
 		for fld in mapping {
 			let mut val: String = String::new();
@@ -408,7 +403,7 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 				// If the source field nale starts with a / a JsonPointer is given,
 				// Otherwise a direct field name
 				let field_val = match fld.source.get(0..1) {
-					Some(c) if c == "/" => &json.pointer(&fld.source).unwrap_or_default(),
+					Some("/") => json.pointer(&fld.source).unwrap_or_default(),
 					_ => &json[&fld.source],
 				};
 
