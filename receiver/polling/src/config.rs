@@ -104,18 +104,18 @@ impl PagingRequestUntil {
 		match self {
 			// Parse JSON-Pointer value and compare to empty
 			Self::EmptyValue(val) => {
-				shared::template::template_string(&val, json.clone()).is_empty()
+				shared::template::template_string(val, json.clone()).is_empty()
 			}
 
 			// Parse JSON-Pointer value and compare to the value
 			Self::Equals(left, right) => {
 				tracing::debug!(
 					message = "PAGING-CHECK",
-					left = shared::template::template_string(&left, json.clone()),
-					right = shared::template::template_string(&right, json.clone())
+					left = shared::template::template_string(left, json.clone()),
+					right = shared::template::template_string(right, json.clone())
 				);
-				shared::template::template_string(&left, json.clone())
-					== shared::template::template_string(&right, json.clone())
+				shared::template::template_string(left, json.clone())
+					== shared::template::template_string(right, json.clone())
 			}
 
 			// Anything else (should be handled above in the first match clause)

@@ -46,11 +46,9 @@ fn main() {
 		true => start_follow_listener(conf_file, queue.clone()),
 		false => start_full_listener(conf_file, queue.clone()),
 	};
-	match res {
-		Err(e) => {
-			error!("{:#?}", e);
-		}
-		Ok(_) => {}
+
+	if let Err(e) = res {
+		error!("{:#?}", e);
 	}
 }
 
@@ -102,7 +100,7 @@ fn start_full_listener(
 	info!(message="listener started", file=conf.path.to_str(), interval=%conf.interval);
 	loop {
 		let content = fs::read_to_string(&conf.path)
-			.with_context(|| format!("reading file {}", &conf.path.display()))?;
+			.with_context(|| format!("reading file {}", conf.path.display()))?;
 		for line in content.lines() {
 			debug!(message="data received", data=%line);
 			queue.push(line.to_string());

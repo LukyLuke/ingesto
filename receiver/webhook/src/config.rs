@@ -26,31 +26,31 @@ impl fmt::Display for Authentication {
 }
 impl Authentication {
 	pub fn check(&self, auth: Option<&String>) -> bool {
-		match &self {
-			&Self::None => {
+		match self {
+			Self::None => {
 				let empty = String::new();
 				auth.unwrap_or(&empty).is_empty()
 			}
 
-			&Self::Basic { user, pass } if let Some(val) = auth => {
+			Self::Basic { user, pass } if let Some(val) = auth => {
 				let parts: Vec<_> = val.split(':').collect();
 				if parts.len() >= 2 {
-					let val_name = parts.get(0).unwrap().to_string();
+					let val_name = parts.first().unwrap().to_string();
 					let val_value = parts.get(1..).unwrap().join(":");
 
 					let value = base64::engine::general_purpose::STANDARD
 						.encode(format!("{}:{}", user, pass));
-					val_name.trim().to_lowercase() == "authorization".to_string()
+					val_name.trim().to_lowercase() == "authorization"
 						&& format!("Basic {}", value) == val_value.trim()
 				} else {
 					false
 				}
 			}
 
-			&Self::Bearer(token) if let Some(val) = auth => {
+			Self::Bearer(token) if let Some(val) = auth => {
 				let parts: Vec<_> = val.split(':').collect();
 				if parts.len() >= 2 {
-					let val_name = parts.get(0).unwrap().to_string();
+					let val_name = parts.first().unwrap().to_string();
 					let val_value = parts.get(1..).unwrap().join(":");
 					let val_token = val_value
 						.trim()
@@ -59,17 +59,16 @@ impl Authentication {
 						.trim();
 
 					let check_token = token.strip_prefix("Bearer ").unwrap_or(token);
-					val_name.trim().to_lowercase() == "authorization".to_string()
-						&& val_token == check_token
+					val_name.trim().to_lowercase() == "authorization" && val_token == check_token
 				} else {
 					false
 				}
 			}
 
-			&Self::Header { name, value } if let Some(val) = auth => {
+			Self::Header { name, value } if let Some(val) = auth => {
 				let parts: Vec<_> = val.split(':').collect();
 				if parts.len() >= 2 {
-					let val_name = parts.get(0).unwrap().to_string();
+					let val_name = parts.first().unwrap().to_string();
 					let val_value = parts.get(1..).unwrap().join(":");
 
 					*name.to_lowercase() == val_name.trim().to_lowercase()

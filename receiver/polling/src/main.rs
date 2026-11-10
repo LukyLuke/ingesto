@@ -50,11 +50,9 @@ fn main() {
 	parser.run();
 
 	let endpoint = Arc::new(conf.api.clone());
-	match run_scheduler(endpoint, conf.timer.as_str(), queue.clone()) {
-		Err(e) => {
-			error!("{:#?}", e);
-		}
-		Ok(_) => {}
+	let res = run_scheduler(endpoint, conf.timer.as_str(), queue.clone());
+	if let Err(e) = res {
+		error!("{:#?}", e);
 	}
 }
 
@@ -77,27 +75,27 @@ fn run_scheduler(
 	loop {
 		// Run if the next schedule would be in the past already on the next run
 		let now = Utc::now();
-		if let Some(upcoming) = schedule.upcoming(Utc).next() {
-			if upcoming < (now + Duration::seconds(1)) {
-				let queue_t = Arc::clone(&queue);
-				let conf_t = Arc::clone(&conf);
+		if let Some(upcoming) = schedule.upcoming(Utc).next()
+			&& upcoming < (now + Duration::seconds(1))
+		{
+			let queue_t = Arc::clone(&queue);
+			let conf_t = Arc::clone(&conf);
 
-				thread::spawn(move || {
-					for c in conf_t.iter() {
-						debug!(message="polling api", method=%c.method, api=%c.name, auth=%c.auth.as_ref().unwrap_or(&Authentication::None));
+			thread::spawn(move || {
+				for c in conf_t.iter() {
+					debug!(message="polling api", method=%c.method, api=%c.name, auth=%c.auth.as_ref().unwrap_or(&Authentication::None));
 
-						// call_api_internal(req) function sends out the real request (dep-injection for test)
-						// queue_message is for adding the received data to the queue (dep-injection for test)
-						call_api(
-							Arc::new(c),
-							queue_t.clone(),
-							call_api_internal,
-							queue_message_internal,
-						)
-						.ok();
-					}
-				});
-			}
+					// call_api_internal(req) function sends out the real request (dep-injection for test)
+					// queue_message is for adding the received data to the queue (dep-injection for test)
+					call_api(
+						&Arc::new(c),
+						queue_t.clone(),
+						call_api_internal,
+						queue_message_internal,
+					)
+					.ok();
+				}
+			});
 		}
 
 		// Check Cron-Scheduler every second
@@ -106,7 +104,7 @@ fn run_scheduler(
 }
 
 fn call_api(
-	conf: Arc<&types::Endpoint>,
+	conf: &types::Endpoint,
 	queue: Arc<shared::queue::MessageQueue<String>>,
 	send_reqwest: impl Fn(RequestBuilder) -> Result<Response, reqwest::Error>,
 	queue_message: impl Fn(String, Arc<shared::queue::MessageQueue<String>>),
@@ -126,19 +124,17 @@ fn call_api(
 		// Append Paging if available
 		if let Some(pg) = conf.paging.as_ref()
 			&& let Some(param) = pg.param.as_ref()
+			&& !param.name.is_empty()
 		{
-			if !param.name.is_empty() {
-				let page_val =
-					shared::template::template_string(&param.value, Arc::clone(&response));
-				let sep = if uri.find('?').is_some() { "&" } else { "?" };
-				uri = format!(
-					"{}{}{}={}",
-					uri,
-					sep,
-					param.name.as_str(),
-					page_val.as_str()
-				);
-			}
+			let page_val = shared::template::template_string(&param.value, Arc::clone(&response));
+			let sep = if uri.find('?').is_some() { "&" } else { "?" };
+			uri = format!(
+				"{}{}{}={}",
+				uri,
+				sep,
+				param.name.as_str(),
+				page_val.as_str()
+			);
 		}
 		debug!(message="calling api", api=conf.uri, uri=%uri);
 
@@ -156,7 +152,7 @@ fn call_api(
 			Some(Authentication::Header { header, value }) => req.header(
 				header,
 				shared::template::template_string(
-					&secrets_string(&value).unwrap_or_default(),
+					&secrets_string(value).unwrap_or_default(),
 					Arc::clone(&response),
 				),
 			),

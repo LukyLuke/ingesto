@@ -41,11 +41,9 @@ fn main() {
 	start_exporter(conf.clone(), queue.clone());
 
 	let c = Arc::new(conf.listener.clone());
-	match start_otel_listener(c, queue.clone()) {
-		Err(e) => {
-			error!("{:#?}", e);
-		}
-		Ok(_) => {}
+	let res = start_otel_listener(c, queue.clone());
+	if let Err(e) = res {
+		error!("{:#?}", e);
 	}
 }
 

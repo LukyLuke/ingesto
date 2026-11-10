@@ -337,18 +337,18 @@ impl DbAccess for Db {
 		match &self.db {
 			DbBackend::Postgres(pool) => {
 				let builder: QueryBuilder<Postgres> =
-					Self::build_insert_query(table, &DbKind::PostgreSQL, &fields);
-				block_on(Self::execute_postgres(pool, builder, &fields))
+					Self::build_insert_query(table, &DbKind::PostgreSQL, fields);
+				block_on(Self::execute_postgres(pool, builder, fields))
 			}
 			DbBackend::MadiaDb(pool) => {
 				let builder: QueryBuilder<MySql> =
-					Self::build_insert_query(table, &DbKind::PostgreSQL, &fields);
-				block_on(Self::execute_mariadb(pool, builder, &fields))
+					Self::build_insert_query(table, &DbKind::PostgreSQL, fields);
+				block_on(Self::execute_mariadb(pool, builder, fields))
 			}
 			DbBackend::SqLite(pool) => {
 				let builder: QueryBuilder<Sqlite> =
-					Self::build_insert_query(table, &DbKind::PostgreSQL, &fields);
-				block_on(Self::execute_sqlite(pool, builder, &fields))
+					Self::build_insert_query(table, &DbKind::PostgreSQL, fields);
+				block_on(Self::execute_sqlite(pool, builder, fields))
 			}
 		}
 	}

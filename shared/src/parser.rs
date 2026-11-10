@@ -321,11 +321,10 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 
 					types::ParserKind::RAW => {
 						vec![raw.to_owned()]
-					}
-					//_ => {
-					//	error!(message="not implemented parser", parser=%parser.kind.to_string());
-					//	raw.to_owned()
-					//}
+					} //_ => {
+					  //	error!(message="not implemented parser", parser=%parser.kind.to_string());
+					  //	raw.to_owned()
+					  //}
 				}
 			}
 			None => {

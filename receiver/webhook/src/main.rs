@@ -37,11 +37,8 @@ fn main() {
 	parser.run();
 
 	let res = webhook_listener(conf.clone(), queue.clone());
-	match res {
-		Err(e) => {
-			error!("{:#?}", e);
-		}
-		Ok(_) => {}
+	if let Err(e) = res {
+		error!("{:#?}", e);
 	}
 }
 
