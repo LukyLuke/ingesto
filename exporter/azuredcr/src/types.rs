@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use shared::types::{ConfStruct, ConfType};
+use shared::types::{ConfStruct, ConfType, leak_str};
 
 // The main configuration for a Azure DCR Export
 #[cfg(feature = "types")]
@@ -12,7 +12,7 @@ pub struct Config {
 impl From<Config> for ConfStruct {
 	fn from(val: Config) -> Self {
 		ConfStruct::from([
-			("config".to_string(), ConfType::String(Box::leak(val.config.into_boxed_str()))),
+			("config".to_string(), ConfType::String(leak_str(&val.config))),
 		])
 	}
 }

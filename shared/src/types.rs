@@ -90,6 +90,13 @@ impl Serialize for ConfStruct {
 	}
 }
 
+/// Turns a value into a `'static` str, as `ConfType` only holds static strings.
+/// The configuration structure is built once, so the leaked memory is negligible.
+#[cfg(feature = "types")]
+pub fn leak_str(val: &str) -> &'static str {
+	Box::leak(val.to_owned().into_boxed_str())
+}
+
 /// A ConfType represents a type which can be used in a struct and configuration file as a value
 ///
 /// A field is **required** unless it is wrapped in an [`ConfType::Option`]. That includes all fields

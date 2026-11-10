@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use shared::types;
 #[cfg(feature = "types")]
-use shared::types::{ConfStruct, ConfType};
+use shared::types::{ConfStruct, ConfType, leak_str};
 
 // Default-Wrapper Functions for Serde::Deserialize
 fn default_method() -> Method { Method::GET }
@@ -15,17 +15,17 @@ pub struct Config {
 }
 
 #[cfg(feature = "types")]
-impl Into<ConfStruct> for Config {
-	fn into(self) -> ConfStruct {
+impl From<Config> for ConfStruct {
+	fn from(val: Config) -> Self {
 		let mut map = ConfStruct::new();
-		map.insert("config".to_string(), ConfType::Struct(Polling::default().into()));
+		map.insert("config".to_string(), ConfType::Struct(val.config.into()));
 		map
 	}
 }
 
 /// A Polling Configuration
 #[cfg(feature = "types")]
-#[derive(Default, Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct Polling {
 	/// Name of the instance
 	pub name: String,
@@ -47,13 +47,26 @@ pub struct Polling {
 }
 
 #[cfg(feature = "types")]
-impl Into<ConfStruct> for Polling {
-	fn into(self) -> ConfStruct {
+impl Default for Polling {
+	fn default() -> Self {
+		Self {
+			name: String::new(),
+			api: Vec::new(),
+			timer: default_cron_timer(),
+			queue: types::Queue::default(),
+			parser: Vec::new(),
+		}
+	}
+}
+
+#[cfg(feature = "types")]
+impl From<Polling> for ConfStruct {
+	fn from(val: Polling) -> Self {
 		let mut map = ConfStruct::new();
-		map.insert("name".to_string(), ConfType::String(""));
+		map.insert("name".to_string(), ConfType::String(leak_str(&val.name)));
 		map.insert("api".to_string(), ConfType::Vec( Box::new( ConfType::Struct( Endpoint::default().into() ) ) ));
-		map.insert("timer".to_string(), ConfType::Option( Box::new( ConfType::String("* */5 * * * *") ) ));
-		map.insert("queue".to_string(), ConfType::Option( Box::new( ConfType::Struct( types::Queue::default().into() ) ) ));
+		map.insert("timer".to_string(), ConfType::Option( Box::new( ConfType::String(leak_str(&val.timer)) ) ));
+		map.insert("queue".to_string(), ConfType::Option( Box::new( ConfType::Struct( val.queue.into() ) ) ));
 		map.insert("parser".to_string(), ConfType::Option( Box::new( ConfType::Vec( Box::new( ConfType::Struct( types::Parser::default().into() ) ) ) ) ));
 		map
 	}
@@ -94,16 +107,17 @@ pub struct Endpoint {
 }
 
 #[cfg(feature = "types")]
-impl Into<ConfStruct> for Endpoint {
-	fn into(self) -> ConfStruct {
+impl From<Endpoint> for ConfStruct {
+	fn from(val: Endpoint) -> Self {
+		let auth = val.auth.unwrap_or_default();
 		let mut map = ConfStruct::new();
-		map.insert("name".to_string(), ConfType::String(""));
-		map.insert("uri".to_string(), ConfType::String(""));
-		map.insert("body".to_string(), ConfType::Option( Box::new(ConfType::String("")) ));
-		map.insert("method".to_string(), ConfType::Option( Box::new(ConfType::Enum(Method::GET.into(), "GET")) ));
-		map.insert("auth".to_string(), ConfType::Option( Box::new(ConfType::Enum(Authentication::None.into(), "None")) ));
+		map.insert("name".to_string(), ConfType::String(leak_str(&val.name)));
+		map.insert("uri".to_string(), ConfType::String(leak_str(&val.uri)));
+		map.insert("body".to_string(), ConfType::Option( Box::new(ConfType::String(leak_str(val.body.as_deref().unwrap_or_default()))) ));
+		map.insert("method".to_string(), ConfType::Option( Box::new(ConfType::Enum(val.method.clone().into(), val.method.name())) ));
+		map.insert("auth".to_string(), ConfType::Option( Box::new(ConfType::Enum(auth.clone().into(), auth.name())) ));
 		map.insert("header".to_string(), ConfType::Option( Box::new(ConfType::Vec( Box::new(ConfType::Struct( Param::default().into() )) )) ));
-		map.insert("paging".to_string(), ConfType::Option( Box::new(ConfType::Struct( PagingRequest::default().into() )) ));
+		map.insert("paging".to_string(), ConfType::Option( Box::new(ConfType::Struct( val.paging.unwrap_or_default().into() )) ));
 		map
 	}
 }
@@ -120,8 +134,21 @@ pub enum Method {
 }
 
 #[cfg(feature = "types")]
-impl Into<ConfStruct> for Method {
-	fn into(self) -> ConfStruct {
+impl Method {
+	/// The name of the variant as it is written in a configuration file
+	pub fn name(&self) -> &'static str {
+		match self {
+			Self::GET => "GET",
+			Self::POST => "POST",
+			Self::HEAD => "HEAD",
+			Self::OPTION => "OPTION",
+		}
+	}
+}
+
+#[cfg(feature = "types")]
+impl From<Method> for ConfStruct {
+	fn from(_val: Method) -> Self {
 		let mut map = ConfStruct::new();
 		map.insert("GET".to_string(), ConfType::EnumValue);
 		map.insert("POST".to_string(), ConfType::EnumValue);
@@ -154,8 +181,21 @@ pub enum Authentication {
 }
 
 #[cfg(feature = "types")]
-impl Into<ConfStruct> for Authentication {
-	fn into(self) -> ConfStruct {
+impl Authentication {
+	/// The name of the variant as it is written in a configuration file
+	pub fn name(&self) -> &'static str {
+		match self {
+			Self::None => "None",
+			Self::Basic { .. } => "Basic",
+			Self::Bearer(_) => "Bearer",
+			Self::Header { .. } => "Header",
+		}
+	}
+}
+
+#[cfg(feature = "types")]
+impl From<Authentication> for ConfStruct {
+	fn from(_val: Authentication) -> Self {
 		ConfStruct::from([
 			("None".to_string(), ConfType::EnumValue),
 			("Basic".to_string(), ConfType::Struct(ConfStruct::from([
@@ -181,11 +221,11 @@ pub struct Param {
 }
 
 #[cfg(feature = "types")]
-impl Into<ConfStruct> for Param {
-	fn into(self) -> ConfStruct {
+impl From<Param> for ConfStruct {
+	fn from(val: Param) -> Self {
 		ConfStruct::from([
-			("name".to_string(), ConfType::String("")),
-			("value".to_string(), ConfType::String("")),
+			("name".to_string(), ConfType::String(leak_str(&val.name))),
+			("value".to_string(), ConfType::String(leak_str(&val.value))),
 		])
 	}
 }
@@ -214,13 +254,13 @@ pub struct PagingRequest {
 }
 
 #[cfg(feature = "types")]
-impl Into<ConfStruct> for PagingRequest {
-	fn into(self) -> ConfStruct {
+impl From<PagingRequest> for ConfStruct {
+	fn from(val: PagingRequest) -> Self {
 		ConfStruct::from([
-			("param".to_string(), ConfType::Option( Box::new(ConfType::Struct( Param::default().into() )) )),
-			("until".to_string(), ConfType::Option( Box::new(ConfType::Enum(PagingRequestUntil::None.into(), "None")) )),
-			("timeout".to_string(), ConfType::Option( Box::new(ConfType::UInt(0)) )),
-			("max_pages".to_string(), ConfType::Option( Box::new(ConfType::UInt(0)) )),
+			("param".to_string(), ConfType::Option( Box::new(ConfType::Struct( val.param.unwrap_or_default().into() )) )),
+			("until".to_string(), ConfType::Option( Box::new(ConfType::Enum(val.until.clone().into(), val.until.name())) )),
+			("timeout".to_string(), ConfType::Option( Box::new(ConfType::UInt(val.timeout.into())) )),
+			("max_pages".to_string(), ConfType::Option( Box::new(ConfType::UInt(val.max_pages.into())) )),
 		])
 	}
 }
@@ -247,8 +287,22 @@ pub enum PagingRequestUntil {
 }
 
 #[cfg(feature = "types")]
-impl Into<ConfStruct> for PagingRequestUntil {
-	fn into(self) -> ConfStruct {
+impl PagingRequestUntil {
+	/// The name of the variant as it is written in a configuration file
+	pub fn name(&self) -> &'static str {
+		match self {
+			Self::None => "None",
+			Self::Empty => "Empty",
+			Self::StatusCode(_) => "StatusCode",
+			Self::EmptyValue(_) => "EmptyValue",
+			Self::Equals(_, _) => "Equals",
+		}
+	}
+}
+
+#[cfg(feature = "types")]
+impl From<PagingRequestUntil> for ConfStruct {
+	fn from(_val: PagingRequestUntil) -> Self {
 		ConfStruct::from([
 			("None".to_string(), ConfType::EnumValue),
 			("Empty".to_string(), ConfType::EnumValue),
@@ -289,5 +343,85 @@ mod tests {
 	fn endpoint_schema_has_a_required_name_first() {
 		let schema: ConfStruct = Endpoint::default().into();
 		assert_eq!(schema.iter().next().map(|(name, ty)| (name.as_str(), matches!(ty, ConfType::String(_)))), Some(("name", true)));
+	}
+
+	fn string_of(conf: &ConfStruct, name: &str) -> Option<&'static str> {
+		match conf.get(name) {
+			Some(ConfType::String(s)) => Some(s),
+			Some(ConfType::Option(inner)) => match inner.as_ref() {
+				ConfType::String(s) => Some(s),
+				_ => None,
+			},
+			_ => None,
+		}
+	}
+
+	#[test]
+	fn endpoint_schema_uses_values() {
+		let conf: ConfStruct = Endpoint {
+			name: "agents".to_string(),
+			uri: "http://example.org".to_string(),
+			body: Some("{}".to_string()),
+			method: Method::POST,
+			auth: Some(Authentication::Bearer("token".to_string())),
+			header: Vec::new(),
+			paging: Some(PagingRequest { timeout: 250, max_pages: 7, ..PagingRequest::default() }),
+		}.into();
+
+		assert_eq!(string_of(&conf, "name"), Some("agents"));
+		assert_eq!(string_of(&conf, "uri"), Some("http://example.org"));
+		assert_eq!(string_of(&conf, "body"), Some("{}"));
+		assert!(matches!(conf.get("method"), Some(ConfType::Option(inner)) if matches!(inner.as_ref(), ConfType::Enum(_, "POST"))));
+		assert!(matches!(conf.get("auth"), Some(ConfType::Option(inner)) if matches!(inner.as_ref(), ConfType::Enum(_, "Bearer"))));
+
+		let Some(ConfType::Option(paging)) = conf.get("paging") else { panic!("missing paging") };
+		let ConfType::Struct(paging) = paging.as_ref() else { panic!("paging is no struct") };
+		assert_eq!(paging.get("timeout"), Some(&ConfType::Option(Box::new(ConfType::UInt(250)))));
+		assert_eq!(paging.get("max_pages"), Some(&ConfType::Option(Box::new(ConfType::UInt(7)))));
+	}
+
+	#[test]
+	fn endpoint_schema_without_optionals() {
+		let conf: ConfStruct = Endpoint::default().into();
+		assert_eq!(string_of(&conf, "body"), Some(""));
+		assert!(matches!(conf.get("method"), Some(ConfType::Option(inner)) if matches!(inner.as_ref(), ConfType::Enum(_, "GET"))));
+		assert!(matches!(conf.get("auth"), Some(ConfType::Option(inner)) if matches!(inner.as_ref(), ConfType::Enum(_, "None"))));
+	}
+
+	#[test]
+	fn polling_uses_values_and_default_timer() {
+		let conf: ConfStruct = Polling { name: "poller".to_string(), timer: "0 * * * * *".to_string(), ..Polling::default() }.into();
+		assert_eq!(string_of(&conf, "name"), Some("poller"));
+		assert_eq!(string_of(&conf, "timer"), Some("0 * * * * *"));
+
+		let conf: ConfStruct = Polling::default().into();
+		assert_eq!(string_of(&conf, "timer"), Some("* */5 * * * *"));
+	}
+
+	#[test]
+	fn paging_until_names() {
+		assert_eq!(PagingRequestUntil::None.name(), "None");
+		assert_eq!(PagingRequestUntil::StatusCode(200).name(), "StatusCode");
+		assert_eq!(PagingRequestUntil::Equals("a".to_string(), "b".to_string()).name(), "Equals");
+
+		let conf: ConfStruct = PagingRequest { until: PagingRequestUntil::Empty, ..PagingRequest::default() }.into();
+		assert!(matches!(conf.get("until"), Some(ConfType::Option(inner)) if matches!(inner.as_ref(), ConfType::Enum(_, "Empty"))));
+	}
+
+	#[test]
+	fn param_uses_values() {
+		let conf: ConfStruct = Param { name: "cursor".to_string(), value: "{{ $response/paging/cursor }}".to_string() }.into();
+		assert_eq!(string_of(&conf, "name"), Some("cursor"));
+		assert_eq!(string_of(&conf, "value"), Some("{{ $response/paging/cursor }}"));
+	}
+
+	#[test]
+	fn authentication_does_not_expose_secrets() {
+		let auth = Authentication::Header { header: "X-Key".to_string(), value: "secret".to_string() };
+		assert_eq!(auth.name(), "Header");
+
+		let conf: ConfStruct = auth.into();
+		let Some(ConfType::Struct(header)) = conf.get("Header") else { panic!("missing Header variant") };
+		assert_eq!(string_of(header, "value"), Some(""));
 	}
 }

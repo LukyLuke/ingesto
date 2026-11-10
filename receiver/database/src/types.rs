@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use shared::types::{ConfStruct, ConfType};
+use shared::types::{ConfStruct, ConfType, leak_str};
 
 // The main configuration for a Azure DCR Export
 #[cfg(feature = "types")]
@@ -9,10 +9,27 @@ pub struct Config {
 }
 
 #[cfg(feature = "types")]
-impl Into<ConfStruct> for Config {
-	fn into(self) -> ConfStruct {
+impl From<Config> for ConfStruct {
+	fn from(val: Config) -> Self {
 		ConfStruct::from([
-			("config".to_string(), ConfType::String("not yet implemented")),
+			("config".to_string(), ConfType::String(leak_str(&val.config))),
 		])
+	}
+}
+
+#[cfg(all(test, feature = "types"))]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn test_config_uses_value() {
+		let conf: ConfStruct = Config { config: "some value".to_string() }.into();
+		assert_eq!(conf.get("config"), Some(&ConfType::String("some value")));
+	}
+
+	#[test]
+	fn test_config_empty_value() {
+		let conf: ConfStruct = Config::default().into();
+		assert_eq!(conf.get("config"), Some(&ConfType::String("")));
 	}
 }

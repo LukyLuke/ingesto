@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use shared::types::{Parser, Queue};
-use shared::types::{ConfStruct, ConfType};
+use shared::types::{ConfStruct, ConfType, leak_str};
 
 // Default-Wrapper Functions for Serde::Deserialize
 fn default_path() -> String { "/".to_string() }
@@ -16,10 +16,10 @@ pub struct Config {
 }
 
 #[cfg(feature = "types")]
-impl Into<ConfStruct> for Config {
-	fn into(self) -> ConfStruct {
+impl From<Config> for ConfStruct {
+	fn from(val: Config) -> Self {
 		ConfStruct::from([
-			("config".to_string(), ConfType::Struct(Webhook::default().into())),
+			("config".to_string(), ConfType::Struct(val.config.into())),
 		])
 	}
 }
@@ -48,13 +48,13 @@ pub struct Webhook {
 }
 
 #[cfg(feature = "types")]
-impl Into<ConfStruct> for Webhook {
-	fn into(self) -> ConfStruct {
+impl From<Webhook> for ConfStruct {
+	fn from(val: Webhook) -> Self {
 		ConfStruct::from([
-			("name".to_string(), ConfType::String("")),
-			("listen".to_string(), ConfType::Struct( Server::default().into() )),
+			("name".to_string(), ConfType::String(leak_str(&val.name))),
+			("listen".to_string(), ConfType::Struct( val.listen.into() )),
 			("routes".to_string(), ConfType::Option( Box::new( ConfType::Vec( Box::new( ConfType::Struct( Route::default().into() ) ) ) ) )),
-			("queue".to_string(), ConfType::Option( Box::new( ConfType::Struct( Queue::default().into() ) ) )),
+			("queue".to_string(), ConfType::Option( Box::new( ConfType::Struct( val.queue.into() ) ) )),
 			("parser".to_string(), ConfType::Option( Box::new( ConfType::Vec( Box::new( ConfType::Struct( Parser::default().into() ) ) ) ) )),
 		])
 	}
@@ -62,7 +62,7 @@ impl Into<ConfStruct> for Webhook {
 
 /// Server Listener Configuration
 #[cfg(feature = "types")]
-#[derive(Default, Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct Server {
 	/// Address to listen on: '0.0.0.0'
 	pub address: String,
@@ -80,11 +80,21 @@ impl Server {
 }
 
 #[cfg(feature = "types")]
-impl Into<ConfStruct> for Server {
-	fn into(self) -> ConfStruct {
+impl Default for Server {
+	fn default() -> Self {
+		Self {
+			address: String::from("0.0.0.0"),
+			port: default_port(),
+		}
+	}
+}
+
+#[cfg(feature = "types")]
+impl From<Server> for ConfStruct {
+	fn from(val: Server) -> Self {
 		ConfStruct::from([
-			("address".to_string(), ConfType::String("0.0.0.0")),
-			("port".to_string(), ConfType::Option( Box::new( ConfType::UInt( default_port().into() ) ) )),
+			("address".to_string(), ConfType::String(leak_str(&val.address))),
+			("port".to_string(), ConfType::Option( Box::new( ConfType::UInt( val.port.into() ) ) )),
 		])
 	}
 }
@@ -92,7 +102,7 @@ impl Into<ConfStruct> for Server {
 
 /// A Route-Configuration for a Webhook/Webserver
 #[cfg(feature = "types")]
-#[derive(Default, Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct Route {
 	/// Path where to listen
 	#[serde(default = "default_path")]
@@ -108,12 +118,24 @@ pub struct Route {
 }
 
 #[cfg(feature = "types")]
-impl Into<ConfStruct> for Route {
-	fn into(self) -> ConfStruct {
+impl Default for Route {
+	fn default() -> Self {
+		Self {
+			path: default_path(),
+			kind: default_kind(),
+			auth: None,
+		}
+	}
+}
+
+#[cfg(feature = "types")]
+impl From<Route> for ConfStruct {
+	fn from(val: Route) -> Self {
+		let auth = val.auth.unwrap_or_default();
 		ConfStruct::from([
-			("path".to_string(), ConfType::Option( Box::new( ConfType::String("/") ) )),
-			("kind".to_string(), ConfType::Option( Box::new( ConfType::String("POST") ) )),
-			("auth".to_string(), ConfType::Option( Box::new( ConfType::Enum(Authentication::None.into(), "None") ) )),
+			("path".to_string(), ConfType::Option( Box::new( ConfType::String(leak_str(&val.path)) ) )),
+			("kind".to_string(), ConfType::Option( Box::new( ConfType::String(leak_str(&val.kind)) ) )),
+			("auth".to_string(), ConfType::Option( Box::new( ConfType::Enum(auth.clone().into(), auth.name()) ) )),
 		])
 	}
 }
@@ -141,8 +163,21 @@ pub enum Authentication {
 }
 
 #[cfg(feature = "types")]
-impl Into<ConfStruct> for Authentication {
-	fn into(self) -> ConfStruct {
+impl Authentication {
+	/// The name of the variant as it is written in a configuration file
+	pub fn name(&self) -> &'static str {
+		match self {
+			Self::None => "None",
+			Self::Basic { .. } => "Basic",
+			Self::Bearer(_) => "Bearer",
+			Self::Header { .. } => "Header",
+		}
+	}
+}
+
+#[cfg(feature = "types")]
+impl From<Authentication> for ConfStruct {
+	fn from(_val: Authentication) -> Self {
 		ConfStruct::from([
 			("None".to_string(), ConfType::EnumValue),
 			("Basic".to_string(), ConfType::Struct(ConfStruct::from([
@@ -155,5 +190,76 @@ impl Into<ConfStruct> for Authentication {
 				("value".to_string(), ConfType::String("")),
 			]))),
 		])
+	}
+}
+
+#[cfg(all(test, feature = "types"))]
+mod tests {
+	use super::*;
+
+	fn string_of(conf: &ConfStruct, name: &str) -> Option<&'static str> {
+		match conf.get(name) {
+			Some(ConfType::String(s)) => Some(s),
+			Some(ConfType::Option(inner)) => match inner.as_ref() {
+				ConfType::String(s) => Some(s),
+				_ => None,
+			},
+			_ => None,
+		}
+	}
+
+	#[test]
+	fn test_server_uses_values() {
+		let conf: ConfStruct = Server { address: "127.0.0.1".to_string(), port: 9000 }.into();
+		assert_eq!(string_of(&conf, "address"), Some("127.0.0.1"));
+		assert_eq!(conf.get("port"), Some(&ConfType::Option(Box::new(ConfType::UInt(9000)))));
+	}
+
+	#[test]
+	fn test_server_default_values() {
+		let conf: ConfStruct = Server::default().into();
+		assert_eq!(string_of(&conf, "address"), Some("0.0.0.0"));
+		assert_eq!(conf.get("port"), Some(&ConfType::Option(Box::new(ConfType::UInt(8080)))));
+	}
+
+	#[test]
+	fn test_route_uses_values() {
+		let conf: ConfStruct = Route {
+			path: "/hook".to_string(),
+			kind: "GET".to_string(),
+			auth: Some(Authentication::Bearer("token".to_string())),
+		}.into();
+		assert_eq!(string_of(&conf, "path"), Some("/hook"));
+		assert_eq!(string_of(&conf, "kind"), Some("GET"));
+		assert!(matches!(conf.get("auth"), Some(ConfType::Option(inner)) if matches!(inner.as_ref(), ConfType::Enum(_, "Bearer"))));
+	}
+
+	#[test]
+	fn test_route_default_values() {
+		let conf: ConfStruct = Route::default().into();
+		assert_eq!(string_of(&conf, "path"), Some("/"));
+		assert_eq!(string_of(&conf, "kind"), Some("POST"));
+		assert!(matches!(conf.get("auth"), Some(ConfType::Option(inner)) if matches!(inner.as_ref(), ConfType::Enum(_, "None"))));
+	}
+
+	#[test]
+	fn test_authentication_does_not_expose_secrets() {
+		let auth = Authentication::Basic { user: "me".to_string(), pass: "secret".to_string() };
+		assert_eq!(auth.name(), "Basic");
+
+		let conf: ConfStruct = auth.into();
+		let Some(ConfType::Struct(basic)) = conf.get("Basic") else { panic!("missing Basic variant") };
+		assert_eq!(string_of(basic, "user"), Some(""));
+		assert_eq!(string_of(basic, "pass"), Some(""));
+	}
+
+	#[test]
+	fn test_webhook_uses_nested_values() {
+		let conf: ConfStruct = Config {
+			config: Webhook { name: "hook".to_string(), ..Webhook::default() },
+		}.into();
+
+		let Some(ConfType::Struct(webhook)) = conf.get("config") else { panic!("missing config struct") };
+		assert_eq!(string_of(webhook, "name"), Some("hook"));
 	}
 }

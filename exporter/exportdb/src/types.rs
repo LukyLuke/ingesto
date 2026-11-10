@@ -1,18 +1,11 @@
 use serde::{Deserialize, Serialize};
 use shared::types::{DbField, OtelReceiver, Queue};
-use shared::types::{ConfStruct, ConfType};
+use shared::types::{ConfStruct, ConfType, leak_str};
 
 // Default-Wrapper Functions for Serde::Deserialize
 pub(crate) fn default_for_messages() -> String { String::from(".*") }
 pub(crate) fn default_postgres_port() -> u16 { 5432 }
 pub(crate) fn default_ssl_mode() -> SslMode { SslMode::Disable }
-
-/// Turns a value into a `'static` str, as `ConfType` only holds static strings.
-/// The configuration structure is built once, so the leaked memory is negligible.
-#[cfg(feature = "types")]
-fn leak(val: &str) -> &'static str {
-	Box::leak(val.to_owned().into_boxed_str())
-}
 
 
 // The main configuration for a Database
@@ -55,7 +48,7 @@ pub struct DbConf {
 impl From<DbConf> for ConfStruct {
 	fn from(val: DbConf) -> Self {
 		ConfStruct::from([
-			("name".to_string(), ConfType::String(leak(&val.name))),
+			("name".to_string(), ConfType::String(leak_str(&val.name))),
 			("listener".to_string(), ConfType::Option( Box::new(ConfType::Struct(val.listener.into())) )),
 			("database".to_string(), ConfType::Option( Box::new(ConfType::Struct(val.database.into())) )),
 			("queue".to_string(), ConfType::Option( Box::new(ConfType::Struct(val.queue.into())) )),
@@ -90,7 +83,7 @@ pub struct Database {
 impl From<Database> for ConfStruct {
 	fn from(val: Database) -> Self {
 		ConfStruct::from([
-			("database".to_string(), ConfType::String(leak(&val.database))),
+			("database".to_string(), ConfType::String(leak_str(&val.database))),
 			("kind".to_string(), ConfType::Enum( val.kind.clone().into(), val.kind.name() )),
 			("tables".to_string(), ConfType::Option( Box::new(ConfType::Vec( Box::new(ConfType::Struct( DbTable::default().into() )) )) )),
 			("auth".to_string(), ConfType::Option( Box::new(ConfType::Enum( val.auth.clone().into(), val.auth.name() )) )),
@@ -186,12 +179,12 @@ impl Default for Connection {
 impl From<Connection> for ConfStruct {
 	fn from(val: Connection) -> Self {
 		ConfStruct::from([
-			("host".to_string(), ConfType::String(leak(&val.host))),
+			("host".to_string(), ConfType::String(leak_str(&val.host))),
 			("port".to_string(), ConfType::Option( Box::new(ConfType::UInt( val.port.into() )) )),
 			("ssl_mode".to_string(), ConfType::Option( Box::new(ConfType::Enum( val.ssl_mode.clone().into(), val.ssl_mode.name() )) )),
-			("root_cert".to_string(), ConfType::Option( Box::new(ConfType::String(leak(val.root_cert.as_deref().unwrap_or_default()))) )),
-			("ssl_cert".to_string(), ConfType::Option( Box::new(ConfType::String(leak(val.ssl_cert.as_deref().unwrap_or_default()))) )),
-			("ssl_key".to_string(), ConfType::Option( Box::new(ConfType::String(leak(val.ssl_key.as_deref().unwrap_or_default()))) )),
+			("root_cert".to_string(), ConfType::Option( Box::new(ConfType::String(leak_str(val.root_cert.as_deref().unwrap_or_default()))) )),
+			("ssl_cert".to_string(), ConfType::Option( Box::new(ConfType::String(leak_str(val.ssl_cert.as_deref().unwrap_or_default()))) )),
+			("ssl_key".to_string(), ConfType::Option( Box::new(ConfType::String(leak_str(val.ssl_key.as_deref().unwrap_or_default()))) )),
 		])
 	}
 }
@@ -315,8 +308,8 @@ impl Default for DbTable {
 impl From<DbTable> for ConfStruct {
 	fn from(val: DbTable) -> Self {
 		ConfStruct::from([
-			("name".to_string(), ConfType::String(leak(&val.name))),
-			("for_messages".to_string(), ConfType::Option( Box::new(ConfType::RegEx(leak(&val.for_messages))) )),
+			("name".to_string(), ConfType::String(leak_str(&val.name))),
+			("for_messages".to_string(), ConfType::Option( Box::new(ConfType::RegEx(leak_str(&val.for_messages))) )),
 			("fields".to_string(), ConfType::Option( Box::new(ConfType::Vec( Box::new( DbField::conf_type() )) ) )),
 		])
 	}
