@@ -86,7 +86,7 @@ impl Template {
 	///
 	/// * `$uuid` - A simple UUID-v4.
 	/// * `$now(FORMAT)` - The current Date/Time. If `FORMAT` is not given, the value `%Y-%m-%d` is used.
-	/// * `$date(DATE#FORMAT)` - The Date/Time value given in `DATE` or the current DateTime value (now). If `FORMAT` is not given, the value `%Y-%m-%d` is used.
+	/// * `$date(DATE#FORMAT)` - The Date/Time value given in `DATE`, a response value like `$response/JSON/POINTER` or the current DateTime value (now). If `FORMAT` is not given, the value `%Y-%m-%d` is used.
 	/// * `$response/JSON/POINTER` - A JSON-Pointer value which is evaluated against the value given in `render(value)`. The format is `/key/key` for objects and in case of array indexes like `/key/0/key/33`.
 	///
 	/// Every Token is encapsulated in `{{ ... }}`.
@@ -222,12 +222,9 @@ impl Template {
 
 							} else {
 								// Check the result for a DateTime value, parse it and use the UTC value
-								let date_val = if d.get(0..4).unwrap_or_default() == "$res" {
-									// TODO: implement $date($response/foo/bar#%Y-%m-%d)
-									// Enable `test_render_date_result()` afterwards
-									d.to_owned()
-								} else {
-									d.to_owned()
+								let date_val = match d.strip_prefix("$response") {
+									Some(json_path) => value.pointer(json_path).map(json_to_string).unwrap_or_default(),
+									None => d.to_owned(),
 								};
 
 								// Try to parse a normal date in one of the most common formats,
@@ -256,12 +253,7 @@ impl Template {
 
 						// Value from the last response
 						ParamParser::Response(json_path) => {
-							match value.pointer(json_path.as_str()).unwrap_or(&Value::Null) {
-								Value::Bool(v) => v.to_string(),
-								Value::Number(v) => v.as_f64().unwrap_or(0.0).to_string(),
-								Value::String(v) => if v == "null" { String::new() } else { v.clone() },
-								_ => String::new()
-							}
+							value.pointer(json_path.as_str()).map(json_to_string).unwrap_or_default()
 						},
 
 						// Just a static value
@@ -277,6 +269,17 @@ impl Template {
 	}
 }
 
+
+/// Converts a scalar JSON-Value into its string representation.
+/// Objects, arrays, `null` and the string `"null"` result in an empty string.
+fn json_to_string(value: &Value) -> String {
+	match value {
+		Value::Bool(v) => v.to_string(),
+		Value::Number(v) => v.as_f64().unwrap_or(0.0).to_string(),
+		Value::String(v) if v != "null" => v.clone(),
+		_ => String::new(),
+	}
+}
 
 /// Represents a static string or a token which has to be evaluated
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -476,7 +479,6 @@ mod tests {
 	}
 
 	#[test]
-	#[ignore]
 	fn test_render_date_result() {
 		let tpl = Template::parse("Response:{{ $date($response/data/foo) }}; Date-dmY:{{ $date($response/data/foo#%d-%m-%Y) }};");
 		let params = Arc::new(
@@ -484,7 +486,45 @@ mod tests {
 		);
 
 		let res = tpl.render(params);
-		assert_eq!(res, String::from("Response:2008-10-12; Date-dmY: 12-10-2008"));
+		assert_eq!(res, String::from("Response:2008-10-12; Date-dmY:12-10-2008;"));
+	}
+
+	#[test]
+	fn test_render_date_result_iso8601() {
+		let tpl = Template::parse("{{ $date($response/data/foo#iso8601) }}");
+		let params = Arc::new(json!({ "data":{ "foo": "2008-10-12T10:12:14Z" } }));
+
+		let res = tpl.render(params);
+		assert_eq!(res, "2008-10-12T10:12:14.000000+00:00");
+	}
+
+	#[test]
+	fn test_render_date_result_unix_timestamp() {
+		let tpl = Template::parse("{{ $date($response/data/foo#%Y-%m-%d %H:%M:%S) }}");
+		let params = Arc::new(json!({ "data":{ "foo": 1223806334 } }));
+
+		let res = tpl.render(params);
+		assert_eq!(res, "2008-10-12 10:12:14");
+	}
+
+	#[test]
+	fn test_render_date_result_missing_falls_back_to_now() {
+		let tpl = Template::parse("{{ $date($response/data/missing) }}|{{ $date($response/data#%Y) }}");
+		let params = Arc::new(json!({ "data":{ "foo": "2008-10-12" } }));
+		let now = Zoned::now().with_time_zone(TimeZone::UTC);
+
+		let res = tpl.render(params);
+		assert_eq!(res, format!("{}|{}", now.strftime("%Y-%m-%d"), now.strftime("%Y")));
+	}
+
+	#[test]
+	fn test_render_date_result_invalid_falls_back_to_now() {
+		let tpl = Template::parse("{{ $date($response/data/foo) }}");
+		let params = Arc::new(json!({ "data":{ "foo": "not a date" } }));
+		let now = Zoned::now().with_time_zone(TimeZone::UTC);
+
+		let res = tpl.render(params);
+		assert_eq!(res, now.strftime("%Y-%m-%d").to_string());
 	}
 
 	#[test]
