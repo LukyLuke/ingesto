@@ -1,12 +1,16 @@
-pub mod types;
 pub mod config;
+pub mod types;
 
 use anyhow::Context;
-use notify::{self, RecursiveMode, Watcher, Event, Result};
-use shared::{self, init_logging, usage, parser::MessageParser, queue::MessageQueue};
-use std::{ fs::{self, File, metadata}, io::{BufRead, BufReader, Seek, SeekFrom}, sync::{Arc, mpsc}, time::Duration };
+use notify::{self, Event, RecursiveMode, Result, Watcher};
+use shared::{self, init_logging, parser::MessageParser, queue::MessageQueue, usage};
+use std::{
+	fs::{self, File, metadata},
+	io::{BufRead, BufReader, Seek, SeekFrom},
+	sync::{Arc, mpsc},
+	time::Duration,
+};
 use tracing::{debug, error, info};
-
 
 fn main() {
 	init_logging();
@@ -15,7 +19,7 @@ fn main() {
 		Ok(file) => file,
 		Err(e) => {
 			error!(%e);
-			return
+			return;
 		}
 	};
 
@@ -30,7 +34,11 @@ fn main() {
 
 	info!(message="starting", name=%conf.name);
 	let queue = Arc::new(MessageQueue::<String>::new());
-	let parser = Arc::new(MessageParser::<String>::new(queue.clone(), conf.queue.clone(), conf.parser.clone()));
+	let parser = Arc::new(MessageParser::<String>::new(
+		queue.clone(),
+		conf.queue.clone(),
+		conf.parser.clone(),
+	));
 	parser.run();
 
 	let conf_file = &conf.file;
@@ -41,12 +49,15 @@ fn main() {
 	match res {
 		Err(e) => {
 			error!("{:#?}", e);
-		},
+		}
 		Ok(_) => {}
 	}
 }
 
-fn start_follow_listener(conf: &types::File, queue: Arc<shared::queue::MessageQueue<String>>) -> anyhow::Result<()> {
+fn start_follow_listener(
+	conf: &types::File,
+	queue: Arc<shared::queue::MessageQueue<String>>,
+) -> anyhow::Result<()> {
 	// open the file and set the position to the end of the file
 	let mut file = File::open(&conf.path)?;
 	let mut pos = metadata(&conf.path)?.len();
@@ -73,7 +84,7 @@ fn start_follow_listener(conf: &types::File, queue: Arc<shared::queue::MessageQu
 					debug!(message="data received", data=%data);
 					queue.push(data);
 				}
-			},
+			}
 			Err(e) => {
 				error!("{:#?}", e)
 			}
@@ -83,11 +94,15 @@ fn start_follow_listener(conf: &types::File, queue: Arc<shared::queue::MessageQu
 	Ok(())
 }
 
-fn start_full_listener(conf: &types::File, queue: Arc<shared::queue::MessageQueue<String>>) -> anyhow::Result<()> {
+fn start_full_listener(
+	conf: &types::File,
+	queue: Arc<shared::queue::MessageQueue<String>>,
+) -> anyhow::Result<()> {
 	let interval = Duration::from_secs_f32(conf.interval);
 	info!(message="listener started", file=conf.path.to_str(), interval=%conf.interval);
 	loop {
-		let content = fs::read_to_string(&conf.path).with_context(|| format!("reading file {}", &conf.path.display()))?;
+		let content = fs::read_to_string(&conf.path)
+			.with_context(|| format!("reading file {}", &conf.path.display()))?;
 		for line in content.lines() {
 			debug!(message="data received", data=%line);
 			queue.push(line.to_string());

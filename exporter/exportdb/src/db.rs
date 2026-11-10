@@ -5,8 +5,10 @@ use std::sync::Arc;
 use anyhow::{Result, anyhow};
 use futures::executor::block_on;
 use shared::{self, types::DbValue};
-use sqlx::{Connection, Database, MySql, MySqlPool, PgPool, Postgres, QueryBuilder, Sqlite, SqlitePool};
-use tracing::{info, error};
+use sqlx::{
+	Connection, Database, MySql, MySqlPool, PgPool, Postgres, QueryBuilder, Sqlite, SqlitePool,
+};
+use tracing::{error, info};
 
 static ERR_NO_CONN: &str = "unable to acquire a db connection";
 static ERR_NOT_REACHABLE: &str = "database not reachable:";
@@ -53,23 +55,23 @@ impl Db {
 	pub fn new(conf: Arc<DbConf>) -> Self {
 		info!(message="initialize database connection", kind=%conf.database.kind);
 		match conf.database.kind {
-			DbKind::PostgreSQL => {
-				Self {
-					tables: conf.database.tables.clone(),
-					db: DbBackend::Postgres(PgPool::connect_lazy_with(conf.database.get_postgres_options())),
-				}
+			DbKind::PostgreSQL => Self {
+				tables: conf.database.tables.clone(),
+				db: DbBackend::Postgres(PgPool::connect_lazy_with(
+					conf.database.get_postgres_options(),
+				)),
 			},
-			DbKind::MariaDB => {
-				Self {
-					tables: conf.database.tables.clone(),
-					db: DbBackend::MadiaDb(MySqlPool::connect_lazy_with(conf.database.get_mysql_options())),
-				}
+			DbKind::MariaDB => Self {
+				tables: conf.database.tables.clone(),
+				db: DbBackend::MadiaDb(MySqlPool::connect_lazy_with(
+					conf.database.get_mysql_options(),
+				)),
 			},
-			DbKind::SQLite => {
-				Self {
-					tables: conf.database.tables.clone(),
-					db: DbBackend::SqLite(SqlitePool::connect_lazy_with(conf.database.get_sqlite_options())),
-				}
+			DbKind::SQLite => Self {
+				tables: conf.database.tables.clone(),
+				db: DbBackend::SqLite(SqlitePool::connect_lazy_with(
+					conf.database.get_sqlite_options(),
+				)),
 			},
 		}
 	}
@@ -96,17 +98,32 @@ impl Db {
 	pub async fn alive(&self) -> Result<()> {
 		match &self.db {
 			DbBackend::Postgres(pool) => {
-				let mut conn = pool.acquire().await.map_err(|e| anyhow!("{}: {:?}", ERR_NO_CONN, e))?;
-				conn.ping().await.map_err(|e| anyhow!("{}: {:?}", ERR_NOT_REACHABLE, e))
-			},
+				let mut conn = pool
+					.acquire()
+					.await
+					.map_err(|e| anyhow!("{}: {:?}", ERR_NO_CONN, e))?;
+				conn.ping()
+					.await
+					.map_err(|e| anyhow!("{}: {:?}", ERR_NOT_REACHABLE, e))
+			}
 			DbBackend::MadiaDb(pool) => {
-				let mut conn = pool.acquire().await.map_err(|e| anyhow!("{}: {:?}", ERR_NO_CONN, e))?;
-				conn.ping().await.map_err(|e| anyhow!("{}: {:?}", ERR_NOT_REACHABLE, e))
-			},
+				let mut conn = pool
+					.acquire()
+					.await
+					.map_err(|e| anyhow!("{}: {:?}", ERR_NO_CONN, e))?;
+				conn.ping()
+					.await
+					.map_err(|e| anyhow!("{}: {:?}", ERR_NOT_REACHABLE, e))
+			}
 			DbBackend::SqLite(pool) => {
-				let mut conn = pool.acquire().await.map_err(|e| anyhow!("{}: {:?}", ERR_NO_CONN, e))?;
-				conn.ping().await.map_err(|e| anyhow!("{}: {:?}", ERR_NOT_REACHABLE, e))
-			},
+				let mut conn = pool
+					.acquire()
+					.await
+					.map_err(|e| anyhow!("{}: {:?}", ERR_NO_CONN, e))?;
+				conn.ping()
+					.await
+					.map_err(|e| anyhow!("{}: {:?}", ERR_NOT_REACHABLE, e))
+			}
 		}
 	}
 
@@ -122,8 +139,15 @@ impl Db {
 	///
 	/// An INSERT-QueryBuilder with all fields set.
 	/// The Query after this looks like 'INSERT INTO `table` (`fld1`,`fld2`,...) VALUES '
-	fn build_insert_query<DB: Database>(table: &str, kind: &DbKind, fields: &[(String, DbValue)]) -> QueryBuilder::<DB> {
-		let mut builder = QueryBuilder::<DB>::new(format!("INSERT INTO {} (", Self::quoted_field_format(kind, table)));
+	fn build_insert_query<DB: Database>(
+		table: &str,
+		kind: &DbKind,
+		fields: &[(String, DbValue)],
+	) -> QueryBuilder<DB> {
+		let mut builder = QueryBuilder::<DB>::new(format!(
+			"INSERT INTO {} (",
+			Self::quoted_field_format(kind, table)
+		));
 		let mut sep = builder.separated(",");
 		for (field, _) in fields {
 			sep.push(Self::quoted_field_format(kind, field));
@@ -163,7 +187,11 @@ impl Db {
 	/// # Returns
 	///
 	/// An Ok if everything went well, otherwise an Error for the Database
-	async fn execute_postgres(pool: &PgPool, mut builder: QueryBuilder<Postgres>, fields: &[(String, DbValue)]) -> Result<()> {
+	async fn execute_postgres(
+		pool: &PgPool,
+		mut builder: QueryBuilder<Postgres>,
+		fields: &[(String, DbValue)],
+	) -> Result<()> {
 		Self::build_postgres_insert(&mut builder, fields);
 		builder.build().execute(pool).await?;
 		Ok(())
@@ -204,7 +232,11 @@ impl Db {
 	/// # Returns
 	///
 	/// An Ok if everything went well, otherwise an Error for the Database
-	async fn execute_mariadb(pool: &MySqlPool, mut builder: QueryBuilder<MySql>, fields: &[(String, DbValue)]) -> Result<()> {
+	async fn execute_mariadb(
+		pool: &MySqlPool,
+		mut builder: QueryBuilder<MySql>,
+		fields: &[(String, DbValue)],
+	) -> Result<()> {
 		Self::build_mariadb_insert(&mut builder, fields);
 		builder.build().execute(pool).await?;
 		Ok(())
@@ -245,7 +277,11 @@ impl Db {
 	/// # Returns
 	///
 	/// An Ok if everything went well, otherwise an Error for the Database
-	async fn execute_sqlite(pool: &SqlitePool, mut builder: QueryBuilder<Sqlite>, fields: &[(String, DbValue)]) -> Result<()> {
+	async fn execute_sqlite(
+		pool: &SqlitePool,
+		mut builder: QueryBuilder<Sqlite>,
+		fields: &[(String, DbValue)],
+	) -> Result<()> {
 		Self::build_sqlite_insert(&mut builder, fields);
 		builder.build().execute(pool).await?;
 		Ok(())
@@ -300,17 +336,20 @@ impl DbAccess for Db {
 	fn insert(&self, table: &str, fields: &[(String, DbValue)]) -> Result<()> {
 		match &self.db {
 			DbBackend::Postgres(pool) => {
-				let builder: QueryBuilder<Postgres> = Self::build_insert_query(table, &DbKind::PostgreSQL, &fields);
+				let builder: QueryBuilder<Postgres> =
+					Self::build_insert_query(table, &DbKind::PostgreSQL, &fields);
 				block_on(Self::execute_postgres(pool, builder, &fields))
-			},
+			}
 			DbBackend::MadiaDb(pool) => {
-				let builder: QueryBuilder<MySql> = Self::build_insert_query(table, &DbKind::PostgreSQL, &fields);
+				let builder: QueryBuilder<MySql> =
+					Self::build_insert_query(table, &DbKind::PostgreSQL, &fields);
 				block_on(Self::execute_mariadb(pool, builder, &fields))
-			},
+			}
 			DbBackend::SqLite(pool) => {
-				let builder: QueryBuilder<Sqlite> = Self::build_insert_query(table, &DbKind::PostgreSQL, &fields);
+				let builder: QueryBuilder<Sqlite> =
+					Self::build_insert_query(table, &DbKind::PostgreSQL, &fields);
 				block_on(Self::execute_sqlite(pool, builder, &fields))
-			},
+			}
 		}
 	}
 }
@@ -338,28 +377,39 @@ mod test {
 	#[test]
 	fn test_build_insert_query() {
 		let table = "table_name";
-		let fields = vec!(
+		let fields = vec![
 			("foo".to_string(), DbValue::String("foo foo".to_string())),
 			("bar".to_string(), DbValue::String("bar bar".to_string())),
-		);
+		];
 
-		let postgres: QueryBuilder<Postgres> = Db::build_insert_query(table, &DbKind::PostgreSQL, &fields);
+		let postgres: QueryBuilder<Postgres> =
+			Db::build_insert_query(table, &DbKind::PostgreSQL, &fields);
 		let mariadb: QueryBuilder<MySql> = Db::build_insert_query(table, &DbKind::MariaDB, &fields);
 		let sqlite: QueryBuilder<Sqlite> = Db::build_insert_query(table, &DbKind::SQLite, &fields);
 
-		assert_eq!(postgres.into_string(), "INSERT INTO \"table_name\" (\"foo\",\"bar\") VALUES ");
-		assert_eq!(mariadb.into_string(), "INSERT INTO `table_name` (`foo`,`bar`) VALUES ");
-		assert_eq!(sqlite.into_string(), "INSERT INTO \"table_name\" (\"foo\",\"bar\") VALUES ");
+		assert_eq!(
+			postgres.into_string(),
+			"INSERT INTO \"table_name\" (\"foo\",\"bar\") VALUES "
+		);
+		assert_eq!(
+			mariadb.into_string(),
+			"INSERT INTO `table_name` (`foo`,`bar`) VALUES "
+		);
+		assert_eq!(
+			sqlite.into_string(),
+			"INSERT INTO \"table_name\" (\"foo\",\"bar\") VALUES "
+		);
 	}
 
 	#[test]
 	fn test_build_postgres_insert() {
 		let table = "table_name";
-		let fields = vec!(
+		let fields = vec![
 			("foo".to_string(), DbValue::String("foo foo".to_string())),
 			("bar".to_string(), DbValue::String("bar bar".to_string())),
-		);
-		let mut builder: QueryBuilder<Postgres> = Db::build_insert_query(table, &DbKind::PostgreSQL, &fields);
+		];
+		let mut builder: QueryBuilder<Postgres> =
+			Db::build_insert_query(table, &DbKind::PostgreSQL, &fields);
 
 		Db::build_postgres_insert(&mut builder, &fields);
 		let mut query = builder.build();
@@ -367,18 +417,22 @@ mod test {
 
 		// Test the SQL, Sql-Flavor (escaping)
 		// Test only for the number of Arguments - not possible to fetch them
-		assert_eq!(query.sql().as_str(), "INSERT INTO \"table_name\" (\"foo\",\"bar\") VALUES ($1,$2)");
+		assert_eq!(
+			query.sql().as_str(),
+			"INSERT INTO \"table_name\" (\"foo\",\"bar\") VALUES ($1,$2)"
+		);
 		assert_eq!(args.len(), 2);
 	}
 
 	#[test]
 	fn test_build_mariadb_insert() {
 		let table = "table_name";
-		let fields = vec!(
+		let fields = vec![
 			("foo".to_string(), DbValue::String("foo foo".to_string())),
 			("bar".to_string(), DbValue::String("bar bar".to_string())),
-		);
-		let mut builder: QueryBuilder<MySql> = Db::build_insert_query(table, &DbKind::MariaDB, &fields);
+		];
+		let mut builder: QueryBuilder<MySql> =
+			Db::build_insert_query(table, &DbKind::MariaDB, &fields);
 
 		Db::build_mariadb_insert(&mut builder, &fields);
 		let mut query = builder.build();
@@ -386,18 +440,22 @@ mod test {
 
 		// Test the SQL, Sql-Flavor (escaping)
 		// Test only for the number of Arguments - not possible to fetch them
-		assert_eq!(query.sql().as_str(), "INSERT INTO `table_name` (`foo`,`bar`) VALUES (?,?)");
+		assert_eq!(
+			query.sql().as_str(),
+			"INSERT INTO `table_name` (`foo`,`bar`) VALUES (?,?)"
+		);
 		assert_eq!(args.len(), 2);
 	}
 
 	#[test]
 	fn test_build_sqlite_insert() {
 		let table = "table_name";
-		let fields = vec!(
+		let fields = vec![
 			("foo".to_string(), DbValue::String("foo foo".to_string())),
 			("bar".to_string(), DbValue::String("bar bar".to_string())),
-		);
-		let mut builder: QueryBuilder<Sqlite> = Db::build_insert_query(table, &DbKind::SQLite, &fields);
+		];
+		let mut builder: QueryBuilder<Sqlite> =
+			Db::build_insert_query(table, &DbKind::SQLite, &fields);
 
 		Db::build_sqlite_insert(&mut builder, &fields);
 		let mut query = builder.build();
@@ -405,7 +463,10 @@ mod test {
 
 		// Test the SQL, Sql-Flavor (escaping)
 		// Test only for the number of Arguments - not possible to fetch them
-		assert_eq!(query.sql().as_str(), "INSERT INTO \"table_name\" (\"foo\",\"bar\") VALUES (?,?)");
+		assert_eq!(
+			query.sql().as_str(),
+			"INSERT INTO \"table_name\" (\"foo\",\"bar\") VALUES (?,?)"
+		);
 		assert_eq!(args.len(), 2);
 	}
 }

@@ -12,7 +12,7 @@ fn main() {
 		Ok(file) => file,
 		Err(e) => {
 			error!(%e);
-			return
+			return;
 		}
 	};
 

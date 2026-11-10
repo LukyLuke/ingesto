@@ -1,10 +1,10 @@
-pub mod types;
 pub mod config;
+pub mod types;
 
-use std::{sync::Arc, thread};
 use anyhow::anyhow;
+use shared::{self, init_logging, parser::MessageParser, queue::MessageQueue, usage};
+use std::{sync::Arc, thread};
 use tiny_http::{self, Request, Response, Server, StatusCode};
-use shared::{self, init_logging, usage, parser::MessageParser, queue::MessageQueue};
 use tracing::{debug, error, info};
 
 fn main() {
@@ -14,7 +14,7 @@ fn main() {
 		Ok(file) => file,
 		Err(e) => {
 			error!(%e);
-			return
+			return;
 		}
 	};
 
@@ -29,38 +29,51 @@ fn main() {
 
 	info!(message="starting", name=%conf.name);
 	let queue = Arc::new(MessageQueue::<String>::new());
-	let parser = Arc::new(MessageParser::<String>::new(queue.clone(), conf.queue.clone(), conf.parser.clone()));
+	let parser = Arc::new(MessageParser::<String>::new(
+		queue.clone(),
+		conf.queue.clone(),
+		conf.parser.clone(),
+	));
 	parser.run();
 
 	let res = webhook_listener(conf.clone(), queue.clone());
 	match res {
 		Err(e) => {
 			error!("{:#?}", e);
-		},
+		}
 		Ok(_) => {}
 	}
 }
 
-fn webhook_listener(conf: Arc<types::Webhook>, queue: Arc<shared::queue::MessageQueue<String>>) -> anyhow::Result<()> {
+fn webhook_listener(
+	conf: Arc<types::Webhook>,
+	queue: Arc<shared::queue::MessageQueue<String>>,
+) -> anyhow::Result<()> {
 	let server = match Server::http(conf.listen.get_address()) {
 		Ok(server) => server,
-		Err(e) => return Err(anyhow!("{:#?}", e))
+		Err(e) => return Err(anyhow!("{:#?}", e)),
 	};
 	info!(message="http server started", address=%conf.listen.address, port=%conf.listen.port);
 
 	for request in server.incoming_requests() {
 		let c = conf.clone();
 		let q = queue.clone();
-		thread::spawn(move || handle_request(request, c, q).is_err_and(|err| {
-			error!("{:?}", err);
-			true
-		}) );
+		thread::spawn(move || {
+			handle_request(request, c, q).is_err_and(|err| {
+				error!("{:?}", err);
+				true
+			})
+		});
 	}
 
 	Ok(())
 }
 
-fn handle_request(mut req: Request, conf: Arc<types::Webhook>, queue: Arc<shared::queue::MessageQueue<String>>) -> anyhow::Result<()> {
+fn handle_request(
+	mut req: Request,
+	conf: Arc<types::Webhook>,
+	queue: Arc<shared::queue::MessageQueue<String>>,
+) -> anyhow::Result<()> {
 	// As first get the configured route
 	let url = req.url().to_string();
 	let method = req.method().to_string();
@@ -81,13 +94,15 @@ fn handle_request(mut req: Request, conf: Arc<types::Webhook>, queue: Arc<shared
 	// Check Authentication
 	if let Some(expected) = &route.auth {
 		let header_name = match expected {
-			types::Authentication::Basic { user: _, pass: _ } | types::Authentication::Bearer(_) => "Authorization".to_string(),
+			types::Authentication::Basic { user: _, pass: _ }
+			| types::Authentication::Bearer(_) => "Authorization".to_string(),
 			types::Authentication::Header { name, value: _ } => name.to_owned(),
-			_ => String::new()
+			_ => String::new(),
 		};
-		let auth_header = req.headers()
+		let auth_header = req
+			.headers()
 			.iter()
-			.find(|h| h.field.as_str().as_str() == header_name )
+			.find(|h| h.field.as_str().as_str() == header_name)
 			.map(|h| h.value.to_string())
 			.map(|h| format!("{}: {}", header_name, h));
 
@@ -111,7 +126,11 @@ fn handle_request(mut req: Request, conf: Arc<types::Webhook>, queue: Arc<shared
 	// TODO: Possible Preprocessing based on the route?
 
 	// Append to the queue
-	let src_addr = if req.remote_addr().is_none() { String::from("0.0.0.0:0") } else { req.remote_addr().unwrap().to_string() };
+	let src_addr = if req.remote_addr().is_none() {
+		String::from("0.0.0.0:0")
+	} else {
+		req.remote_addr().unwrap().to_string()
+	};
 	debug!(message="data received", src_addr=%src_addr, size=body.len(), data=%body);
 	queue.push(body);
 
@@ -128,12 +147,14 @@ mod test {
 	use super::*;
 	use tiny_http::TestRequest;
 
-
 	#[test]
 	fn test_handle_request_no_routes() {
-		let conf = Arc::new(types::Webhook{
+		let conf = Arc::new(types::Webhook {
 			name: "".to_string(),
-			listen: types::Server { address: "0.0.0.0".to_string(), port: 1514 },
+			listen: types::Server {
+				address: "0.0.0.0".to_string(),
+				port: 1514,
+			},
 			routes: vec![],
 			queue: shared::types::Queue::default(),
 			parser: vec![],
@@ -143,15 +164,21 @@ mod test {
 
 		let res = handle_request(req.into(), conf, queue.clone());
 		assert!(res.is_err());
-		assert_eq!(res.err().unwrap().to_string().get(0..16).unwrap(), "Invalid Request:");
+		assert_eq!(
+			res.err().unwrap().to_string().get(0..16).unwrap(),
+			"Invalid Request:"
+		);
 	}
 
 	#[test]
 	fn test_handle_request_no_route_match() {
-		let conf = Arc::new(types::Webhook{
+		let conf = Arc::new(types::Webhook {
 			name: "".to_string(),
-			listen: types::Server { address: "0.0.0.0".to_string(), port: 1514 },
-			routes: vec![types::Route{
+			listen: types::Server {
+				address: "0.0.0.0".to_string(),
+				port: 1514,
+			},
+			routes: vec![types::Route {
 				path: "/test".to_string(),
 				kind: "GET".to_string(),
 				auth: None,
@@ -164,15 +191,21 @@ mod test {
 
 		let res = handle_request(req.into(), conf, queue.clone());
 		assert!(res.is_err());
-		assert_eq!(res.err().unwrap().to_string().get(0..16).unwrap(), "Invalid Request:");
+		assert_eq!(
+			res.err().unwrap().to_string().get(0..16).unwrap(),
+			"Invalid Request:"
+		);
 	}
 
 	#[test]
 	fn test_handle_request_route_match() {
-		let conf = Arc::new(types::Webhook{
+		let conf = Arc::new(types::Webhook {
 			name: "".to_string(),
-			listen: types::Server { address: "0.0.0.0".to_string(), port: 1514 },
-			routes: vec![types::Route{
+			listen: types::Server {
+				address: "0.0.0.0".to_string(),
+				port: 1514,
+			},
+			routes: vec![types::Route {
 				path: "/test".to_string(),
 				kind: "GET".to_string(),
 				auth: None,
@@ -181,7 +214,10 @@ mod test {
 			parser: vec![],
 		});
 		let queue = Arc::new(shared::queue::MessageQueue::<String>::new());
-		let req = TestRequest::new().with_body("foo bar").with_path("/test").with_method(tiny_http::Method::Get);
+		let req = TestRequest::new()
+			.with_body("foo bar")
+			.with_path("/test")
+			.with_method(tiny_http::Method::Get);
 
 		let res = handle_request(req.into(), conf, queue.clone());
 		assert!(res.is_ok());
@@ -190,10 +226,13 @@ mod test {
 
 	#[test]
 	fn test_handle_request_auth_bearer_none() {
-		let conf = Arc::new(types::Webhook{
+		let conf = Arc::new(types::Webhook {
 			name: "".to_string(),
-			listen: types::Server { address: "0.0.0.0".to_string(), port: 1514 },
-			routes: vec![types::Route{
+			listen: types::Server {
+				address: "0.0.0.0".to_string(),
+				port: 1514,
+			},
+			routes: vec![types::Route {
 				path: "/test".to_string(),
 				kind: "GET".to_string(),
 				auth: Some(types::Authentication::Bearer("Bearer TEST".to_string())),
@@ -209,15 +248,21 @@ mod test {
 
 		let res = handle_request(req.into(), conf, queue.clone());
 		assert!(res.is_err());
-		assert_eq!(res.err().unwrap().to_string().get(0..23).unwrap(), "Authorization Required:");
+		assert_eq!(
+			res.err().unwrap().to_string().get(0..23).unwrap(),
+			"Authorization Required:"
+		);
 	}
 
 	#[test]
 	fn test_handle_request_auth_bearer() {
-		let conf = Arc::new(types::Webhook{
+		let conf = Arc::new(types::Webhook {
 			name: "".to_string(),
-			listen: types::Server { address: "0.0.0.0".to_string(), port: 1514 },
-			routes: vec![types::Route{
+			listen: types::Server {
+				address: "0.0.0.0".to_string(),
+				port: 1514,
+			},
+			routes: vec![types::Route {
 				path: "/test".to_string(),
 				kind: "GET".to_string(),
 				auth: Some(types::Authentication::Bearer("Bearer TEST".to_string())),
@@ -239,13 +284,19 @@ mod test {
 
 	#[test]
 	fn test_handle_request_auth_basic() {
-		let conf = Arc::new(types::Webhook{
+		let conf = Arc::new(types::Webhook {
 			name: "".to_string(),
-			listen: types::Server { address: "0.0.0.0".to_string(), port: 1514 },
-			routes: vec![types::Route{
+			listen: types::Server {
+				address: "0.0.0.0".to_string(),
+				port: 1514,
+			},
+			routes: vec![types::Route {
 				path: "/test".to_string(),
 				kind: "GET".to_string(),
-				auth: Some(types::Authentication::Basic{ user: "john@example.com".to_string(), pass: "SecretPassword".to_string() }),
+				auth: Some(types::Authentication::Basic {
+					user: "john@example.com".to_string(),
+					pass: "SecretPassword".to_string(),
+				}),
 			}],
 			queue: shared::types::Queue::default(),
 			parser: vec![],
@@ -255,12 +306,15 @@ mod test {
 			.with_body("foo bar")
 			.with_path("/test")
 			.with_method(tiny_http::Method::Get)
-			.with_header(tiny_http::Header::from_str("Authorization: Basic am9obkBleGFtcGxlLmNvbTpTZWNyZXRQYXNzd29yZA==").unwrap());
+			.with_header(
+				tiny_http::Header::from_str(
+					"Authorization: Basic am9obkBleGFtcGxlLmNvbTpTZWNyZXRQYXNzd29yZA==",
+				)
+				.unwrap(),
+			);
 
 		let res = handle_request(req.into(), conf, queue.clone());
 		assert!(res.is_ok());
 		assert_eq!(queue.size(), 1);
 	}
-
 }
-

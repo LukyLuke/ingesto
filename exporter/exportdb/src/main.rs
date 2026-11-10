@@ -1,12 +1,19 @@
-pub mod types;
 pub mod config;
 pub mod db;
+pub mod types;
 
 use anyhow::{Result, anyhow};
 use futures::executor::block_on;
 use regex::Regex;
-use shared::{self, init_logging, queue::MessageQueue, receiver::start_otel_listener, types::DbValue, usage};
-use std::{collections::HashMap, sync::{Arc, OnceLock}, thread, time::Duration};
+use shared::{
+	self, init_logging, queue::MessageQueue, receiver::start_otel_listener, types::DbValue, usage,
+};
+use std::{
+	collections::HashMap,
+	sync::{Arc, OnceLock},
+	thread,
+	time::Duration,
+};
 use tracing::{debug, error, info};
 
 fn main() {
@@ -16,7 +23,7 @@ fn main() {
 		Ok(file) => file,
 		Err(e) => {
 			error!(%e);
-			return
+			return;
 		}
 	};
 
@@ -37,7 +44,7 @@ fn main() {
 	match start_otel_listener(c, queue.clone()) {
 		Err(e) => {
 			error!("{:#?}", e);
-		},
+		}
 		Ok(_) => {}
 	}
 }
@@ -83,7 +90,12 @@ fn start_exporter(conf: Arc<types::DbConf>, queue: Arc<MessageQueue<String>>) {
 /// # Returns
 ///
 /// An empty Ok Result or an Error with a string identifying what went wrong
-fn process_queue<DB: db::DbAccess + 'static>(queue: Arc<MessageQueue<String>>, max_time: Duration, _max_messages: u16, db: Arc<DB>) -> Result<()> {
+fn process_queue<DB: db::DbAccess + 'static>(
+	queue: Arc<MessageQueue<String>>,
+	max_time: Duration,
+	_max_messages: u16,
+	db: Arc<DB>,
+) -> Result<()> {
 	let msg = match queue.pull(max_time) {
 		Some(m) => m.to_owned().trim().to_string(),
 		None => {
@@ -99,9 +111,9 @@ fn process_queue<DB: db::DbAccess + 'static>(queue: Arc<MessageQueue<String>>, m
 			let fields = DbValue::from(&table.fields, &json);
 			match db.insert(&table.name, &fields) {
 				Ok(_) => Ok(()),
-				Err (e) => Err(anyhow!("{:?} ; fields: {:?}", e, fields))
+				Err(e) => Err(anyhow!("{:?} ; fields: {:?}", e, fields)),
 			}
-		},
+		}
 		Err(e) => Err(e),
 	}
 }
@@ -128,7 +140,7 @@ fn precompile_regex(tables: &[types::DbTable]) -> &HashMap<String, Regex> {
 				Ok(re) => {
 					info!(message="regex compile", regex=%table.for_messages);
 					rm.insert(table.for_messages.to_owned(), re);
-				},
+				}
 				Err(e) => error!(message="regex compile", regex=%table.for_messages, error=%e),
 			};
 		}
@@ -150,24 +162,28 @@ fn precompile_regex(tables: &[types::DbTable]) -> &HashMap<String, Regex> {
 /// * If the Regular Expressions where not yet cached via `precompile_regex()`
 fn find_matching_table_config(tables: &[types::DbTable], msg: &str) -> Result<types::DbTable> {
 	if let Some(reg) = TABLES_REGEXES.get() {
-		if let Some(Some(table)) = reg.iter()
-			.find(|(_, re)| re.is_match(msg))
-			.map(|(for_message, _)| {
-				tables.iter().find(|table| table.for_messages == *for_message)
-			}) {
+		if let Some(Some(table)) =
+			reg.iter()
+				.find(|(_, re)| re.is_match(msg))
+				.map(|(for_message, _)| {
+					tables
+						.iter()
+						.find(|table| table.for_messages == *for_message)
+				}) {
 			return Ok(table.clone());
 		}
 		return Err(anyhow!("no suitable table configuration found"));
 	}
-	Err(anyhow!("tables regex need to be precompiled before accessed: precompile_regex(&[DbTable])"))
+	Err(anyhow!(
+		"tables regex need to be precompiled before accessed: precompile_regex(&[DbTable])"
+	))
 }
-
 
 #[cfg(test)]
 mod test {
 	use super::*;
+	use crate::{db::DbAccess, types::DbTable};
 	use shared::types::{DbField, DbValue};
-	use crate::{types::DbTable, db::DbAccess};
 
 	struct DbTest {
 		pub tables: Vec<DbTable>,
@@ -179,7 +195,10 @@ mod test {
 		}
 
 		fn insert(&self, _table: &str, fields: &[(String, DbValue)]) -> anyhow::Result<()> {
-			let diff: Vec<_> = fields.into_iter().filter(|item| !self.expected.contains(item)).collect();
+			let diff: Vec<_> = fields
+				.into_iter()
+				.filter(|item| !self.expected.contains(item))
+				.collect();
 			if diff.is_empty() {
 				Ok(())
 			} else {
@@ -190,33 +209,58 @@ mod test {
 	}
 	impl DbTest {
 		fn new(expected: Vec<(String, DbValue)>) -> Self {
-			let tables = vec!(
-				types::DbTable{
+			let tables = vec![
+				types::DbTable {
 					name: "first".to_string(),
 					for_messages: "\"match\":\"first\"".to_string(),
-					fields: vec!(
-						DbField::Int    { name: "db_int1".to_string(),   origin: Some("int1".to_string()), default: None },
-						DbField::Bool   { name: "db_bool1".to_string(),  origin: Some("bool1".to_string()), default: None },
-						DbField::Float  { name: "db_float1".to_string(), origin: Some("float1".to_string()), default: None },
-						DbField::String { name: "db_foo1".to_string(),   origin: Some("foo1".to_string()), default: None },
-						DbField::String { name: "db_foo2".to_string(),   origin: Some("foo2".to_string()), default: None },
-					),
+					fields: vec![
+						DbField::Int {
+							name: "db_int1".to_string(),
+							origin: Some("int1".to_string()),
+							default: None,
+						},
+						DbField::Bool {
+							name: "db_bool1".to_string(),
+							origin: Some("bool1".to_string()),
+							default: None,
+						},
+						DbField::Float {
+							name: "db_float1".to_string(),
+							origin: Some("float1".to_string()),
+							default: None,
+						},
+						DbField::String {
+							name: "db_foo1".to_string(),
+							origin: Some("foo1".to_string()),
+							default: None,
+						},
+						DbField::String {
+							name: "db_foo2".to_string(),
+							origin: Some("foo2".to_string()),
+							default: None,
+						},
+					],
 				},
-				types::DbTable{
+				types::DbTable {
 					name: "second".to_string(),
 					for_messages: "\"match\":\"second\"".to_string(),
-					fields: vec!(
-						DbField::String { name: "db_foo1".to_string(),   origin: Some("foo1".to_string()), default: None },
-						DbField::String { name: "db_foo2".to_string(),   origin: Some("foo2".to_string()), default: None },
-					),
+					fields: vec![
+						DbField::String {
+							name: "db_foo1".to_string(),
+							origin: Some("foo1".to_string()),
+							default: None,
+						},
+						DbField::String {
+							name: "db_foo2".to_string(),
+							origin: Some("foo2".to_string()),
+							default: None,
+						},
+					],
 				},
-			);
+			];
 			precompile_regex(&tables);
 
-			Self {
-				expected,
-				tables,
-			}
+			Self { expected, tables }
 		}
 	}
 
@@ -233,15 +277,19 @@ mod test {
 	fn test_process_queue_message() {
 		let queue = Arc::new(MessageQueue::<String>::new());
 		queue.push(String::from("{\"match\":\"first\",\"foo1\":\"bar1\",\"foo2\":\"bar2\",\"int1\":666,\"float1\":666.666,\"bool1\":true}"));
-		let testdb = Arc::new(DbTest::new(
-			vec!(
-				(String::from("db_foo1"),   DbValue::String(String::from("bar1"))),
-				(String::from("db_foo2"),   DbValue::String(String::from("bar2"))),
-				(String::from("db_int1"),   DbValue::I64(666)),
-				(String::from("db_float1"), DbValue::F64(666.666)),
-				(String::from("db_bool1"),  DbValue::Bool(true)),
-			)
-		));
+		let testdb = Arc::new(DbTest::new(vec![
+			(
+				String::from("db_foo1"),
+				DbValue::String(String::from("bar1")),
+			),
+			(
+				String::from("db_foo2"),
+				DbValue::String(String::from("bar2")),
+			),
+			(String::from("db_int1"), DbValue::I64(666)),
+			(String::from("db_float1"), DbValue::F64(666.666)),
+			(String::from("db_bool1"), DbValue::Bool(true)),
+		]));
 
 		let res = process_queue(queue, Duration::from_millis(1), 0, testdb);
 		assert!(res.is_ok());
@@ -251,17 +299,24 @@ mod test {
 	fn test_process_queue_no_match() {
 		let queue = Arc::new(MessageQueue::<String>::new());
 		queue.push(String::from("{\"foo1\":\"bar1\",\"foo2\":\"bar2\"}"));
-		let testdb = Arc::new(DbTest::new(
-			vec!(
-				(String::from("db_foo1"),   DbValue::String(String::from("bar1"))),
-				(String::from("db_foo2"),   DbValue::String(String::from("bar2"))),
-				(String::from("db_int1"),   DbValue::I64(666)),
-				(String::from("db_float1"), DbValue::F64(666.666)),
-				(String::from("db_bool1"),  DbValue::Bool(true)),
-			)
-		));
+		let testdb = Arc::new(DbTest::new(vec![
+			(
+				String::from("db_foo1"),
+				DbValue::String(String::from("bar1")),
+			),
+			(
+				String::from("db_foo2"),
+				DbValue::String(String::from("bar2")),
+			),
+			(String::from("db_int1"), DbValue::I64(666)),
+			(String::from("db_float1"), DbValue::F64(666.666)),
+			(String::from("db_bool1"), DbValue::Bool(true)),
+		]));
 
 		let res = process_queue(queue, Duration::from_millis(1), 0, testdb);
-		assert_eq!(res.unwrap_err().to_string(), "no suitable table configuration found");
+		assert_eq!(
+			res.unwrap_err().to_string(),
+			"no suitable table configuration found"
+		);
 	}
 }

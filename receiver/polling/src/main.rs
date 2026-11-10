@@ -1,14 +1,19 @@
-pub mod types;
 pub mod config;
+pub mod types;
 
 use core::time;
-use std::{ str::FromStr, sync::Arc, thread };
+use std::{str::FromStr, sync::Arc, thread};
 
-use chrono::{ Duration, Utc };
+use chrono::{Duration, Utc};
 use cron::Schedule;
-use reqwest::{ StatusCode, blocking::{ Response, RequestBuilder } };
-use shared::{ self, init_logging, parser::MessageParser, queue::MessageQueue, usage, secrets_string };
+use reqwest::{
+	StatusCode,
+	blocking::{RequestBuilder, Response},
+};
 use serde_json::{Value, json};
+use shared::{
+	self, init_logging, parser::MessageParser, queue::MessageQueue, secrets_string, usage,
+};
 use tracing::{debug, error, info};
 
 use crate::types::{Authentication, Method, PagingRequestUntil};
@@ -22,7 +27,7 @@ fn main() {
 		Ok(file) => file,
 		Err(e) => {
 			error!(%e);
-			return
+			return;
 		}
 	};
 
@@ -37,19 +42,27 @@ fn main() {
 
 	info!(message="starting", name=%conf.name);
 	let queue = Arc::new(MessageQueue::<String>::new());
-	let parser = Arc::new(MessageParser::<String>::new(queue.clone(), conf.queue.clone(), conf.parser.clone()));
+	let parser = Arc::new(MessageParser::<String>::new(
+		queue.clone(),
+		conf.queue.clone(),
+		conf.parser.clone(),
+	));
 	parser.run();
 
 	let endpoint = Arc::new(conf.api.clone());
 	match run_scheduler(endpoint, conf.timer.as_str(), queue.clone()) {
 		Err(e) => {
 			error!("{:#?}", e);
-		},
+		}
 		Ok(_) => {}
 	}
 }
 
-fn run_scheduler(conf: Arc<Vec<types::Endpoint>>, cron_expr: &str, queue: Arc<shared::queue::MessageQueue<String>>) -> anyhow::Result<()> {
+fn run_scheduler(
+	conf: Arc<Vec<types::Endpoint>>,
+	cron_expr: &str,
+	queue: Arc<shared::queue::MessageQueue<String>>,
+) -> anyhow::Result<()> {
 	let schedule = Schedule::from_str(cron_expr)?;
 	info!(message="scheduler started", cron=%cron_expr);
 
@@ -75,7 +88,13 @@ fn run_scheduler(conf: Arc<Vec<types::Endpoint>>, cron_expr: &str, queue: Arc<sh
 
 						// call_api_internal(req) function sends out the real request (dep-injection for test)
 						// queue_message is for adding the received data to the queue (dep-injection for test)
-						call_api(Arc::new(c), queue_t.clone(), call_api_internal, queue_message_internal).ok();
+						call_api(
+							Arc::new(c),
+							queue_t.clone(),
+							call_api_internal,
+							queue_message_internal,
+						)
+						.ok();
 					}
 				});
 			}
@@ -86,22 +105,39 @@ fn run_scheduler(conf: Arc<Vec<types::Endpoint>>, cron_expr: &str, queue: Arc<sh
 	}
 }
 
-fn call_api(conf: Arc<&types::Endpoint>, queue: Arc<shared::queue::MessageQueue<String>>, send_reqwest: impl Fn(RequestBuilder) -> Result<Response, reqwest::Error>, queue_message: impl Fn(String, Arc<shared::queue::MessageQueue<String>>)) -> anyhow::Result<()> {
-	let mut response = Arc::new( json!({}) );
+fn call_api(
+	conf: Arc<&types::Endpoint>,
+	queue: Arc<shared::queue::MessageQueue<String>>,
+	send_reqwest: impl Fn(RequestBuilder) -> Result<Response, reqwest::Error>,
+	queue_message: impl Fn(String, Arc<shared::queue::MessageQueue<String>>),
+) -> anyhow::Result<()> {
+	let mut response = Arc::new(json!({}));
 	let mut paging = true;
 	let mut pages = 0;
 
 	while paging {
 		// Parse URI and Body
 		let mut uri = shared::template::template_string(&conf.uri, Arc::clone(&response));
-		let send_body = shared::template::template_string(&conf.body.as_deref().unwrap_or_default().to_owned(), Arc::clone(&response));
+		let send_body = shared::template::template_string(
+			&conf.body.as_deref().unwrap_or_default().to_owned(),
+			Arc::clone(&response),
+		);
 
 		// Append Paging if available
-		if let Some(pg) = conf.paging.as_ref() && let Some(param) = pg.param.as_ref() {
+		if let Some(pg) = conf.paging.as_ref()
+			&& let Some(param) = pg.param.as_ref()
+		{
 			if !param.name.is_empty() {
-				let page_val = shared::template::template_string(&param.value, Arc::clone(&response));
+				let page_val =
+					shared::template::template_string(&param.value, Arc::clone(&response));
 				let sep = if uri.find('?').is_some() { "&" } else { "?" };
-				uri = format!("{}{}{}={}", uri, sep, param.name.as_str(), page_val.as_str());
+				uri = format!(
+					"{}{}{}={}",
+					uri,
+					sep,
+					param.name.as_str(),
+					page_val.as_str()
+				);
 			}
 		}
 		debug!(message="calling api", api=conf.uri, uri=%uri);
@@ -117,17 +153,28 @@ fn call_api(conf: Arc<&types::Endpoint>, queue: Arc<shared::queue::MessageQueue<
 
 		// Authentication
 		req = match &conf.auth {
-			Some(Authentication::Header { header, value }) => req.header(header, shared::template::template_string(&secrets_string(&value).unwrap_or_default(), Arc::clone(&response))),
+			Some(Authentication::Header { header, value }) => req.header(
+				header,
+				shared::template::template_string(
+					&secrets_string(&value).unwrap_or_default(),
+					Arc::clone(&response),
+				),
+			),
 
-			Some(Authentication::Basic { user, pass }) => req.basic_auth(secrets_string(user).unwrap_or_default(), secrets_string(pass).ok()),
+			Some(Authentication::Basic { user, pass }) => req.basic_auth(
+				secrets_string(user).unwrap_or_default(),
+				secrets_string(pass).ok(),
+			),
 
 			Some(Authentication::Bearer(token)) => {
 				if token.starts_with("Bearer") {
-					req.bearer_auth(secrets_string(token.get(7..).unwrap_or_default()).unwrap_or_default())
+					req.bearer_auth(
+						secrets_string(token.get(7..).unwrap_or_default()).unwrap_or_default(),
+					)
 				} else {
 					req.bearer_auth(secrets_string(token).unwrap_or_default())
 				}
-			},
+			}
 
 			_ => req,
 		};
@@ -135,7 +182,10 @@ fn call_api(conf: Arc<&types::Endpoint>, queue: Arc<shared::queue::MessageQueue<
 		// Additional Headers
 		req = req.header("User-Agent", "ingesto-polling/1.0");
 		for header in &conf.header {
-			req = req.header(header.name.to_string(), shared::template::template_string(&header.value, Arc::clone(&response)));
+			req = req.header(
+				header.name.to_string(),
+				shared::template::template_string(&header.value, Arc::clone(&response)),
+			);
 		}
 
 		let resp = send_reqwest(req)?;
@@ -146,23 +196,26 @@ fn call_api(conf: Arc<&types::Endpoint>, queue: Arc<shared::queue::MessageQueue<
 			break;
 		}
 
-		debug!(message="data received", data=body.to_owned());
+		debug!(message = "data received", data = body.to_owned());
 		queue_message(body.to_owned(), queue.clone());
 
 		// Check for paging
 		if let Some(pg) = conf.paging.as_ref() {
 			pages += 1;
 			debug!(message="paging", conf=%pg, pages=pages, max_pages=MAX_PAGING_REQUESTS);
-			if pg.until == PagingRequestUntil::None || pages >= pg.max_pages || pages >= MAX_PAGING_REQUESTS {
+			if pg.until == PagingRequestUntil::None
+				|| pages >= pg.max_pages
+				|| pages >= MAX_PAGING_REQUESTS
+			{
 				break;
 			}
 
 			paging = !pg.until.check(status.as_u16(), body.to_owned());
-			debug!(message="apply paging", apply=paging);
+			debug!(message = "apply paging", apply = paging);
 			if paging {
 				match serde_json::from_str(body.to_owned().as_str()).unwrap_or_default() {
 					Value::Null => break,
-					j => response = Arc::<Value>::new(j)
+					j => response = Arc::<Value>::new(j),
 				}
 			}
 		} else {
@@ -189,7 +242,7 @@ pub mod test {
 
 	#[test]
 	fn test_call_api() {
-		let conf = types::Endpoint{
+		let conf = types::Endpoint {
 			name: String::from("Test API"),
 			uri: String::from("http://127.0.0.1/polling/?cursor={{ $response/paging/cursor }}"),
 			body: None,
@@ -197,17 +250,28 @@ pub mod test {
 			auth: None,
 			header: Vec::new(),
 			paging: Some(types::PagingRequest {
-				param: Some(types::Param { name: String::from("page"), value: String::from("{{ $response/paging/page }}")}),
+				param: Some(types::Param {
+					name: String::from("page"),
+					value: String::from("{{ $response/paging/page }}"),
+				}),
 				until: types::PagingRequestUntil::Empty,
 				timeout: 100,
 				max_pages: 2,
-			})
+			}),
 		};
 		let queue = Arc::new(shared::queue::MessageQueue::<String>::new());
-		shared::template::template_string_parse(&conf.uri,  &conf.uri);
-		shared::template::template_string_parse(&conf.body.as_deref().unwrap_or_default().to_owned(), &conf.body.as_deref().unwrap_or_default().to_owned());
+		shared::template::template_string_parse(&conf.uri, &conf.uri);
+		shared::template::template_string_parse(
+			&conf.body.as_deref().unwrap_or_default().to_owned(),
+			&conf.body.as_deref().unwrap_or_default().to_owned(),
+		);
 
-		let res = call_api(Arc::new(&conf), queue.clone(), call_api_internal, queue_message_internal);
+		let res = call_api(
+			Arc::new(&conf),
+			queue.clone(),
+			call_api_internal,
+			queue_message_internal,
+		);
 
 		// Check for two responses (paging requests)
 		assert_eq!(res.is_ok(), true);
@@ -225,7 +289,7 @@ pub mod test {
 
 	#[test]
 	fn test_call_api_nojson() {
-		let conf = types::Endpoint{
+		let conf = types::Endpoint {
 			name: String::from("Test API"),
 			uri: String::from("http://127.0.0.1/polling/?cursor={{ $response/paging/cursor }}"),
 			body: None,
@@ -233,17 +297,28 @@ pub mod test {
 			auth: None,
 			header: Vec::new(),
 			paging: Some(types::PagingRequest {
-				param: Some(types::Param { name: String::from("page"), value: String::from("{{ $response/paging/page }}")}),
+				param: Some(types::Param {
+					name: String::from("page"),
+					value: String::from("{{ $response/paging/page }}"),
+				}),
 				until: types::PagingRequestUntil::Empty,
 				timeout: 100,
 				max_pages: 2,
-			})
+			}),
 		};
 		let queue = Arc::new(shared::queue::MessageQueue::<String>::new());
-		shared::template::template_string_parse(&conf.uri,  &conf.uri);
-		shared::template::template_string_parse(&conf.body.as_deref().unwrap_or_default().to_owned(), &conf.body.as_deref().unwrap_or_default().to_owned());
+		shared::template::template_string_parse(&conf.uri, &conf.uri);
+		shared::template::template_string_parse(
+			&conf.body.as_deref().unwrap_or_default().to_owned(),
+			&conf.body.as_deref().unwrap_or_default().to_owned(),
+		);
 
-		let res = call_api(Arc::new(&conf), queue.clone(), call_api_internal_nojson, queue_message_internal);
+		let res = call_api(
+			Arc::new(&conf),
+			queue.clone(),
+			call_api_internal_nojson,
+			queue_message_internal,
+		);
 
 		// Check for one response (no paging requests possible due to no json)
 		assert_eq!(res.is_ok(), true);
@@ -254,7 +329,6 @@ pub mod test {
 		assert_eq!(r1, "http://127.0.0.1/polling/?cursor=&page=");
 	}
 
-
 	fn call_api_internal(reqb: RequestBuilder) -> Result<Response, reqwest::Error> {
 		let resp = http::response::Response::new("Test Response");
 		let (mut parts, _body) = resp.into_parts();
@@ -264,7 +338,9 @@ pub mod test {
 
 		// Copy over all headers from the request to the response
 		let headers = req.headers();
-		headers.iter().for_each(|h| { parts.headers.insert(h.0, h.1.to_owned()); } );
+		headers.iter().for_each(|h| {
+			parts.headers.insert(h.0, h.1.to_owned());
+		});
 
 		let body = json!({ "uri":url, "paging": { "page":1, "cursor":"testing" } });
 		let resp = http::response::Response::from_parts(parts, body.to_string());
@@ -280,7 +356,9 @@ pub mod test {
 
 		// Copy over all headers from the request to the response
 		let headers = req.headers();
-		headers.iter().for_each(|h| { parts.headers.insert(h.0, h.1.to_owned()); } );
+		headers.iter().for_each(|h| {
+			parts.headers.insert(h.0, h.1.to_owned());
+		});
 
 		let resp = http::response::Response::from_parts(parts, url);
 		Ok(Response::from(resp))
@@ -289,6 +367,4 @@ pub mod test {
 	fn queue_message_internal(data: String, queue: Arc<shared::queue::MessageQueue<String>>) {
 		queue.push(data);
 	}
-
 }
-

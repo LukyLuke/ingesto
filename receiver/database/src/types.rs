@@ -11,9 +11,10 @@ pub struct Config {
 #[cfg(feature = "types")]
 impl From<Config> for ConfStruct {
 	fn from(val: Config) -> Self {
-		ConfStruct::from([
-			("config".to_string(), ConfType::String(leak_str(&val.config))),
-		])
+		ConfStruct::from([(
+			"config".to_string(),
+			ConfType::String(leak_str(&val.config)),
+		)])
 	}
 }
 
@@ -23,7 +24,10 @@ mod tests {
 
 	#[test]
 	fn test_config_uses_value() {
-		let conf: ConfStruct = Config { config: "some value".to_string() }.into();
+		let conf: ConfStruct = Config {
+			config: "some value".to_string(),
+		}
+		.into();
 		assert_eq!(conf.get("config"), Some(&ConfType::String("some value")));
 	}
 

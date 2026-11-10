@@ -1,11 +1,12 @@
-use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
-use shared::types::{Parser, Queue};
 use shared::types::{ConfStruct, ConfType, leak_str};
+use shared::types::{Parser, Queue};
+use std::path::PathBuf;
 
 // Default-Wrapper Functions for Serde::Deserialize
-fn default_interval() -> f32 { 3600.0 }
-
+fn default_interval() -> f32 {
+	3600.0
+}
 
 /// The main File-Reader Configuration
 #[cfg(feature = "types")]
@@ -17,9 +18,7 @@ pub struct Config {
 #[cfg(feature = "types")]
 impl From<Config> for ConfStruct {
 	fn from(val: Config) -> Self {
-		ConfStruct::from([
-			("config".to_string(), ConfType::Struct(val.config.into())),
-		])
+		ConfStruct::from([("config".to_string(), ConfType::Struct(val.config.into()))])
 	}
 }
 
@@ -48,8 +47,16 @@ impl From<Reader> for ConfStruct {
 		ConfStruct::from([
 			("name".to_string(), ConfType::String(leak_str(&val.name))),
 			("file".to_string(), ConfType::Struct(val.file.into())),
-			("queue".to_string(), ConfType::Option( Box::new( ConfType::Struct( val.queue.into() ) ) )),
-			("parser".to_string(), ConfType::Option( Box::new( ConfType::Vec( Box::new( ConfType::Struct( Parser::default().into() ) ) ) ) )),
+			(
+				"queue".to_string(),
+				ConfType::Option(Box::new(ConfType::Struct(val.queue.into()))),
+			),
+			(
+				"parser".to_string(),
+				ConfType::Option(Box::new(ConfType::Vec(Box::new(ConfType::Struct(
+					Parser::default().into(),
+				))))),
+			),
 		])
 	}
 }
@@ -88,9 +95,18 @@ impl Default for File {
 impl From<File> for ConfStruct {
 	fn from(val: File) -> Self {
 		ConfStruct::from([
-			("path".to_string(), ConfType::String(leak_str(&val.path.to_string_lossy()))),
-			("follow".to_string(), ConfType::Option( Box::new( ConfType::Bool(val.follow) ) )),
-			("interval".to_string(), ConfType::Option( Box::new( ConfType::Float( val.interval.into() ) ) )),
+			(
+				"path".to_string(),
+				ConfType::String(leak_str(&val.path.to_string_lossy())),
+			),
+			(
+				"follow".to_string(),
+				ConfType::Option(Box::new(ConfType::Bool(val.follow))),
+			),
+			(
+				"interval".to_string(),
+				ConfType::Option(Box::new(ConfType::Float(val.interval.into()))),
+			),
 		])
 	}
 }
@@ -101,18 +117,35 @@ mod tests {
 
 	#[test]
 	fn test_file_uses_values() {
-		let conf: ConfStruct = File { path: PathBuf::from("/var/log/syslog"), follow: true, interval: 12.5 }.into();
+		let conf: ConfStruct = File {
+			path: PathBuf::from("/var/log/syslog"),
+			follow: true,
+			interval: 12.5,
+		}
+		.into();
 		assert_eq!(conf.get("path"), Some(&ConfType::String("/var/log/syslog")));
-		assert_eq!(conf.get("follow"), Some(&ConfType::Option(Box::new(ConfType::Bool(true)))));
-		assert_eq!(conf.get("interval"), Some(&ConfType::Option(Box::new(ConfType::Float(12.5)))));
+		assert_eq!(
+			conf.get("follow"),
+			Some(&ConfType::Option(Box::new(ConfType::Bool(true))))
+		);
+		assert_eq!(
+			conf.get("interval"),
+			Some(&ConfType::Option(Box::new(ConfType::Float(12.5))))
+		);
 	}
 
 	#[test]
 	fn test_file_default_values() {
 		let conf: ConfStruct = File::default().into();
 		assert_eq!(conf.get("path"), Some(&ConfType::String("")));
-		assert_eq!(conf.get("follow"), Some(&ConfType::Option(Box::new(ConfType::Bool(false)))));
-		assert_eq!(conf.get("interval"), Some(&ConfType::Option(Box::new(ConfType::Float(3600.0)))));
+		assert_eq!(
+			conf.get("follow"),
+			Some(&ConfType::Option(Box::new(ConfType::Bool(false))))
+		);
+		assert_eq!(
+			conf.get("interval"),
+			Some(&ConfType::Option(Box::new(ConfType::Float(3600.0))))
+		);
 	}
 
 	#[test]
@@ -120,14 +153,22 @@ mod tests {
 		let conf: ConfStruct = Config {
 			config: Reader {
 				name: "my-reader".to_string(),
-				file: File { path: PathBuf::from("a.log"), ..File::default() },
+				file: File {
+					path: PathBuf::from("a.log"),
+					..File::default()
+				},
 				..Reader::default()
 			},
-		}.into();
+		}
+		.into();
 
-		let Some(ConfType::Struct(reader)) = conf.get("config") else { panic!("missing config struct") };
+		let Some(ConfType::Struct(reader)) = conf.get("config") else {
+			panic!("missing config struct")
+		};
 		assert_eq!(reader.get("name"), Some(&ConfType::String("my-reader")));
-		let Some(ConfType::Struct(file)) = reader.get("file") else { panic!("missing file struct") };
+		let Some(ConfType::Struct(file)) = reader.get("file") else {
+			panic!("missing file struct")
+		};
 		assert_eq!(file.get("path"), Some(&ConfType::String("a.log")));
 	}
 }
