@@ -27,7 +27,8 @@ pub fn esc(input: &str) -> String {
 
 /// Convert snake_case to Title Case
 pub fn title_case(input: &str) -> String {
-	input.split('_')
+	input
+		.split('_')
 		.filter(|s| !s.is_empty())
 		.map(|s| {
 			let mut c = s.chars();
@@ -61,8 +62,11 @@ pub fn label_for(path: &str) -> String {
 		[.., parent, last] if last.parse::<usize>().is_ok() => {
 			let index: usize = last.parse().unwrap_or_default();
 			format!("{} #{}", title_case(parent), index.saturating_add(1))
-		},
-		[.., last] if last.parse::<usize>().is_ok() => format!("Item #{}", last.parse::<usize>().unwrap_or_default().saturating_add(1)),
+		}
+		[.., last] if last.parse::<usize>().is_ok() => format!(
+			"Item #{}",
+			last.parse::<usize>().unwrap_or_default().saturating_add(1)
+		),
 		[.., last] => title_case(last),
 		[] => String::new(),
 	}
@@ -104,7 +108,7 @@ pub fn attr_selector(attribute: &str, value: &str) -> String {
 			'\\' | '"' => {
 				quoted.push('\\');
 				quoted.push(c);
-			},
+			}
 			'\n' => quoted.push_str("\\a "),
 			c => quoted.push(c),
 		}
@@ -119,7 +123,9 @@ pub fn shift_after_remove(paths: Vec<String>, list_path: &str, removed: usize) -
 		.into_iter()
 		.filter_map(|path| match list_index_in(&path, list_path) {
 			Some((index, _)) if index == removed => None,
-			Some((index, tail)) if index > removed => Some(format!("{list_path}.{}{tail}", index - 1)),
+			Some((index, tail)) if index > removed => {
+				Some(format!("{list_path}.{}{tail}", index - 1))
+			}
 			_ => Some(path),
 		})
 		.collect()
@@ -131,7 +137,11 @@ pub fn download_name(file_name: &str, extension: &str) -> String {
 		Some((stem, _)) => stem,
 		None => file_name,
 	};
-	let stem = if stem.trim().is_empty() { "config" } else { stem };
+	let stem = if stem.trim().is_empty() {
+		"config"
+	} else {
+		stem
+	};
 	format!("{stem}.{extension}")
 }
 
@@ -141,7 +151,10 @@ mod tests {
 
 	#[test]
 	fn esc_handles_all_special_characters() {
-		assert_eq!(esc(r#"<a href="x" onclick='y'>&</a>"#), "&lt;a href=&quot;x&quot; onclick=&#39;y&#39;&gt;&amp;&lt;/a&gt;");
+		assert_eq!(
+			esc(r#"<a href="x" onclick='y'>&</a>"#),
+			"&lt;a href=&quot;x&quot; onclick=&#39;y&#39;&gt;&amp;&lt;/a&gt;"
+		);
 		assert_eq!(esc(""), "");
 		assert_eq!(esc("plain ü"), "plain ü");
 	}
@@ -175,15 +188,24 @@ mod tests {
 	#[test]
 	fn readable_paths() {
 		assert_eq!(readable_path("config.listen.port"), "Listen › Port");
-		assert_eq!(readable_path("config.parser.2.mapping.0.name"), "Parser #3 › Mapping #1 › Name");
+		assert_eq!(
+			readable_path("config.parser.2.mapping.0.name"),
+			"Parser #3 › Mapping #1 › Name"
+		);
 		assert_eq!(readable_path("config"), "Config");
 		assert_eq!(readable_path(""), "");
 	}
 
 	#[test]
 	fn list_index_detection() {
-		assert_eq!(list_index_in("config.parser.2", "config.parser"), Some((2, String::new())));
-		assert_eq!(list_index_in("config.parser.2.name", "config.parser"), Some((2, ".name".to_string())));
+		assert_eq!(
+			list_index_in("config.parser.2", "config.parser"),
+			Some((2, String::new()))
+		);
+		assert_eq!(
+			list_index_in("config.parser.2.name", "config.parser"),
+			Some((2, ".name".to_string()))
+		);
 		assert_eq!(list_index_in("config.parser", "config.parser"), None);
 		assert_eq!(list_index_in("config.parsers.2", "config.parser"), None);
 		assert_eq!(list_index_in("config.parser.x", "config.parser"), None);
@@ -191,20 +213,38 @@ mod tests {
 
 	#[test]
 	fn selectors_are_quoted() {
-		assert_eq!(attr_selector("data-path", "config.name"), r#"[data-path="config.name"]"#);
-		assert_eq!(attr_selector("data-path", r#"a"]b\c"#), r#"[data-path="a\"]b\\c"]"#);
+		assert_eq!(
+			attr_selector("data-path", "config.name"),
+			r#"[data-path="config.name"]"#
+		);
+		assert_eq!(
+			attr_selector("data-path", r#"a"]b\c"#),
+			r#"[data-path="a\"]b\\c"]"#
+		);
 	}
 
 	#[test]
 	fn open_paths_are_shifted_after_a_removal() {
-		let open = vec!["config.p".to_string(), "config.p.0".to_string(), "config.p.1.m.0".to_string(), "config.p.2".to_string(), "config.q.2".to_string()];
-		assert_eq!(shift_after_remove(open, "config.p", 1), vec!["config.p", "config.p.0", "config.p.1", "config.q.2"]);
+		let open = vec![
+			"config.p".to_string(),
+			"config.p.0".to_string(),
+			"config.p.1.m.0".to_string(),
+			"config.p.2".to_string(),
+			"config.q.2".to_string(),
+		];
+		assert_eq!(
+			shift_after_remove(open, "config.p", 1),
+			vec!["config.p", "config.p.0", "config.p.1", "config.q.2"]
+		);
 		assert!(shift_after_remove(vec![], "config.p", 0).is_empty());
 	}
 
 	#[test]
 	fn download_names() {
-		assert_eq!(download_name("webhook.config.toml", "yaml"), "webhook.config.yaml");
+		assert_eq!(
+			download_name("webhook.config.toml", "yaml"),
+			"webhook.config.yaml"
+		);
 		assert_eq!(download_name("config", "toml"), "config.toml");
 		assert_eq!(download_name(".toml", "yaml"), "config.yaml");
 		assert_eq!(download_name("", "yaml"), "config.yaml");

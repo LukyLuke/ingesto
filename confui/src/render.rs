@@ -9,11 +9,12 @@
 use shared::types::{ConfStruct, ConfType};
 
 use crate::kinds::ConfigKind;
-use crate::model::{peel, variants_of, Form, ModelError, Node};
+use crate::model::{Form, ModelError, Node, peel, variants_of};
 use crate::types::Issue;
 use crate::utils::{esc, join_path, label_for, readable_path, split_path};
 
-const INPUT_CLASS: &str = "w-full rounded border border-slate-300 px-3 py-2 shadow-sm text-slate-800 bg-white";
+const INPUT_CLASS: &str =
+	"w-full rounded border border-slate-300 px-3 py-2 shadow-sm text-slate-800 bg-white";
 const LABEL_CLASS: &str = "block text-sm font-semibold text-slate-700 mb-1";
 const BADGE_REQUIRED: &str = r#"<span class="inline-flex items-center rounded-md bg-red-50 px-2 py-1 text-xs font-medium text-red-700 ring-inset ring-red-600/10">Required</span>"#;
 const BADGE_OPTIONAL: &str = r#"<span class="inline-flex items-center rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-slate-500">Optional</span>"#;
@@ -34,7 +35,10 @@ fn badge(optional: bool) -> &'static str {
 }
 
 fn button(class: &str, action: &str, path: &str, label: &str) -> String {
-	format!(r#"<button type="button" class="{class}" data-action="{action}" data-path="{}">{label}</button>"#, esc(path))
+	format!(
+		r#"<button type="button" class="{class}" data-action="{action}" data-path="{}">{label}</button>"#,
+		esc(path)
+	)
 }
 
 fn is_enum(ty: &ConfType) -> bool {
@@ -42,7 +46,14 @@ fn is_enum(ty: &ConfType) -> bool {
 }
 
 /// A collapsible box with a title and optional buttons
-fn container(label: &str, path: &str, depth: usize, optional: bool, actions: &str, body: &str) -> String {
+fn container(
+	label: &str,
+	path: &str,
+	depth: usize,
+	optional: bool,
+	actions: &str,
+	body: &str,
+) -> String {
 	let open = if depth == OPEN_DEPTH { " open" } else { "" };
 	let path = esc(path);
 	format!(
@@ -54,8 +65,15 @@ fn container(label: &str, path: &str, depth: usize, optional: bool, actions: &st
 
 fn input_attrs(path: &str, kind: &str, type_name: &str, optional: bool) -> String {
 	let required = if optional { "false" } else { "true" };
-	let aria_required = if optional { "" } else { r#" aria-required="true""# };
-	format!(r#"id="f-{path}" data-path="{path}" data-kind="{kind}" data-type="{type_name}" data-required="{required}"{aria_required}"#, path = esc(path))
+	let aria_required = if optional {
+		""
+	} else {
+		r#" aria-required="true""#
+	};
+	format!(
+		r#"id="f-{path}" data-path="{path}" data-kind="{kind}" data-type="{type_name}" data-required="{required}"{aria_required}"#,
+		path = esc(path)
+	)
 }
 
 /// The input element for a string, regular expression, number or bool
@@ -63,7 +81,12 @@ fn scalar_input(ty: &ConfType, optional: bool, text: &str, path: &str) -> String
 	let value = esc(text);
 	match ty {
 		ConfType::Bool(_) if optional => {
-			let option = |v: &str, label: &str| format!(r#"<option value="{v}"{}>{label}</option>"#, if text == v { " selected" } else { "" });
+			let option = |v: &str, label: &str| {
+				format!(
+					r#"<option value="{v}"{}>{label}</option>"#,
+					if text == v { " selected" } else { "" }
+				)
+			};
 			format!(
 				r#"<select {} class="{INPUT_CLASS}">{}{}{}</select>"#,
 				input_attrs(path, "text", "bool", true),
@@ -71,11 +94,14 @@ fn scalar_input(ty: &ConfType, optional: bool, text: &str, path: &str) -> String
 				option("true", "true"),
 				option("false", "false")
 			)
-		},
+		}
 		ConfType::Bool(_) => {
 			let checked = if text == "true" { " checked" } else { "" };
-			format!(r#"<input type="checkbox" {} class="h-4 w-4 rounded border-gray-300 text-teal-600 shadow-sm"{checked} />"#, input_attrs(path, "check", "bool", optional))
-		},
+			format!(
+				r#"<input type="checkbox" {} class="h-4 w-4 rounded border-gray-300 text-teal-600 shadow-sm"{checked} />"#,
+				input_attrs(path, "check", "bool", optional)
+			)
+		}
 		ConfType::UInt(default) => format!(
 			r#"<input type="number" min="0" step="1" {} value="{value}" placeholder="{default}" class="w-48 rounded border border-slate-300 px-3 py-2 shadow-sm text-slate-800 bg-white" />"#,
 			input_attrs(path, "text", "uint", optional)
@@ -119,13 +145,27 @@ fn enum_control(ty: &ConfType, optional: bool, node: &Node, path: &str, depth: u
 
 	let mut options = String::new();
 	if optional {
-		options.push_str(&format!(r#"<option value=""{}>— not set —</option>"#, if selected.is_none() { " selected" } else { "" }));
+		options.push_str(&format!(
+			r#"<option value=""{}>— not set —</option>"#,
+			if selected.is_none() { " selected" } else { "" }
+		));
 	}
 	for (name, _) in variants {
-		let sel = if selected == Some(name.as_str()) { " selected" } else { "" };
-		options.push_str(&format!(r#"<option value="{}"{sel}>{}</option>"#, esc(name), esc(name)));
+		let sel = if selected == Some(name.as_str()) {
+			" selected"
+		} else {
+			""
+		};
+		options.push_str(&format!(
+			r#"<option value="{}"{sel}>{}</option>"#,
+			esc(name),
+			esc(name)
+		));
 	}
-	let mut html = format!(r#"<select {} class="{INPUT_CLASS}">{options}</select>"#, input_attrs(path, "enum", "enum", optional));
+	let mut html = format!(
+		r#"<select {} class="{INPUT_CLASS}">{options}</select>"#,
+		input_attrs(path, "enum", "enum", optional)
+	);
 
 	let payload = match node {
 		Node::Enum { payload, .. } => Some(payload.as_ref()),
@@ -141,11 +181,21 @@ fn enum_control(ty: &ConfType, optional: bool, node: &Node, path: &str, depth: u
 		let payload_path = join_path(path, variant);
 		let inner_html = match peel(variant_ty).0 {
 			ConfType::EnumValue => String::new(),
-			ConfType::Struct(_) | ConfType::Tuple(_) => value_body(variant_ty, payload, &payload_path, depth + 1),
-			_ => field(&label_for(&payload_path), variant_ty, payload, &payload_path, depth + 1),
+			ConfType::Struct(_) | ConfType::Tuple(_) => {
+				value_body(variant_ty, payload, &payload_path, depth + 1)
+			}
+			_ => field(
+				&label_for(&payload_path),
+				variant_ty,
+				payload,
+				&payload_path,
+				depth + 1,
+			),
 		};
 		if !inner_html.is_empty() {
-			html.push_str(&format!(r#"<div class="mt-3 pl-4 border-l-2 border-slate-200 space-y-4">{inner_html}</div>"#));
+			html.push_str(&format!(
+				r#"<div class="mt-3 pl-4 border-l-2 border-slate-200 space-y-4">{inner_html}</div>"#
+			));
 		}
 	}
 	html
@@ -159,7 +209,15 @@ fn value_body(ty: &ConfType, node: &Node, path: &str, depth: usize) -> String {
 		(Node::Struct(fields), ConfType::Struct(schema)) => fields
 			.iter()
 			.filter_map(|(name, child)| schema.get(name).map(|child_ty| (name, child, child_ty)))
-			.map(|(name, child, child_ty)| field(&label_for(&join_path(path, name)), child_ty, child, &join_path(path, name), depth + 1))
+			.map(|(name, child, child_ty)| {
+				field(
+					&label_for(&join_path(path, name)),
+					child_ty,
+					child,
+					&join_path(path, name),
+					depth + 1,
+				)
+			})
 			.collect(),
 		(Node::Tuple(items), ConfType::Tuple(types)) => items
 			.iter()
@@ -167,7 +225,13 @@ fn value_body(ty: &ConfType, node: &Node, path: &str, depth: usize) -> String {
 			.enumerate()
 			.map(|(index, (child, child_ty))| {
 				let child_path = join_path(path, &index.to_string());
-				field(&label_for(&child_path), child_ty, child, &child_path, depth + 1)
+				field(
+					&label_for(&child_path),
+					child_ty,
+					child,
+					&child_path,
+					depth + 1,
+				)
 			})
 			.collect(),
 		(Node::Enum { .. }, _) => enum_control(ty, optional, node, path, depth),
@@ -200,9 +264,20 @@ fn field(label: &str, ty: &ConfType, node: &Node, path: &str, depth: usize) -> S
 			button(BTN_ADD, "opt-add", path, "+ Add")
 		),
 		(Node::Opt(_), _) if is_enum(inner) => {
-			format!(r#"<div class="mb-4" data-node="{path_attr}"><label class="{LABEL_CLASS}" for="f-{path_attr}">{} {BADGE_OPTIONAL}</label>{}</div>"#, esc(label), enum_control(ty, true, node, path, depth))
-		},
-		(Node::Opt(Some(child)), _) => container(label, path, depth, true, &button(BTN_REMOVE, "opt-remove", path, "Remove"), &value_body(inner, child, path, depth)),
+			format!(
+				r#"<div class="mb-4" data-node="{path_attr}"><label class="{LABEL_CLASS}" for="f-{path_attr}">{} {BADGE_OPTIONAL}</label>{}</div>"#,
+				esc(label),
+				enum_control(ty, true, node, path, depth)
+			)
+		}
+		(Node::Opt(Some(child)), _) => container(
+			label,
+			path,
+			depth,
+			true,
+			&button(BTN_REMOVE, "opt-remove", path, "Remove"),
+			&value_body(inner, child, path, depth),
+		),
 		(Node::Opt(None), _) => String::new(),
 		(Node::Text(text), ConfType::Bool(_)) if !optional => format!(
 			r#"<div class="mb-4 flex items-center gap-3" data-node="{path_attr}">{}<label class="text-sm font-semibold text-slate-700" for="f-{path_attr}">{}</label></div>"#,
@@ -210,22 +285,61 @@ fn field(label: &str, ty: &ConfType, node: &Node, path: &str, depth: usize) -> S
 			esc(label)
 		),
 		(Node::Text(text), _) => {
-			let hint = if matches!(inner, ConfType::RegEx(_)) { r#"<p class="text-xs text-slate-500 mt-1">A regular expression</p>"# } else { "" };
-			format!(r#"<div class="mb-4" data-node="{path_attr}"><label class="{LABEL_CLASS}" for="f-{path_attr}">{} {}</label>{}{hint}</div>"#, esc(label), badge(optional), scalar_input(inner, optional, text, path))
-		},
+			let hint = if matches!(inner, ConfType::RegEx(_)) {
+				r#"<p class="text-xs text-slate-500 mt-1">A regular expression</p>"#
+			} else {
+				""
+			};
+			format!(
+				r#"<div class="mb-4" data-node="{path_attr}"><label class="{LABEL_CLASS}" for="f-{path_attr}">{} {}</label>{}{hint}</div>"#,
+				esc(label),
+				badge(optional),
+				scalar_input(inner, optional, text, path)
+			)
+		}
 		(Node::List(items), ConfType::Vec(item_ty)) => {
 			let body = if items.is_empty() {
 				r#"<div class="text-sm text-slate-500 italic">No entries yet. Click "+ Add" to add one.</div>"#.to_owned()
 			} else {
-				let entries: String = items.iter().enumerate().map(|(index, item)| list_item(item_ty, item, &join_path(path, &index.to_string()), depth + 1)).collect();
+				let entries: String = items
+					.iter()
+					.enumerate()
+					.map(|(index, item)| {
+						list_item(
+							item_ty,
+							item,
+							&join_path(path, &index.to_string()),
+							depth + 1,
+						)
+					})
+					.collect();
 				format!(r#"<div class="space-y-3">{entries}</div>"#)
 			};
-			container(label, path, depth, optional, &button(BTN_ADD, "list-add", path, "+ Add"), &body)
-		},
+			container(
+				label,
+				path,
+				depth,
+				optional,
+				&button(BTN_ADD, "list-add", path, "+ Add"),
+				&body,
+			)
+		}
 		(Node::Enum { .. }, _) => {
-			format!(r#"<div class="mb-4" data-node="{path_attr}"><label class="{LABEL_CLASS}" for="f-{path_attr}">{} {}</label>{}</div>"#, esc(label), badge(optional), enum_control(ty, optional, node, path, depth))
-		},
-		(Node::Struct(_) | Node::Tuple(_), _) => container(label, path, depth, optional, "", &value_body(ty, node, path, depth)),
+			format!(
+				r#"<div class="mb-4" data-node="{path_attr}"><label class="{LABEL_CLASS}" for="f-{path_attr}">{} {}</label>{}</div>"#,
+				esc(label),
+				badge(optional),
+				enum_control(ty, optional, node, path, depth)
+			)
+		}
+		(Node::Struct(_) | Node::Tuple(_), _) => container(
+			label,
+			path,
+			depth,
+			optional,
+			"",
+			&value_body(ty, node, path, depth),
+		),
 		(Node::Unit | Node::List(_), _) => String::new(),
 	}
 }
@@ -259,8 +373,10 @@ pub fn render_path(form: &Form, path: &str) -> Result<String, ModelError> {
 
 	if let Some((parent, last)) = path.rsplit_once('.')
 		&& last.parse::<usize>().is_ok()
-		&& matches!(form.locate(parent).map(|(_, ty)| peel(ty).0), Ok(ConfType::Vec(_)))
-	{
+		&& matches!(
+			form.locate(parent).map(|(_, ty)| peel(ty).0),
+			Ok(ConfType::Vec(_))
+		) {
 		return Ok(list_item(ty, node, path, depth));
 	}
 	Ok(field(&label_for(path), ty, node, path, depth))
@@ -290,9 +406,15 @@ fn variants_description(variants: &ConfStruct) -> String {
 		.map(|(name, ty)| {
 			let extra = match peel(ty).0 {
 				ConfType::EnumValue => String::new(),
-				other => format!(" <span class=\"text-slate-400\">({})</span>", esc(&describe(other))),
+				other => format!(
+					" <span class=\"text-slate-400\">({})</span>",
+					esc(&describe(other))
+				),
 			};
-			format!(r#"<li><span class="font-mono text-teal-200">{}</span>{extra}</li>"#, esc(name))
+			format!(
+				r#"<li><span class="font-mono text-teal-200">{}</span>{extra}</li>"#,
+				esc(name)
+			)
 		})
 		.collect();
 	format!(r#"<ul class="list-disc list-inside text-xs text-slate-300 space-y-1">{items}</ul>"#)
@@ -302,21 +424,41 @@ fn variants_description(variants: &ConfStruct) -> String {
 pub fn doc_html(form: &Form, path: &str) -> Option<(String, String)> {
 	let (_, ty) = form.locate(path).ok()?;
 	let (inner, optional) = peel(ty);
-	let row = |name: &str, value: &str| format!(r#"<div><div class="text-xs text-slate-400">{name}</div><div class="text-sm text-slate-100">{value}</div></div>"#);
+	let row = |name: &str, value: &str| {
+		format!(
+			r#"<div><div class="text-xs text-slate-400">{name}</div><div class="text-sm text-slate-100">{value}</div></div>"#
+		)
+	};
 
-	let mut html = String::from(r#"<div class="rounded-lg bg-white/5 border border-slate-800 p-3 space-y-3">"#);
+	let mut html = String::from(
+		r#"<div class="rounded-lg bg-white/5 border border-slate-800 p-3 space-y-3">"#,
+	);
 	html.push_str(&row("Type", &esc(&describe(inner))));
-	html.push_str(&row("Required", if optional { "No, can be left empty" } else { "Yes" }));
+	html.push_str(&row(
+		"Required",
+		if optional {
+			"No, can be left empty"
+		} else {
+			"Yes"
+		},
+	));
 	match inner {
-		ConfType::String(default) | ConfType::RegEx(default) if !default.is_empty() => html.push_str(&row("Example / Default", &format!(r#"<code class="font-mono">{}</code>"#, esc(default)))),
+		ConfType::String(default) | ConfType::RegEx(default) if !default.is_empty() => html
+			.push_str(&row(
+				"Example / Default",
+				&format!(r#"<code class="font-mono">{}</code>"#, esc(default)),
+			)),
 		ConfType::UInt(default) => html.push_str(&row("Example / Default", &default.to_string())),
 		ConfType::Int(default) => html.push_str(&row("Example / Default", &default.to_string())),
 		ConfType::Float(default) => html.push_str(&row("Example / Default", &default.to_string())),
 		ConfType::Enum(variants, default) | ConfType::Tagged(_, variants, default) => {
-			html.push_str(&row("Default", &format!(r#"<code class="font-mono">{}</code>"#, esc(default))));
+			html.push_str(&row(
+				"Default",
+				&format!(r#"<code class="font-mono">{}</code>"#, esc(default)),
+			));
 			html.push_str(&row("Accepted values", &variants_description(variants)));
-		},
-		_ => {},
+		}
+		_ => {}
 	}
 	html.push_str("</div>");
 	Some((readable_path(path), html))
@@ -375,8 +517,15 @@ pub fn messages_html(level: Level, heading: &str, items: &[Issue]) -> String {
 			}
 		})
 		.collect();
-	let list = if list.is_empty() { String::new() } else { format!(r#"<ul class="list-disc list-inside mt-1 space-y-1">{list}</ul>"#) };
-	format!(r#"<div class="rounded-md border p-3 text-sm {colors}" role="alert"><p class="font-semibold">{}</p>{list}</div>"#, esc(heading))
+	let list = if list.is_empty() {
+		String::new()
+	} else {
+		format!(r#"<ul class="list-disc list-inside mt-1 space-y-1">{list}</ul>"#)
+	};
+	format!(
+		r#"<div class="rounded-md border p-3 text-sm {colors}" role="alert"><p class="font-semibold">{}</p>{list}</div>"#,
+		esc(heading)
+	)
 }
 
 /// Asks which configuration type a loaded file is. The first `best` types are the recommended ones.
@@ -415,7 +564,9 @@ pub fn reopen_html(kinds: &[&ConfigKind], current: &str) -> String {
 	if buttons.is_empty() {
 		return String::new();
 	}
-	format!(r#"<div class="rounded-md border border-slate-200 bg-white p-3 text-sm text-slate-700"><p>Not the right type? Open the file as:</p><div class="flex flex-wrap gap-2 mt-2">{buttons}</div></div>"#)
+	format!(
+		r#"<div class="rounded-md border border-slate-200 bg-white p-3 text-sm text-slate-700"><p>Not the right type? Open the file as:</p><div class="flex flex-wrap gap-2 mt-2">{buttons}</div></div>"#
+	)
 }
 
 #[cfg(test)]
@@ -433,11 +584,29 @@ mod tests {
 		let html = form_html(&sample_form());
 		assert!(html.contains(r#"data-path="config.name""#));
 		assert!(!html.contains(r#"data-details="config""#));
-		let name = html.split(r#"data-node="config.name""#).nth(1).unwrap_or_default();
-		assert!(name.split("</div>").next().unwrap_or_default().contains("Required"));
-		let port = html.split(r#"data-node="config.port""#).nth(1).unwrap_or_default();
-		assert!(port.split("</div>").next().unwrap_or_default().contains("Optional"));
-		assert!(html.contains(r#"data-path="config.port" data-kind="text" data-type="uint" data-required="false""#));
+		let name = html
+			.split(r#"data-node="config.name""#)
+			.nth(1)
+			.unwrap_or_default();
+		assert!(
+			name.split("</div>")
+				.next()
+				.unwrap_or_default()
+				.contains("Required")
+		);
+		let port = html
+			.split(r#"data-node="config.port""#)
+			.nth(1)
+			.unwrap_or_default();
+		assert!(
+			port.split("</div>")
+				.next()
+				.unwrap_or_default()
+				.contains("Optional")
+		);
+		assert!(html.contains(
+			r#"data-path="config.port" data-kind="text" data-type="uint" data-required="false""#
+		));
 		assert!(html.contains(r#"data-required="true" aria-required="true""#));
 		assert_eq!(count(&html, "<details"), count(&html, "</details>"));
 		assert_eq!(count(&html, "<div"), count(&html, "</div>"));
@@ -446,7 +615,16 @@ mod tests {
 	#[test]
 	fn fields_are_in_schema_order() {
 		let html = form_html(&sample_form());
-		let positions: Vec<usize> = ["config.name\"", "config.port\"", "config.ratio\"", "config.follow\"", "config.active\""].iter().filter_map(|p| html.find(&format!("data-path=\"{p}"))).collect();
+		let positions: Vec<usize> = [
+			"config.name\"",
+			"config.port\"",
+			"config.ratio\"",
+			"config.follow\"",
+			"config.active\"",
+		]
+		.iter()
+		.filter_map(|p| html.find(&format!("data-path=\"{p}")))
+		.collect();
 		assert_eq!(positions.len(), 5);
 		assert!(positions.windows(2).all(|w| w[0] < w[1]));
 	}
@@ -485,7 +663,13 @@ mod tests {
 		let mut form = sample_form();
 		assert_eq!(form.set_variant("config.login", "Basic"), Ok(()));
 		let html = form_html(&form);
-		let select = html.split(r#"id="f-config.login""#).nth(1).unwrap_or_default().split("</select>").next().unwrap_or_default();
+		let select = html
+			.split(r#"id="f-config.login""#)
+			.nth(1)
+			.unwrap_or_default()
+			.split("</select>")
+			.next()
+			.unwrap_or_default();
 		assert_eq!(count(select, "<option"), 4);
 		assert!(select.contains(r#"<option value="Basic" selected>"#));
 		assert!(!select.contains("not set"));
@@ -493,7 +677,13 @@ mod tests {
 		assert!(!html.contains(r#"data-path="config.login.Bearer""#));
 
 		// The optional enum has an empty option
-		let select = html.split(r#"id="f-config.auth""#).nth(1).unwrap_or_default().split("</select>").next().unwrap_or_default();
+		let select = html
+			.split(r#"id="f-config.auth""#)
+			.nth(1)
+			.unwrap_or_default()
+			.split("</select>")
+			.next()
+			.unwrap_or_default();
 		assert_eq!(count(select, "<option"), 5);
 		assert!(select.contains(r#"<option value="" selected>"#));
 	}
@@ -522,7 +712,13 @@ mod tests {
 		assert!(html.contains(r#"type="checkbox" id="f-config.active""#));
 		assert!(html.contains(r#"data-kind="check""#));
 		assert!(html.contains("checked"));
-		let select = html.split(r#"id="f-config.follow""#).nth(1).unwrap_or_default().split("</select>").next().unwrap_or_default();
+		let select = html
+			.split(r#"id="f-config.follow""#)
+			.nth(1)
+			.unwrap_or_default()
+			.split("</select>")
+			.next()
+			.unwrap_or_default();
 		assert!(select.contains(r#"<option value="false" selected>"#));
 	}
 
@@ -546,7 +742,9 @@ mod tests {
 		assert_eq!(form.list_add("config.fields"), Ok(0));
 
 		let html = render_path(&form, "config.entries").unwrap_or_default();
-		assert!(html.starts_with(r#"<div class="mb-4 border border-slate-300 rounded-lg shadow-sm" data-node="config.entries""#));
+		assert!(html.starts_with(
+			r#"<div class="mb-4 border border-slate-300 rounded-lg shadow-sm" data-node="config.entries""#
+		));
 
 		let html = render_path(&form, "config.entries.0").unwrap_or_default();
 		assert!(html.contains(r#"data-node="config.entries.0""#));
@@ -570,7 +768,12 @@ mod tests {
 			let form = Form::new((kind.schema)());
 			let html = form_html(&form);
 			assert!(html.contains(r#"data-path="config.name""#), "{}", kind.id);
-			assert_eq!(count(&html, "<details"), count(&html, "</details>"), "{}", kind.id);
+			assert_eq!(
+				count(&html, "<details"),
+				count(&html, "</details>"),
+				"{}",
+				kind.id
+			);
 			assert_eq!(count(&html, "<div"), count(&html, "</div>"), "{}", kind.id);
 			assert!(!html.contains("Unit"), "{}", kind.id);
 		}
@@ -589,7 +792,14 @@ mod tests {
 
 	#[test]
 	fn messages_link_to_fields() {
-		let html = messages_html(Level::Warning, "Check", &[Issue::new("config.parser.0.name", "missing"), Issue::new("", "general")]);
+		let html = messages_html(
+			Level::Warning,
+			"Check",
+			&[
+				Issue::new("config.parser.0.name", "missing"),
+				Issue::new("", "general"),
+			],
+		);
 		assert!(html.contains(r#"data-action="goto" data-path="config.parser.0.name""#));
 		assert!(html.contains("Parser #1 › Name"));
 		assert!(html.contains("<li>general</li>"));
@@ -608,6 +818,9 @@ mod tests {
 		assert_eq!(count(&html, "choose-kind"), 1);
 		assert!(!html.contains(&format!(r#"data-kind="{}""#, found[0].id)));
 		assert_eq!(reopen_html(&found[..1], found[0].id), "");
-		assert_eq!(count(&nav_buttons_html(kinds::all()), r#"data-action="new""#), kinds::all().len());
+		assert_eq!(
+			count(&nav_buttons_html(kinds::all()), r#"data-action="new""#),
+			kinds::all().len()
+		);
 	}
 }

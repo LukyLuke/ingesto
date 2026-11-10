@@ -4,7 +4,7 @@ use serde_yaml::{Mapping, Number, Value};
 use shared::types::{ConfStruct, ConfType};
 
 use crate::kinds::ConfigKind;
-use crate::model::{peel, Form, Node};
+use crate::model::{Form, Node, peel};
 use crate::types::{Format, Issue};
 use crate::utils::join_path;
 
@@ -32,7 +32,13 @@ fn number_error(path: &str, what: &str) -> Issue {
 	Issue::new(path, format!("Not a valid {what}"))
 }
 
-fn emit_text(inner: &ConfType, optional: bool, text: &str, path: &str, issues: &mut Vec<Issue>) -> Option<Value> {
+fn emit_text(
+	inner: &ConfType,
+	optional: bool,
+	text: &str,
+	path: &str,
+	issues: &mut Vec<Issue>,
+) -> Option<Value> {
 	if text.is_empty() {
 		if !optional {
 			issues.push(Issue::new(path, REQUIRED));
@@ -47,43 +53,56 @@ fn emit_text(inner: &ConfType, optional: bool, text: &str, path: &str, issues: &
 			_ => {
 				issues.push(Issue::new(path, "Must be true or false"));
 				None
-			},
+			}
 		},
 		ConfType::UInt(_) => match text.trim().parse::<u64>() {
 			Ok(n) => Some(Value::Number(Number::from(n))),
 			Err(_) => {
 				issues.push(number_error(path, "positive whole number"));
 				None
-			},
+			}
 		},
 		ConfType::Int(_) => match text.trim().parse::<i64>() {
 			Ok(n) => Some(Value::Number(Number::from(n))),
 			Err(_) => {
 				issues.push(number_error(path, "whole number"));
 				None
-			},
+			}
 		},
 		ConfType::Float(_) => match text.trim().parse::<f64>() {
 			Ok(n) if n.is_finite() => Some(Value::Number(Number::from(n))),
 			_ => {
 				issues.push(number_error(path, "number"));
 				None
-			},
+			}
 		},
 		ConfType::RegEx(_) => match regex::Regex::new(text) {
 			Ok(_) => Some(Value::String(text.to_owned())),
 			Err(e) => {
 				let message = e.to_string();
-				let first = message.lines().last().unwrap_or("invalid regular expression").trim();
-				issues.push(Issue::new(path, format!("Invalid regular expression: {first}")));
+				let first = message
+					.lines()
+					.last()
+					.unwrap_or("invalid regular expression")
+					.trim();
+				issues.push(Issue::new(
+					path,
+					format!("Invalid regular expression: {first}"),
+				));
 				None
-			},
+			}
 		},
 		_ => Some(Value::String(text.to_owned())),
 	}
 }
 
-fn emit(ty: &ConfType, node: &Node, path: &str, format: Format, issues: &mut Vec<Issue>) -> Option<Value> {
+fn emit(
+	ty: &ConfType,
+	node: &Node,
+	path: &str,
+	format: Format,
+	issues: &mut Vec<Issue>,
+) -> Option<Value> {
 	let (inner, optional) = peel(ty);
 	match (node, inner) {
 		(Node::Unit, _) | (Node::Opt(None), _) => None,
@@ -92,13 +111,15 @@ fn emit(ty: &ConfType, node: &Node, path: &str, format: Format, issues: &mut Vec
 		(Node::Struct(fields), ConfType::Struct(schema)) => {
 			let mut map = Mapping::new();
 			for (name, child) in fields {
-				let Some(child_ty) = schema.get(name) else { continue };
+				let Some(child_ty) = schema.get(name) else {
+					continue;
+				};
 				if let Some(value) = emit(child_ty, child, &join_path(path, name), format, issues) {
 					map.insert(Value::String(name.clone()), value);
 				}
 			}
 			Some(Value::Mapping(map))
-		},
+		}
 		(Node::List(items), ConfType::Vec(item_ty)) => {
 			if items.is_empty() {
 				if !optional {
@@ -109,45 +130,82 @@ fn emit(ty: &ConfType, node: &Node, path: &str, format: Format, issues: &mut Vec
 			let values: Vec<Value> = items
 				.iter()
 				.enumerate()
-				.filter_map(|(index, item)| emit(item_ty, item, &join_path(path, &index.to_string()), format, issues))
+				.filter_map(|(index, item)| {
+					emit(
+						item_ty,
+						item,
+						&join_path(path, &index.to_string()),
+						format,
+						issues,
+					)
+				})
 				.collect();
 			Some(Value::Sequence(values))
-		},
+		}
 		(Node::Tuple(items), ConfType::Tuple(types)) => {
 			let values: Vec<Value> = items
 				.iter()
 				.zip(types)
 				.enumerate()
-				.filter_map(|(index, (item, item_ty))| emit(item_ty, item, &join_path(path, &index.to_string()), format, issues))
+				.filter_map(|(index, (item, item_ty))| {
+					emit(
+						item_ty,
+						item,
+						&join_path(path, &index.to_string()),
+						format,
+						issues,
+					)
+				})
 				.collect();
 			Some(Value::Sequence(values))
-		},
+		}
 		(Node::Enum { variant, payload }, ConfType::Enum(variants, _)) => {
 			let variant_ty = variants.get(variant)?;
 			if matches!(peel(variant_ty).0, ConfType::EnumValue) {
 				return Some(Value::String(variant.clone()));
 			}
-			let value = emit(variant_ty, payload, &join_path(path, variant), format, issues)?;
+			let value = emit(
+				variant_ty,
+				payload,
+				&join_path(path, variant),
+				format,
+				issues,
+			)?;
 			if format == Format::Yaml {
-				return Some(Value::Tagged(Box::new(TaggedValue { tag: Tag::new(variant), value })));
+				return Some(Value::Tagged(Box::new(TaggedValue {
+					tag: Tag::new(variant),
+					value,
+				})));
 			}
 			let mut map = Mapping::new();
 			map.insert(Value::String(variant.clone()), value);
 			Some(Value::Mapping(map))
-		},
+		}
 		(Node::Enum { variant, payload }, ConfType::Tagged(tag, variants, _)) => {
 			let variant_ty = variants.get(variant)?;
 			let mut map = Mapping::new();
-			map.insert(Value::String((*tag).to_owned()), Value::String(variant.clone()));
-			if let Some(Value::Mapping(fields)) = emit(variant_ty, payload, &join_path(path, variant), format, issues) {
+			map.insert(
+				Value::String((*tag).to_owned()),
+				Value::String(variant.clone()),
+			);
+			if let Some(Value::Mapping(fields)) = emit(
+				variant_ty,
+				payload,
+				&join_path(path, variant),
+				format,
+				issues,
+			) {
 				map.extend(fields);
 			}
 			Some(Value::Mapping(map))
-		},
+		}
 		_ => {
-			issues.push(Issue::new(path, "The value does not match the type of the field"));
+			issues.push(Issue::new(
+				path,
+				"The value does not match the type of the field",
+			));
 			None
-		},
+		}
 	}
 }
 
@@ -193,7 +251,7 @@ pub fn parse_text(text: &str, format: Format) -> Result<Json, String> {
 		Format::Yaml => {
 			let value = serde_yaml::from_str::<Value>(text).map_err(|e| e.to_string())?;
 			yaml_to_json(&value)
-		},
+		}
 	}
 }
 
@@ -204,11 +262,15 @@ fn yaml_to_json(value: &Value) -> Result<Json, String> {
 		Value::Number(n) => match (n.as_i64(), n.as_u64(), n.as_f64()) {
 			(Some(i), _, _) => Json::from(i),
 			(_, Some(u), _) => Json::from(u),
-			(_, _, Some(f)) => serde_json::Number::from_f64(f).map(Json::Number).ok_or_else(|| format!("The number {f} is not supported"))?,
+			(_, _, Some(f)) => serde_json::Number::from_f64(f)
+				.map(Json::Number)
+				.ok_or_else(|| format!("The number {f} is not supported"))?,
 			_ => return Err("Unsupported number".to_owned()),
 		},
 		Value::String(s) => Json::String(s.clone()),
-		Value::Sequence(items) => Json::Array(items.iter().map(yaml_to_json).collect::<Result<_, _>>()?),
+		Value::Sequence(items) => {
+			Json::Array(items.iter().map(yaml_to_json).collect::<Result<_, _>>()?)
+		}
 		Value::Mapping(map) => {
 			let mut out = serde_json::Map::new();
 			for (key, value) in map {
@@ -221,13 +283,16 @@ fn yaml_to_json(value: &Value) -> Result<Json, String> {
 				out.insert(key, yaml_to_json(value)?);
 			}
 			Json::Object(out)
-		},
+		}
 		Value::Tagged(tagged) => {
 			let name = tagged.tag.to_string();
 			let mut out = serde_json::Map::new();
-			out.insert(name.trim_start_matches('!').to_owned(), yaml_to_json(&tagged.value)?);
+			out.insert(
+				name.trim_start_matches('!').to_owned(),
+				yaml_to_json(&tagged.value)?,
+			);
 			Json::Object(out)
-		},
+		}
 	})
 }
 
@@ -249,7 +314,11 @@ fn scalar_text(value: &Json) -> Option<String> {
 }
 
 fn wrap_present(inner: &ConfType, optional: bool, node: Node) -> Node {
-	if optional && matches!(inner, ConfType::Struct(_) | ConfType::Tuple(_) | ConfType::Enum(..) | ConfType::Tagged(..)) {
+	if optional
+		&& matches!(
+			inner,
+			ConfType::Struct(_) | ConfType::Tuple(_) | ConfType::Enum(..) | ConfType::Tagged(..)
+		) {
 		Node::Opt(Some(Box::new(node)))
 	} else {
 		node
@@ -264,7 +333,7 @@ fn load(ty: &ConfType, value: Option<&Json>, path: &str, report: &mut LoadReport
 				report.missing.push(path.to_owned());
 			}
 			return Node::new(ty);
-		},
+		}
 		Some(value) => value,
 	};
 
@@ -288,24 +357,55 @@ fn load(ty: &ConfType, value: Option<&Json>, path: &str, report: &mut LoadReport
 		},
 		ConfType::EnumValue => Node::Unit,
 		ConfType::Struct(schema) => match value {
-			Json::Object(map) => wrap_present(inner, optional, load_struct(schema, map, None, path, report)),
+			Json::Object(map) => wrap_present(
+				inner,
+				optional,
+				load_struct(schema, map, None, path, report),
+			),
 			_ => mismatch(report),
 		},
 		ConfType::Tuple(types) => match value {
 			Json::Array(items) if items.len() == types.len() => {
-				let nodes = types.iter().zip(items).enumerate().map(|(i, (ty, item))| load(ty, Some(item), &join_path(path, &i.to_string()), report)).collect();
+				let nodes = types
+					.iter()
+					.zip(items)
+					.enumerate()
+					.map(|(i, (ty, item))| {
+						load(ty, Some(item), &join_path(path, &i.to_string()), report)
+					})
+					.collect();
 				wrap_present(inner, optional, Node::Tuple(nodes))
-			},
+			}
 			_ => mismatch(report),
 		},
 		ConfType::Vec(item_ty) => match value {
-			Json::Array(items) => Node::List(items.iter().enumerate().map(|(i, item)| load(item_ty, Some(item), &join_path(path, &i.to_string()), report)).collect()),
+			Json::Array(items) => Node::List(
+				items
+					.iter()
+					.enumerate()
+					.map(|(i, item)| {
+						load(
+							item_ty,
+							Some(item),
+							&join_path(path, &i.to_string()),
+							report,
+						)
+					})
+					.collect(),
+			),
 			_ => mismatch(report),
 		},
 		ConfType::Enum(variants, _) => {
 			let found = match value {
-				Json::String(name) => variants.get(name).filter(|ty| matches!(peel(ty).0, ConfType::EnumValue)).map(|_| (name.as_str(), None)),
-				Json::Object(map) if map.len() == 1 => map.iter().next().and_then(|(name, payload)| variants.get(name).map(|_| (name.as_str(), Some(payload)))),
+				Json::String(name) => variants
+					.get(name)
+					.filter(|ty| matches!(peel(ty).0, ConfType::EnumValue))
+					.map(|_| (name.as_str(), None)),
+				Json::Object(map) if map.len() == 1 => {
+					map.iter().next().and_then(|(name, payload)| {
+						variants.get(name).map(|_| (name.as_str(), Some(payload)))
+					})
+				}
 				_ => None,
 			};
 			match found {
@@ -316,39 +416,74 @@ fn load(ty: &ConfType, value: Option<&Json>, path: &str, report: &mut LoadReport
 						(ConfType::EnumValue, _) => Node::Unit,
 						(_, payload) => load(variant_ty, payload, &payload_path, report),
 					};
-					wrap_present(inner, optional, Node::Enum { variant: name.to_owned(), payload: Box::new(payload) })
-				},
+					wrap_present(
+						inner,
+						optional,
+						Node::Enum {
+							variant: name.to_owned(),
+							payload: Box::new(payload),
+						},
+					)
+				}
 				None => mismatch(report),
 			}
-		},
+		}
 		ConfType::Tagged(tag, variants, _) => {
 			let found = match value {
-				Json::Object(map) => map.get(*tag).and_then(Json::as_str).and_then(|name| variants.get(name).map(|ty| (name, ty, map))),
+				Json::Object(map) => map
+					.get(*tag)
+					.and_then(Json::as_str)
+					.and_then(|name| variants.get(name).map(|ty| (name, ty, map))),
 				_ => None,
 			};
 			match found {
 				Some((name, variant_ty, map)) => {
 					let payload_path = join_path(path, name);
 					let payload = match peel(variant_ty).0 {
-						ConfType::Struct(schema) => load_struct(schema, map, Some(tag), &payload_path, report),
+						ConfType::Struct(schema) => {
+							load_struct(schema, map, Some(tag), &payload_path, report)
+						}
 						_ => Node::Unit,
 					};
-					wrap_present(inner, optional, Node::Enum { variant: name.to_owned(), payload: Box::new(payload) })
-				},
+					wrap_present(
+						inner,
+						optional,
+						Node::Enum {
+							variant: name.to_owned(),
+							payload: Box::new(payload),
+						},
+					)
+				}
 				None => mismatch(report),
 			}
-		},
+		}
 		ConfType::Option(_) => mismatch(report),
 	}
 }
 
-fn load_struct(schema: &ConfStruct, map: &serde_json::Map<String, Json>, ignore: Option<&str>, path: &str, report: &mut LoadReport) -> Node {
+fn load_struct(
+	schema: &ConfStruct,
+	map: &serde_json::Map<String, Json>,
+	ignore: Option<&str>,
+	path: &str,
+	report: &mut LoadReport,
+) -> Node {
 	for key in map.keys() {
 		if schema.get(key).is_none() && ignore != Some(key.as_str()) {
 			report.unknown.push(join_path(path, key));
 		}
 	}
-	Node::Struct(schema.iter().map(|(name, ty)| (name.clone(), load(ty, map.get(name), &join_path(path, name), report))).collect())
+	Node::Struct(
+		schema
+			.iter()
+			.map(|(name, ty)| {
+				(
+					name.clone(),
+					load(ty, map.get(name), &join_path(path, name), report),
+				)
+			})
+			.collect(),
+	)
 }
 
 /// How well a loaded file fits a configuration type
@@ -380,8 +515,16 @@ pub fn rank(value: &Json, kinds: &'static [ConfigKind]) -> Vec<Fit> {
 		.filter(|kind| kind.implemented())
 		.map(|kind| {
 			let report = form_from_value((kind.schema)(), value).1;
-			let all = report.missing.iter().chain(&report.unknown).chain(&report.mismatched);
-			Fit { kind, top_level: all.filter(|path| is_top_level(path)).count(), total: report.score() }
+			let all = report
+				.missing
+				.iter()
+				.chain(&report.unknown)
+				.chain(&report.mismatched);
+			Fit {
+				kind,
+				top_level: all.filter(|path| is_top_level(path)).count(),
+				total: report.score(),
+			}
 		})
 		.collect();
 	fits.sort_by_key(Fit::rank);
@@ -392,7 +535,10 @@ pub fn rank(value: &Json, kinds: &'static [ConfigKind]) -> Vec<Fit> {
 /// one if the files of different types are structurally alike.
 pub fn best_count(fits: &[Fit]) -> usize {
 	match fits.first() {
-		Some(first) => fits.iter().take_while(|fit| fit.rank() == first.rank()).count(),
+		Some(first) => fits
+			.iter()
+			.take_while(|fit| fit.rank() == first.rank())
+			.count(),
 		None => 0,
 	}
 }
@@ -401,7 +547,10 @@ pub fn best_count(fits: &[Fit]) -> usize {
 #[cfg(test)]
 pub fn detect(value: &Json, kinds: &'static [ConfigKind]) -> Vec<&'static ConfigKind> {
 	let fits = rank(value, kinds);
-	fits.iter().take(best_count(&fits)).map(|fit| fit.kind).collect()
+	fits.iter()
+		.take(best_count(&fits))
+		.map(|fit| fit.kind)
+		.collect()
 }
 
 #[cfg(test)]
@@ -422,7 +571,9 @@ mod tests {
 
 	#[test]
 	fn empty_form_lists_all_required_fields() {
-		let issues = form_to_value(&sample_form(), Format::Toml).err().unwrap_or_default();
+		let issues = form_to_value(&sample_form(), Format::Toml)
+			.err()
+			.unwrap_or_default();
 		let paths: Vec<&str> = issues.iter().map(|i| i.path.as_str()).collect();
 		assert_eq!(paths, vec!["config.name", "config.entries"]);
 		assert_eq!(issues[0].message, REQUIRED);
@@ -434,14 +585,22 @@ mod tests {
 		fill_minimal(&mut form);
 		let value = form_to_value(&form, Format::Yaml).unwrap_or(Value::Null);
 		let text = to_text(&value, Format::Yaml).unwrap_or_default();
-		assert_eq!(text, "config:\n  name: n\n  active: false\n  login: None\n  entries:\n  - name: e\n");
+		assert_eq!(
+			text,
+			"config:\n  name: n\n  active: false\n  login: None\n  entries:\n  - name: e\n"
+		);
 	}
 
 	#[test]
 	fn all_optional_values_are_written_in_both_formats() {
 		let mut form = sample_form();
 		fill_minimal(&mut form);
-		for (path, value) in [("config.port", "8081"), ("config.ratio", "0.5"), ("config.follow", "true"), ("config.matcher", "^a.*$")] {
+		for (path, value) in [
+			("config.port", "8081"),
+			("config.ratio", "0.5"),
+			("config.follow", "true"),
+			("config.matcher", "^a.*$"),
+		] {
 			assert_eq!(form.set_text(path, value), Ok(()));
 		}
 		assert_eq!(form.set_variant("config.auth", "Basic"), Ok(()));
@@ -461,15 +620,24 @@ mod tests {
 		let from_toml = parse_text(&toml, Format::Toml).unwrap_or(Json::Null);
 		let value = form_to_value(&form, Format::Yaml).unwrap_or(Value::Null);
 		let yaml = to_text(&value, Format::Yaml).unwrap_or_default();
-		assert!(yaml.contains("!Basic") && yaml.contains("!Equals"), "{yaml}");
+		assert!(
+			yaml.contains("!Basic") && yaml.contains("!Equals"),
+			"{yaml}"
+		);
 		let from_yaml = parse_text(&yaml, Format::Yaml).unwrap_or(Json::Null);
 		assert_eq!(from_toml, from_yaml);
 		assert_eq!(from_toml["config"]["port"], 8081);
 		assert_eq!(from_toml["config"]["ratio"], 0.5);
 		assert_eq!(from_toml["config"]["auth"]["Basic"]["user"], "u");
-		assert_eq!(from_toml["config"]["login"]["Equals"], serde_json::json!(["l", "r"]));
+		assert_eq!(
+			from_toml["config"]["login"]["Equals"],
+			serde_json::json!(["l", "r"])
+		);
 		assert_eq!(from_toml["config"]["queue"], serde_json::json!({}));
-		assert_eq!(from_toml["config"]["fields"][0], serde_json::json!({"kind": "Number", "name": "f", "min": -1}));
+		assert_eq!(
+			from_toml["config"]["fields"][0],
+			serde_json::json!({"kind": "Number", "name": "f", "min": -1})
+		);
 	}
 
 	#[test]
@@ -485,7 +653,16 @@ mod tests {
 
 		let issues = form_to_value(&form, Format::Toml).err().unwrap_or_default();
 		let paths: Vec<&str> = issues.iter().map(|i| i.path.as_str()).collect();
-		assert_eq!(paths, vec!["config.port", "config.ratio", "config.matcher", "config.login.Basic.pass", "config.entries.1.name"]);
+		assert_eq!(
+			paths,
+			vec![
+				"config.port",
+				"config.ratio",
+				"config.matcher",
+				"config.login.Basic.pass",
+				"config.entries.1.name"
+			]
+		);
 		assert!(issues[2].message.starts_with("Invalid regular expression"));
 	}
 
@@ -493,14 +670,36 @@ mod tests {
 	fn number_edge_cases() {
 		let mut form = sample_form();
 		fill_minimal(&mut form);
-		for (value, ok) in [("0", true), ("18446744073709551615", true), ("18446744073709551616", false), (" 7 ", true), ("1.5", false), ("1e3", false), ("+5", true)] {
+		for (value, ok) in [
+			("0", true),
+			("18446744073709551615", true),
+			("18446744073709551616", false),
+			(" 7 ", true),
+			("1.5", false),
+			("1e3", false),
+			("+5", true),
+		] {
 			assert_eq!(form.set_text("config.port", value), Ok(()));
-			assert_eq!(form_to_value(&form, Format::Toml).is_ok(), ok, "port {value}");
+			assert_eq!(
+				form_to_value(&form, Format::Toml).is_ok(),
+				ok,
+				"port {value}"
+			);
 		}
-		for (value, ok) in [("1e3", true), ("-0.5", true), ("NaN", false), ("inf", false), ("1,5", false)] {
+		for (value, ok) in [
+			("1e3", true),
+			("-0.5", true),
+			("NaN", false),
+			("inf", false),
+			("1,5", false),
+		] {
 			assert_eq!(form.set_text("config.port", ""), Ok(()));
 			assert_eq!(form.set_text("config.ratio", value), Ok(()));
-			assert_eq!(form_to_value(&form, Format::Toml).is_ok(), ok, "ratio {value}");
+			assert_eq!(
+				form_to_value(&form, Format::Toml).is_ok(),
+				ok,
+				"ratio {value}"
+			);
 		}
 	}
 
@@ -509,7 +708,13 @@ mod tests {
 		let mut form = sample_form();
 		assert_eq!(form.set_text("config.name", "n"), Ok(()));
 		let issues = form_to_value(&form, Format::Toml).err().unwrap_or_default();
-		assert_eq!(issues, vec![Issue::new("config.entries", "At least one entry is required")]);
+		assert_eq!(
+			issues,
+			vec![Issue::new(
+				"config.entries",
+				"At least one entry is required"
+			)]
+		);
 	}
 
 	#[test]
@@ -552,15 +757,35 @@ mod tests {
 
 	#[test]
 	fn load_reports_missing_unknown_and_mismatched() {
-		let value = json("config:\n  name: n\n  active: false\n  bogus: 1\n  port: abc\n  entries:\n    - name: e\n      extra: x\n  auth: {Basic: {user: u, pass: p, more: 1}}\n  login: Nonexistent\n  queue: [1]\n");
+		let value = json(
+			"config:\n  name: n\n  active: false\n  bogus: 1\n  port: abc\n  entries:\n    - name: e\n      extra: x\n  auth: {Basic: {user: u, pass: p, more: 1}}\n  login: Nonexistent\n  queue: [1]\n",
+		);
 		let (form, report) = form_from_value(sample_schema(), &value);
-		assert_eq!(report.unknown, vec!["config.bogus", "config.auth.Basic.more", "config.entries.0.extra"]);
-		assert_eq!(report.mismatched, vec!["config.port", "config.login", "config.queue"]);
+		assert_eq!(
+			report.unknown,
+			vec![
+				"config.bogus",
+				"config.auth.Basic.more",
+				"config.entries.0.extra"
+			]
+		);
+		assert_eq!(
+			report.mismatched,
+			vec!["config.port", "config.login", "config.queue"]
+		);
 		assert!(report.missing.is_empty(), "{:?}", report.missing);
 		// Broken values come back empty / default
-		assert_eq!(form.locate("config.port").map(|(n, _)| n.clone()), Ok(Node::Text(String::new())));
-		assert_eq!(form.locate("config.queue").map(|(n, _)| n.clone()), Ok(Node::Opt(None)));
-		assert!(matches!(form.locate("config.login"), Ok((Node::Enum { variant, .. }, _)) if variant == "None"));
+		assert_eq!(
+			form.locate("config.port").map(|(n, _)| n.clone()),
+			Ok(Node::Text(String::new()))
+		);
+		assert_eq!(
+			form.locate("config.queue").map(|(n, _)| n.clone()),
+			Ok(Node::Opt(None))
+		);
+		assert!(
+			matches!(form.locate("config.login"), Ok((Node::Enum { variant, .. }, _)) if variant == "None")
+		);
 	}
 
 	#[test]
@@ -570,7 +795,15 @@ mod tests {
 		assert_eq!(report.unknown, vec!["other"]);
 
 		let (_, report) = form_from_value(sample_schema(), &json("config: {}"));
-		assert_eq!(report.missing, vec!["config.name", "config.active", "config.login", "config.entries"]);
+		assert_eq!(
+			report.missing,
+			vec![
+				"config.name",
+				"config.active",
+				"config.login",
+				"config.entries"
+			]
+		);
 
 		for broken in [Json::Null, json("[]"), json("7"), json("\"text\"")] {
 			let (form, _) = form_from_value(sample_schema(), &broken);
@@ -580,21 +813,40 @@ mod tests {
 
 	#[test]
 	fn load_accepts_a_number_for_a_string_but_not_the_other_way() {
-		let (form, report) = form_from_value(sample_schema(), &json("config:\n  name: 5\n  port: '5'\n  active: true\n  login: None\n  entries: []\n"));
-		assert_eq!(form.locate("config.name").map(|(n, _)| n.clone()), Ok(Node::Text("5".into())));
+		let (form, report) = form_from_value(
+			sample_schema(),
+			&json(
+				"config:\n  name: 5\n  port: '5'\n  active: true\n  login: None\n  entries: []\n",
+			),
+		);
+		assert_eq!(
+			form.locate("config.name").map(|(n, _)| n.clone()),
+			Ok(Node::Text("5".into()))
+		);
 		assert_eq!(report.mismatched, vec!["config.port"]);
 	}
 
 	#[test]
 	fn tagged_unknown_or_missing_tag_is_a_mismatch() {
-		let (_, report) = form_from_value(sample_schema(), &json("config:\n  name: n\n  entries: []\n  fields:\n    - {kind: Nope, name: x}\n    - {name: y}\n    - {kind: Text, name: z}\n"));
-		assert_eq!(report.mismatched, vec!["config.fields.0", "config.fields.1"]);
+		let (_, report) = form_from_value(
+			sample_schema(),
+			&json(
+				"config:\n  name: n\n  entries: []\n  fields:\n    - {kind: Nope, name: x}\n    - {name: y}\n    - {kind: Text, name: z}\n",
+			),
+		);
+		assert_eq!(
+			report.mismatched,
+			vec!["config.fields.0", "config.fields.1"]
+		);
 	}
 
 	#[test]
 	fn detection_prefers_the_best_fit() {
 		let polling = json("config:\n  name: x\n  api:\n    - name: a\n      uri: http://x\n");
-		let found: Vec<&str> = detect(&polling, kinds::all()).iter().map(|k| k.id).collect();
+		let found: Vec<&str> = detect(&polling, kinds::all())
+			.iter()
+			.map(|k| k.id)
+			.collect();
 		assert_eq!(found, vec!["recv_polling"]);
 
 		let file = json("config:\n  name: x\n  file:\n    path: /var/log/x.log\n");
@@ -620,9 +872,18 @@ mod tests {
 	#[test]
 	fn yaml_tags_are_loaded_as_enum_variants() {
 		let parsed = parse_text("config:\n  auth: !Basic {user: u, pass: p}\n  login: !Bearer tok\n  pair: !Equals [a, b]\n  unit: None\n", Format::Yaml).unwrap_or(Json::Null);
-		assert_eq!(parsed["config"]["auth"], serde_json::json!({"Basic": {"user": "u", "pass": "p"}}));
-		assert_eq!(parsed["config"]["login"], serde_json::json!({"Bearer": "tok"}));
-		assert_eq!(parsed["config"]["pair"], serde_json::json!({"Equals": ["a", "b"]}));
+		assert_eq!(
+			parsed["config"]["auth"],
+			serde_json::json!({"Basic": {"user": "u", "pass": "p"}})
+		);
+		assert_eq!(
+			parsed["config"]["login"],
+			serde_json::json!({"Bearer": "tok"})
+		);
+		assert_eq!(
+			parsed["config"]["pair"],
+			serde_json::json!({"Equals": ["a", "b"]})
+		);
 		assert_eq!(parsed["config"]["unit"], "None");
 	}
 
@@ -630,17 +891,28 @@ mod tests {
 	fn yaml_parsing_edge_cases() {
 		assert!(parse_text("a: [", Format::Yaml).is_err());
 		assert!(parse_text("[1, 2]: x", Format::Yaml).is_err());
-		assert_eq!(parse_text("1: x\ntrue: y\n", Format::Yaml).unwrap_or(Json::Null), serde_json::json!({"1": "x", "true": "y"}));
+		assert_eq!(
+			parse_text("1: x\ntrue: y\n", Format::Yaml).unwrap_or(Json::Null),
+			serde_json::json!({"1": "x", "true": "y"})
+		);
 		assert!(parse_text("a: .inf", Format::Yaml).is_err());
-		assert_eq!(parse_text("a: 18446744073709551615", Format::Yaml).unwrap_or(Json::Null)["a"], 18446744073709551615u64);
-		assert_eq!(parse_text("", Format::Yaml).unwrap_or(Json::Bool(true)), Json::Null);
+		assert_eq!(
+			parse_text("a: 18446744073709551615", Format::Yaml).unwrap_or(Json::Null)["a"],
+			18446744073709551615u64
+		);
+		assert_eq!(
+			parse_text("", Format::Yaml).unwrap_or(Json::Bool(true)),
+			Json::Null
+		);
 		assert!(parse_text("a = ", Format::Toml).is_err());
 	}
 
 	#[test]
 	fn nested_problems_do_not_hide_the_type() {
 		// The auth header has the wrong key names, but the keys of the file are those of a polling configuration
-		let value = json("config:\n  name: x\n  timer: '0 */1 * * * *'\n  queue: {}\n  api:\n    - name: a\n      uri: http://x\n      auth: {Header: {name: h, value: v}}\n  parser: []\n");
+		let value = json(
+			"config:\n  name: x\n  timer: '0 */1 * * * *'\n  queue: {}\n  api:\n    - name: a\n      uri: http://x\n      auth: {Header: {name: h, value: v}}\n  parser: []\n",
+		);
 		let found: Vec<&str> = detect(&value, kinds::all()).iter().map(|k| k.id).collect();
 		assert_eq!(found, vec!["recv_polling"]);
 	}

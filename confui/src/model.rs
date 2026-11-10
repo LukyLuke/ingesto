@@ -11,7 +11,10 @@ pub enum ModelError {
 	#[error("'{0}' is not set, add it first")]
 	NotPresent(String),
 	#[error("'{path}' is not {expected}")]
-	WrongNode { path: String, expected: &'static str },
+	WrongNode {
+		path: String,
+		expected: &'static str,
+	},
 	#[error("'{variant}' is not a variant of '{path}'")]
 	UnknownVariant { path: String, variant: String },
 	#[error("there is no entry {index} in '{path}'")]
@@ -59,7 +62,10 @@ pub fn peel(ty: &ConfType) -> (&ConfType, bool) {
 
 /// Types which can't be shown as a simple input and are therefore added and removed
 fn is_composite(ty: &ConfType) -> bool {
-	matches!(ty, ConfType::Struct(_) | ConfType::Tuple(_) | ConfType::Enum(..) | ConfType::Tagged(..))
+	matches!(
+		ty,
+		ConfType::Struct(_) | ConfType::Tuple(_) | ConfType::Enum(..) | ConfType::Tagged(..)
+	)
 }
 
 /// The variants of an enum
@@ -86,12 +92,24 @@ impl Node {
 		let (inner, optional) = peel(ty);
 		match inner {
 			ConfType::Bool(_) if !optional => Node::Text("false".to_owned()),
-			ConfType::Bool(_) | ConfType::UInt(_) | ConfType::Int(_) | ConfType::Float(_) | ConfType::String(_) | ConfType::RegEx(_) => Node::Text(String::new()),
+			ConfType::Bool(_)
+			| ConfType::UInt(_)
+			| ConfType::Int(_)
+			| ConfType::Float(_)
+			| ConfType::String(_)
+			| ConfType::RegEx(_) => Node::Text(String::new()),
 			ConfType::EnumValue => Node::Unit,
-			ConfType::Struct(fields) => Node::Struct(fields.iter().map(|(name, ty)| (name.clone(), Node::new(ty))).collect()),
+			ConfType::Struct(fields) => Node::Struct(
+				fields
+					.iter()
+					.map(|(name, ty)| (name.clone(), Node::new(ty)))
+					.collect(),
+			),
 			ConfType::Tuple(types) => Node::Tuple(types.iter().map(Node::new).collect()),
 			ConfType::Vec(_) => Node::List(Vec::new()),
-			ConfType::Enum(_, default) | ConfType::Tagged(_, _, default) => Node::variant(inner, default).unwrap_or(Node::Unit),
+			ConfType::Enum(_, default) | ConfType::Tagged(_, _, default) => {
+				Node::variant(inner, default).unwrap_or(Node::Unit)
+			}
 			ConfType::Option(_) => Node::Unit,
 		}
 	}
@@ -99,7 +117,10 @@ impl Node {
 	/// A node of an enum with the given variant selected
 	pub fn variant(ty: &ConfType, variant: &str) -> Option<Node> {
 		let variant_ty = variants_of(ty)?.get(variant)?;
-		Some(Node::Enum { variant: variant.to_owned(), payload: Box::new(Node::new(variant_ty)) })
+		Some(Node::Enum {
+			variant: variant.to_owned(),
+			payload: Box::new(Node::new(variant_ty)),
+		})
 	}
 }
 
@@ -110,7 +131,12 @@ pub struct Form {
 	pub root: Node,
 }
 
-fn locate_in<'a>(node: &'a Node, ty: &'a ConfType, segs: &[&str], path: &str) -> Result<(&'a Node, &'a ConfType), ModelError> {
+fn locate_in<'a>(
+	node: &'a Node,
+	ty: &'a ConfType,
+	segs: &[&str],
+	path: &str,
+) -> Result<(&'a Node, &'a ConfType), ModelError> {
 	let Some((first, rest)) = segs.split_first() else {
 		return Ok((node, ty));
 	};
@@ -119,30 +145,58 @@ fn locate_in<'a>(node: &'a Node, ty: &'a ConfType, segs: &[&str], path: &str) ->
 		(Node::Opt(None), _) => Err(ModelError::NotPresent(path.to_owned())),
 		(Node::Opt(Some(child)), _) => locate_in(child, ty, segs, path),
 		(Node::Struct(fields), ConfType::Struct(schema)) => {
-			let child_ty = schema.get(first).ok_or_else(|| ModelError::UnknownPath(path.to_owned()))?;
-			let (_, child) = fields.iter().find(|(name, _)| name == first).ok_or_else(|| ModelError::UnknownPath(path.to_owned()))?;
+			let child_ty = schema
+				.get(first)
+				.ok_or_else(|| ModelError::UnknownPath(path.to_owned()))?;
+			let (_, child) = fields
+				.iter()
+				.find(|(name, _)| name == first)
+				.ok_or_else(|| ModelError::UnknownPath(path.to_owned()))?;
 			locate_in(child, child_ty, rest, path)
-		},
+		}
 		(Node::List(items), ConfType::Vec(item_ty)) => {
-			let index: usize = first.parse().map_err(|_| ModelError::UnknownPath(path.to_owned()))?;
-			let child = items.get(index).ok_or_else(|| ModelError::UnknownIndex { path: path.to_owned(), index })?;
+			let index: usize = first
+				.parse()
+				.map_err(|_| ModelError::UnknownPath(path.to_owned()))?;
+			let child = items.get(index).ok_or_else(|| ModelError::UnknownIndex {
+				path: path.to_owned(),
+				index,
+			})?;
 			locate_in(child, item_ty, rest, path)
-		},
+		}
 		(Node::Tuple(items), ConfType::Tuple(types)) => {
-			let index: usize = first.parse().map_err(|_| ModelError::UnknownPath(path.to_owned()))?;
-			let child = items.get(index).ok_or_else(|| ModelError::UnknownIndex { path: path.to_owned(), index })?;
-			let child_ty = types.get(index).ok_or_else(|| ModelError::UnknownIndex { path: path.to_owned(), index })?;
+			let index: usize = first
+				.parse()
+				.map_err(|_| ModelError::UnknownPath(path.to_owned()))?;
+			let child = items.get(index).ok_or_else(|| ModelError::UnknownIndex {
+				path: path.to_owned(),
+				index,
+			})?;
+			let child_ty = types.get(index).ok_or_else(|| ModelError::UnknownIndex {
+				path: path.to_owned(),
+				index,
+			})?;
 			locate_in(child, child_ty, rest, path)
-		},
-		(Node::Enum { variant, payload }, ConfType::Enum(variants, _) | ConfType::Tagged(_, variants, _)) if variant == first => {
-			let child_ty = variants.get(variant).ok_or_else(|| ModelError::UnknownPath(path.to_owned()))?;
+		}
+		(
+			Node::Enum { variant, payload },
+			ConfType::Enum(variants, _) | ConfType::Tagged(_, variants, _),
+		) if variant == first => {
+			let child_ty = variants
+				.get(variant)
+				.ok_or_else(|| ModelError::UnknownPath(path.to_owned()))?;
 			locate_in(payload, child_ty, rest, path)
-		},
+		}
 		_ => Err(ModelError::UnknownPath(path.to_owned())),
 	}
 }
 
-fn locate_in_mut<'a>(node: &'a mut Node, ty: &'a ConfType, segs: &[&str], path: &str) -> Result<(&'a mut Node, &'a ConfType), ModelError> {
+fn locate_in_mut<'a>(
+	node: &'a mut Node,
+	ty: &'a ConfType,
+	segs: &[&str],
+	path: &str,
+) -> Result<(&'a mut Node, &'a ConfType), ModelError> {
 	let Some((first, rest)) = segs.split_first() else {
 		return Ok((node, ty));
 	};
@@ -151,28 +205,55 @@ fn locate_in_mut<'a>(node: &'a mut Node, ty: &'a ConfType, segs: &[&str], path: 
 		(Node::Opt(None), _) => Err(ModelError::NotPresent(path.to_owned())),
 		(Node::Opt(Some(child)), _) => locate_in_mut(child, ty, segs, path),
 		(Node::Struct(fields), ConfType::Struct(schema)) => {
-			let child_ty = schema.get(first).ok_or_else(|| ModelError::UnknownPath(path.to_owned()))?;
-			let (_, child) = fields.iter_mut().find(|(name, _)| name == first).ok_or_else(|| ModelError::UnknownPath(path.to_owned()))?;
+			let child_ty = schema
+				.get(first)
+				.ok_or_else(|| ModelError::UnknownPath(path.to_owned()))?;
+			let (_, child) = fields
+				.iter_mut()
+				.find(|(name, _)| name == first)
+				.ok_or_else(|| ModelError::UnknownPath(path.to_owned()))?;
 			locate_in_mut(child, child_ty, rest, path)
-		},
+		}
 		(Node::List(items), ConfType::Vec(item_ty)) => {
-			let index: usize = first.parse().map_err(|_| ModelError::UnknownPath(path.to_owned()))?;
-			let child = items.get_mut(index).ok_or_else(|| ModelError::UnknownIndex { path: path.to_owned(), index })?;
+			let index: usize = first
+				.parse()
+				.map_err(|_| ModelError::UnknownPath(path.to_owned()))?;
+			let child = items
+				.get_mut(index)
+				.ok_or_else(|| ModelError::UnknownIndex {
+					path: path.to_owned(),
+					index,
+				})?;
 			locate_in_mut(child, item_ty, rest, path)
-		},
+		}
 		(Node::Tuple(items), ConfType::Tuple(types)) => {
-			let index: usize = first.parse().map_err(|_| ModelError::UnknownPath(path.to_owned()))?;
-			let child = items.get_mut(index).ok_or_else(|| ModelError::UnknownIndex { path: path.to_owned(), index })?;
-			let child_ty = types.get(index).ok_or_else(|| ModelError::UnknownIndex { path: path.to_owned(), index })?;
+			let index: usize = first
+				.parse()
+				.map_err(|_| ModelError::UnknownPath(path.to_owned()))?;
+			let child = items
+				.get_mut(index)
+				.ok_or_else(|| ModelError::UnknownIndex {
+					path: path.to_owned(),
+					index,
+				})?;
+			let child_ty = types.get(index).ok_or_else(|| ModelError::UnknownIndex {
+				path: path.to_owned(),
+				index,
+			})?;
 			locate_in_mut(child, child_ty, rest, path)
-		},
-		(Node::Enum { variant, payload }, ConfType::Enum(variants, _) | ConfType::Tagged(_, variants, _)) => {
+		}
+		(
+			Node::Enum { variant, payload },
+			ConfType::Enum(variants, _) | ConfType::Tagged(_, variants, _),
+		) => {
 			if variant != first {
 				return Err(ModelError::UnknownPath(path.to_owned()));
 			}
-			let child_ty = variants.get(variant).ok_or_else(|| ModelError::UnknownPath(path.to_owned()))?;
+			let child_ty = variants
+				.get(variant)
+				.ok_or_else(|| ModelError::UnknownPath(path.to_owned()))?;
 			locate_in_mut(payload, child_ty, rest, path)
-		},
+		}
 		_ => Err(ModelError::UnknownPath(path.to_owned())),
 	}
 }
@@ -202,8 +283,11 @@ impl Form {
 			(Node::Text(text), _) => {
 				*text = value.to_owned();
 				Ok(())
-			},
-			_ => Err(ModelError::WrongNode { path: path.to_owned(), expected: "a value" }),
+			}
+			_ => Err(ModelError::WrongNode {
+				path: path.to_owned(),
+				expected: "a value",
+			}),
 		}
 	}
 
@@ -212,28 +296,44 @@ impl Form {
 		match self.locate_mut(path)? {
 			(Node::List(items), ty) => {
 				let ConfType::Vec(item_ty) = peel(ty).0 else {
-					return Err(ModelError::WrongNode { path: path.to_owned(), expected: "a list" });
+					return Err(ModelError::WrongNode {
+						path: path.to_owned(),
+						expected: "a list",
+					});
 				};
 				items.push(Node::present(item_ty));
 				Ok(items.len() - 1)
-			},
-			_ => Err(ModelError::WrongNode { path: path.to_owned(), expected: "a list" }),
+			}
+			_ => Err(ModelError::WrongNode {
+				path: path.to_owned(),
+				expected: "a list",
+			}),
 		}
 	}
 
 	/// Removes the entry at `path` (`config.parser.1`) from it's list
 	pub fn list_remove(&mut self, path: &str) -> Result<(), ModelError> {
-		let (list_path, index) = path.rsplit_once('.').ok_or_else(|| ModelError::UnknownPath(path.to_owned()))?;
-		let index: usize = index.parse().map_err(|_| ModelError::UnknownPath(path.to_owned()))?;
+		let (list_path, index) = path
+			.rsplit_once('.')
+			.ok_or_else(|| ModelError::UnknownPath(path.to_owned()))?;
+		let index: usize = index
+			.parse()
+			.map_err(|_| ModelError::UnknownPath(path.to_owned()))?;
 		match self.locate_mut(list_path)? {
 			(Node::List(items), _) => {
 				if index >= items.len() {
-					return Err(ModelError::UnknownIndex { path: list_path.to_owned(), index });
+					return Err(ModelError::UnknownIndex {
+						path: list_path.to_owned(),
+						index,
+					});
 				}
 				items.remove(index);
 				Ok(())
-			},
-			_ => Err(ModelError::WrongNode { path: list_path.to_owned(), expected: "a list" }),
+			}
+			_ => Err(ModelError::WrongNode {
+				path: list_path.to_owned(),
+				expected: "a list",
+			}),
 		}
 	}
 
@@ -244,11 +344,14 @@ impl Form {
 				match (present, slot.is_some()) {
 					(true, false) => *slot = Some(Box::new(Node::present(peel(ty).0))),
 					(false, _) => *slot = None,
-					(true, true) => {},
+					(true, true) => {}
 				}
 				Ok(())
-			},
-			_ => Err(ModelError::WrongNode { path: path.to_owned(), expected: "optional" }),
+			}
+			_ => Err(ModelError::WrongNode {
+				path: path.to_owned(),
+				expected: "optional",
+			}),
 		}
 	}
 
@@ -258,32 +361,44 @@ impl Form {
 		let (node, ty) = self.locate_mut(path)?;
 		let inner = peel(ty).0;
 		let Some(variants) = variants_of(inner) else {
-			return Err(ModelError::WrongNode { path: path.to_owned(), expected: "an enum" });
+			return Err(ModelError::WrongNode {
+				path: path.to_owned(),
+				expected: "an enum",
+			});
 		};
-		let unknown = || ModelError::UnknownVariant { path: path.to_owned(), variant: variant.to_owned() };
+		let unknown = || ModelError::UnknownVariant {
+			path: path.to_owned(),
+			variant: variant.to_owned(),
+		};
 
 		match node {
 			Node::Opt(slot) if variant.is_empty() => {
 				*slot = None;
 				Ok(())
-			},
+			}
 			Node::Opt(slot) => {
-				if matches!(slot.as_deref(), Some(Node::Enum { variant: current, .. }) if current == variant) {
+				if matches!(slot.as_deref(), Some(Node::Enum { variant: current, .. }) if current == variant)
+				{
 					return Ok(());
 				}
 				variants.get(variant).ok_or_else(unknown)?;
 				*slot = Some(Box::new(Node::variant(inner, variant).ok_or_else(unknown)?));
 				Ok(())
-			},
-			Node::Enum { variant: current, .. } => {
+			}
+			Node::Enum {
+				variant: current, ..
+			} => {
 				if current == variant {
 					return Ok(());
 				}
 				variants.get(variant).ok_or_else(unknown)?;
 				*node = Node::variant(inner, variant).ok_or_else(unknown)?;
 				Ok(())
-			},
-			_ => Err(ModelError::WrongNode { path: path.to_owned(), expected: "an enum" }),
+			}
+			_ => Err(ModelError::WrongNode {
+				path: path.to_owned(),
+				expected: "an enum",
+			}),
 		}
 	}
 }
@@ -305,17 +420,35 @@ pub(crate) mod tests {
 		let auth = ConfType::Enum(
 			ConfStruct::from([
 				s("None", ConfType::EnumValue),
-				s("Basic", ConfType::Struct(ConfStruct::from([s("user", ConfType::String("")), s("pass", ConfType::String(""))]))),
+				s(
+					"Basic",
+					ConfType::Struct(ConfStruct::from([
+						s("user", ConfType::String("")),
+						s("pass", ConfType::String("")),
+					])),
+				),
 				s("Bearer", ConfType::String("")),
-				s("Equals", ConfType::Tuple(vec![ConfType::String(""), ConfType::String("")])),
+				s(
+					"Equals",
+					ConfType::Tuple(vec![ConfType::String(""), ConfType::String("")]),
+				),
 			]),
 			"None",
 		);
 		let tagged = ConfType::Tagged(
 			"kind",
 			ConfStruct::from([
-				s("Text", ConfType::Struct(ConfStruct::from([s("name", ConfType::String(""))]))),
-				s("Number", ConfType::Struct(ConfStruct::from([s("name", ConfType::String("")), s("min", opt(ConfType::Int(0)))]))),
+				s(
+					"Text",
+					ConfType::Struct(ConfStruct::from([s("name", ConfType::String(""))])),
+				),
+				s(
+					"Number",
+					ConfType::Struct(ConfStruct::from([
+						s("name", ConfType::String("")),
+						s("min", opt(ConfType::Int(0))),
+					])),
+				),
 			]),
 			"Text",
 		);
@@ -330,10 +463,28 @@ pub(crate) mod tests {
 				s("matcher", opt(ConfType::RegEx(".*"))),
 				s("auth", opt(auth.clone())),
 				s("login", auth),
-				s("queue", opt(ConfType::Struct(ConfStruct::from([s("size", opt(ConfType::UInt(10)))])))),
-				s("entries", ConfType::Vec(Box::new(ConfType::Struct(ConfStruct::from([s("name", ConfType::String("")), s("tags", opt(ConfType::Vec(Box::new(ConfType::String("")))))]))))),
+				s(
+					"queue",
+					opt(ConfType::Struct(ConfStruct::from([s(
+						"size",
+						opt(ConfType::UInt(10)),
+					)]))),
+				),
+				s(
+					"entries",
+					ConfType::Vec(Box::new(ConfType::Struct(ConfStruct::from([
+						s("name", ConfType::String("")),
+						s("tags", opt(ConfType::Vec(Box::new(ConfType::String(""))))),
+					])))),
+				),
 				s("fields", opt(ConfType::Vec(Box::new(tagged)))),
-				s("pair", opt(ConfType::Tuple(vec![ConfType::String(""), ConfType::UInt(0)]))),
+				s(
+					"pair",
+					opt(ConfType::Tuple(vec![
+						ConfType::String(""),
+						ConfType::UInt(0),
+					])),
+				),
 			])),
 		)])
 	}
@@ -345,24 +496,45 @@ pub(crate) mod tests {
 	#[test]
 	fn new_form_has_required_defaults_and_unset_optionals() {
 		let form = sample_form();
-		let Ok((Node::Text(name), _)) = form.locate("config.name") else { panic!("name") };
+		let Ok((Node::Text(name), _)) = form.locate("config.name") else {
+			panic!("name")
+		};
 		assert_eq!(name, "");
-		assert_eq!(form.locate("config.active").map(|(n, _)| n.clone()), Ok(Node::Text("false".into())));
+		assert_eq!(
+			form.locate("config.active").map(|(n, _)| n.clone()),
+			Ok(Node::Text("false".into()))
+		);
 		// An optional bool is tri-state and starts unset
-		assert_eq!(form.locate("config.follow").map(|(n, _)| n.clone()), Ok(Node::Text(String::new())));
-		assert_eq!(form.locate("config.queue").map(|(n, _)| n.clone()), Ok(Node::Opt(None)));
-		assert_eq!(form.locate("config.auth").map(|(n, _)| n.clone()), Ok(Node::Opt(None)));
+		assert_eq!(
+			form.locate("config.follow").map(|(n, _)| n.clone()),
+			Ok(Node::Text(String::new()))
+		);
+		assert_eq!(
+			form.locate("config.queue").map(|(n, _)| n.clone()),
+			Ok(Node::Opt(None))
+		);
+		assert_eq!(
+			form.locate("config.auth").map(|(n, _)| n.clone()),
+			Ok(Node::Opt(None))
+		);
 		// A required enum starts with it's default variant
-		let Ok((Node::Enum { variant, payload }, _)) = form.locate("config.login") else { panic!("login") };
+		let Ok((Node::Enum { variant, payload }, _)) = form.locate("config.login") else {
+			panic!("login")
+		};
 		assert_eq!(variant, "None");
 		assert_eq!(**payload, Node::Unit);
-		assert_eq!(form.locate("config.entries").map(|(n, _)| n.clone()), Ok(Node::List(vec![])));
+		assert_eq!(
+			form.locate("config.entries").map(|(n, _)| n.clone()),
+			Ok(Node::List(vec![]))
+		);
 	}
 
 	#[test]
 	fn fields_keep_the_order_of_the_schema() {
 		let form = sample_form();
-		let Ok((Node::Struct(fields), _)) = form.locate("config") else { panic!("config") };
+		let Ok((Node::Struct(fields), _)) = form.locate("config") else {
+			panic!("config")
+		};
 		let names: Vec<&str> = fields.iter().map(|(n, _)| n.as_str()).collect();
 		assert_eq!(&names[..4], &["name", "port", "ratio", "follow"]);
 	}
@@ -371,12 +543,30 @@ pub(crate) mod tests {
 	fn set_text_and_errors() {
 		let mut form = sample_form();
 		assert_eq!(form.set_text("config.name", "abc"), Ok(()));
-		assert_eq!(form.locate("config.name").map(|(n, _)| n.clone()), Ok(Node::Text("abc".into())));
-		assert!(matches!(form.set_text("config.unknown", "x"), Err(ModelError::UnknownPath(_))));
-		assert!(matches!(form.set_text("config", "x"), Err(ModelError::WrongNode { .. })));
-		assert!(matches!(form.set_text("config.queue.size", "1"), Err(ModelError::NotPresent(_))));
-		assert!(matches!(form.set_text("", "x"), Err(ModelError::WrongNode { .. })));
-		assert!(matches!(form.set_text("config.name.deeper", "x"), Err(ModelError::UnknownPath(_))));
+		assert_eq!(
+			form.locate("config.name").map(|(n, _)| n.clone()),
+			Ok(Node::Text("abc".into()))
+		);
+		assert!(matches!(
+			form.set_text("config.unknown", "x"),
+			Err(ModelError::UnknownPath(_))
+		));
+		assert!(matches!(
+			form.set_text("config", "x"),
+			Err(ModelError::WrongNode { .. })
+		));
+		assert!(matches!(
+			form.set_text("config.queue.size", "1"),
+			Err(ModelError::NotPresent(_))
+		));
+		assert!(matches!(
+			form.set_text("", "x"),
+			Err(ModelError::WrongNode { .. })
+		));
+		assert!(matches!(
+			form.set_text("config.name.deeper", "x"),
+			Err(ModelError::UnknownPath(_))
+		));
 	}
 
 	#[test]
@@ -389,14 +579,35 @@ pub(crate) mod tests {
 		assert_eq!(form.set_text("config.entries.2.name", "third"), Ok(()));
 
 		assert_eq!(form.list_remove("config.entries.0"), Ok(()));
-		assert_eq!(form.locate("config.entries.0.name").map(|(n, _)| n.clone()), Ok(Node::Text("second".into())));
-		assert!(matches!(form.locate("config.entries.2"), Err(ModelError::UnknownIndex { index: 2, .. })));
+		assert_eq!(
+			form.locate("config.entries.0.name").map(|(n, _)| n.clone()),
+			Ok(Node::Text("second".into()))
+		);
+		assert!(matches!(
+			form.locate("config.entries.2"),
+			Err(ModelError::UnknownIndex { index: 2, .. })
+		));
 
-		assert!(matches!(form.list_remove("config.entries.5"), Err(ModelError::UnknownIndex { .. })));
-		assert!(matches!(form.list_remove("config.entries.x"), Err(ModelError::UnknownPath(_))));
-		assert!(matches!(form.list_remove("config"), Err(ModelError::UnknownPath(_))));
-		assert!(matches!(form.list_remove("config.name.0"), Err(ModelError::WrongNode { .. })));
-		assert!(matches!(form.list_add("config.name"), Err(ModelError::WrongNode { .. })));
+		assert!(matches!(
+			form.list_remove("config.entries.5"),
+			Err(ModelError::UnknownIndex { .. })
+		));
+		assert!(matches!(
+			form.list_remove("config.entries.x"),
+			Err(ModelError::UnknownPath(_))
+		));
+		assert!(matches!(
+			form.list_remove("config"),
+			Err(ModelError::UnknownPath(_))
+		));
+		assert!(matches!(
+			form.list_remove("config.name.0"),
+			Err(ModelError::WrongNode { .. })
+		));
+		assert!(matches!(
+			form.list_add("config.name"),
+			Err(ModelError::WrongNode { .. })
+		));
 	}
 
 	#[test]
@@ -406,7 +617,10 @@ pub(crate) mod tests {
 		assert_eq!(form.list_add("config.entries.0.tags"), Ok(0));
 		assert_eq!(form.set_text("config.entries.0.tags.0", "t"), Ok(()));
 		assert_eq!(form.list_remove("config.entries.0.tags.0"), Ok(()));
-		assert_eq!(form.locate("config.entries.0.tags").map(|(n, _)| n.clone()), Ok(Node::List(vec![])));
+		assert_eq!(
+			form.locate("config.entries.0.tags").map(|(n, _)| n.clone()),
+			Ok(Node::List(vec![]))
+		);
 	}
 
 	#[test]
@@ -416,16 +630,31 @@ pub(crate) mod tests {
 		assert_eq!(form.set_text("config.queue.size", "5"), Ok(()));
 		// Adding again does not throw away the values
 		assert_eq!(form.set_present("config.queue", true), Ok(()));
-		assert_eq!(form.locate("config.queue.size").map(|(n, _)| n.clone()), Ok(Node::Text("5".into())));
+		assert_eq!(
+			form.locate("config.queue.size").map(|(n, _)| n.clone()),
+			Ok(Node::Text("5".into()))
+		);
 		assert_eq!(form.set_present("config.queue", false), Ok(()));
-		assert_eq!(form.locate("config.queue").map(|(n, _)| n.clone()), Ok(Node::Opt(None)));
+		assert_eq!(
+			form.locate("config.queue").map(|(n, _)| n.clone()),
+			Ok(Node::Opt(None))
+		);
 		assert_eq!(form.set_present("config.queue", false), Ok(()));
 		// A removed struct comes back empty
 		assert_eq!(form.set_present("config.queue", true), Ok(()));
-		assert_eq!(form.locate("config.queue.size").map(|(n, _)| n.clone()), Ok(Node::Text(String::new())));
+		assert_eq!(
+			form.locate("config.queue.size").map(|(n, _)| n.clone()),
+			Ok(Node::Text(String::new()))
+		);
 
-		assert!(matches!(form.set_present("config.name", true), Err(ModelError::WrongNode { .. })));
-		assert!(matches!(form.set_present("config.nothing", true), Err(ModelError::UnknownPath(_))));
+		assert!(matches!(
+			form.set_present("config.name", true),
+			Err(ModelError::WrongNode { .. })
+		));
+		assert!(matches!(
+			form.set_present("config.nothing", true),
+			Err(ModelError::UnknownPath(_))
+		));
 	}
 
 	#[test]
@@ -434,7 +663,10 @@ pub(crate) mod tests {
 		assert_eq!(form.set_present("config.pair", true), Ok(()));
 		assert_eq!(form.set_text("config.pair.0", "a"), Ok(()));
 		assert_eq!(form.set_text("config.pair.1", "7"), Ok(()));
-		assert!(matches!(form.set_text("config.pair.2", "7"), Err(ModelError::UnknownIndex { .. })));
+		assert!(matches!(
+			form.set_text("config.pair.2", "7"),
+			Err(ModelError::UnknownIndex { .. })
+		));
 	}
 
 	#[test]
@@ -444,17 +676,33 @@ pub(crate) mod tests {
 		assert_eq!(form.set_text("config.login.Basic.user", "me"), Ok(()));
 		// Same variant keeps the values
 		assert_eq!(form.set_variant("config.login", "Basic"), Ok(()));
-		assert_eq!(form.locate("config.login.Basic.user").map(|(n, _)| n.clone()), Ok(Node::Text("me".into())));
+		assert_eq!(
+			form.locate("config.login.Basic.user")
+				.map(|(n, _)| n.clone()),
+			Ok(Node::Text("me".into()))
+		);
 		// Another variant resets them
 		assert_eq!(form.set_variant("config.login", "Bearer"), Ok(()));
 		assert_eq!(form.set_text("config.login.Bearer", "tok"), Ok(()));
-		assert!(matches!(form.set_text("config.login.Basic.user", "x"), Err(ModelError::UnknownPath(_))));
+		assert!(matches!(
+			form.set_text("config.login.Basic.user", "x"),
+			Err(ModelError::UnknownPath(_))
+		));
 		assert_eq!(form.set_variant("config.login", "Equals"), Ok(()));
 		assert_eq!(form.set_text("config.login.Equals.1", "x"), Ok(()));
 
-		assert!(matches!(form.set_variant("config.login", "Nope"), Err(ModelError::UnknownVariant { .. })));
-		assert!(matches!(form.set_variant("config.login", ""), Err(ModelError::UnknownVariant { .. })));
-		assert!(matches!(form.set_variant("config.name", "Basic"), Err(ModelError::WrongNode { .. })));
+		assert!(matches!(
+			form.set_variant("config.login", "Nope"),
+			Err(ModelError::UnknownVariant { .. })
+		));
+		assert!(matches!(
+			form.set_variant("config.login", ""),
+			Err(ModelError::UnknownVariant { .. })
+		));
+		assert!(matches!(
+			form.set_variant("config.name", "Basic"),
+			Err(ModelError::WrongNode { .. })
+		));
 	}
 
 	#[test]
@@ -463,18 +711,34 @@ pub(crate) mod tests {
 		assert_eq!(form.set_variant("config.auth", "Bearer"), Ok(()));
 		assert_eq!(form.set_text("config.auth.Bearer", "tok"), Ok(()));
 		assert_eq!(form.set_variant("config.auth", "Bearer"), Ok(()));
-		assert_eq!(form.locate("config.auth.Bearer").map(|(n, _)| n.clone()), Ok(Node::Text("tok".into())));
+		assert_eq!(
+			form.locate("config.auth.Bearer").map(|(n, _)| n.clone()),
+			Ok(Node::Text("tok".into()))
+		);
 		assert_eq!(form.set_variant("config.auth", ""), Ok(()));
-		assert_eq!(form.locate("config.auth").map(|(n, _)| n.clone()), Ok(Node::Opt(None)));
-		assert!(matches!(form.set_variant("config.auth", "Nope"), Err(ModelError::UnknownVariant { .. })));
+		assert_eq!(
+			form.locate("config.auth").map(|(n, _)| n.clone()),
+			Ok(Node::Opt(None))
+		);
+		assert!(matches!(
+			form.set_variant("config.auth", "Nope"),
+			Err(ModelError::UnknownVariant { .. })
+		));
 	}
 
 	#[test]
 	fn tagged_enum_in_a_list() {
 		let mut form = sample_form();
-		assert!(form.set_present("config.fields", true).is_err(), "an optional list is not an Opt-Node");
+		assert!(
+			form.set_present("config.fields", true).is_err(),
+			"an optional list is not an Opt-Node"
+		);
 		assert_eq!(form.list_add("config.fields"), Ok(0));
-		assert_eq!(form.locate("config.fields.0.Text.name").map(|(n, _)| n.clone()), Ok(Node::Text(String::new())));
+		assert_eq!(
+			form.locate("config.fields.0.Text.name")
+				.map(|(n, _)| n.clone()),
+			Ok(Node::Text(String::new()))
+		);
 		assert_eq!(form.set_variant("config.fields.0", "Number"), Ok(()));
 		assert_eq!(form.set_text("config.fields.0.Number.min", "-3"), Ok(()));
 	}

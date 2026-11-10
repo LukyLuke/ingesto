@@ -42,7 +42,7 @@ pub(crate) fn form_path(path: &str) -> String {
 	for c in path.chars() {
 		match c {
 			'[' => out.push('.'),
-			']' => {},
+			']' => {}
 			c => out.push(c),
 		}
 	}
@@ -57,12 +57,16 @@ fn check_text<T: DeserializeOwned>(text: &str, format: Format) -> Result<(), Iss
 	match format {
 		Format::Toml => {
 			let de = toml::Deserializer::parse(text).map_err(|e| Issue::new("", e.to_string()))?;
-			serde_path_to_error::deserialize::<_, T>(de).map(|_| ()).map_err(to_issue)
-		},
+			serde_path_to_error::deserialize::<_, T>(de)
+				.map(|_| ())
+				.map_err(to_issue)
+		}
 		Format::Yaml => {
 			let de = serde_yaml::Deserializer::from_str(text);
-			serde_path_to_error::deserialize::<_, T>(de).map(|_| ()).map_err(to_issue)
-		},
+			serde_path_to_error::deserialize::<_, T>(de)
+				.map(|_| ())
+				.map_err(to_issue)
+		}
 	}
 }
 
@@ -160,8 +164,21 @@ mod tests {
 
 	#[test]
 	fn stubs_are_not_implemented() {
-		let implemented: Vec<&str> = all().iter().filter(|k| k.implemented()).map(|k| k.id).collect();
-		assert_eq!(implemented, vec!["recv_webhook", "recv_polling", "recv_network", "recv_file", "exp_exportdb"]);
+		let implemented: Vec<&str> = all()
+			.iter()
+			.filter(|k| k.implemented())
+			.map(|k| k.id)
+			.collect();
+		assert_eq!(
+			implemented,
+			vec![
+				"recv_webhook",
+				"recv_polling",
+				"recv_network",
+				"recv_file",
+				"exp_exportdb"
+			]
+		);
 	}
 
 	#[test]

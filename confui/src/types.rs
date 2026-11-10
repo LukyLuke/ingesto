@@ -33,7 +33,8 @@ impl Format {
 
 	/// Detects the format by the extension of a file name
 	pub fn from_file_name(name: &str) -> Option<Format> {
-		name.rsplit_once('.').and_then(|(_, ext)| Self::from_name(ext))
+		name.rsplit_once('.')
+			.and_then(|(_, ext)| Self::from_name(ext))
 	}
 }
 
@@ -46,7 +47,10 @@ pub struct Issue {
 
 impl Issue {
 	pub fn new(path: &str, message: impl Into<String>) -> Self {
-		Self { path: path.to_owned(), message: message.into() }
+		Self {
+			path: path.to_owned(),
+			message: message.into(),
+		}
 	}
 }
 
@@ -56,7 +60,10 @@ mod tests {
 
 	#[test]
 	fn format_from_file_name() {
-		assert_eq!(Format::from_file_name("webhook.config.toml"), Some(Format::Toml));
+		assert_eq!(
+			Format::from_file_name("webhook.config.toml"),
+			Some(Format::Toml)
+		);
 		assert_eq!(Format::from_file_name("a.YAML"), Some(Format::Yaml));
 		assert_eq!(Format::from_file_name("a.yml"), Some(Format::Yaml));
 		assert_eq!(Format::from_file_name("config"), None);

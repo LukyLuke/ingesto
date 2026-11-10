@@ -6,7 +6,7 @@ use shared::types::ConfType;
 
 use crate::codec::{form_from_value, form_to_value, parse_text, to_text};
 use crate::kinds;
-use crate::model::{peel, Form};
+use crate::model::{Form, peel};
 use crate::types::Format;
 use crate::utils::join_path;
 
@@ -32,7 +32,7 @@ fn populate(form: &mut Form, path: &str, ty: &ConfType, mode: Mode) {
 			for (name, field_ty) in fields {
 				populate(form, &join_path(path, name), field_ty, mode);
 			}
-		},
+		}
 		ConfType::Tuple(types) => {
 			if optional {
 				assert_eq!(form.set_present(path, true), Ok(()), "{path}");
@@ -40,14 +40,14 @@ fn populate(form: &mut Form, path: &str, ty: &ConfType, mode: Mode) {
 			for (index, item_ty) in types.iter().enumerate() {
 				populate(form, &join_path(path, &index.to_string()), item_ty, mode);
 			}
-		},
+		}
 		ConfType::Vec(item_ty) => {
 			let entries = if matches!(mode, Mode::Minimal) { 1 } else { 2 };
 			for _ in 0..entries {
 				let index = form.list_add(path).unwrap_or_default();
 				populate(form, &join_path(path, &index.to_string()), item_ty, mode);
 			}
-		},
+		}
 		ConfType::Enum(variants, default) | ConfType::Tagged(_, variants, default) => {
 			let names: Vec<&String> = variants.iter().map(|(name, _)| name).collect();
 			let variant = match mode {
@@ -60,14 +60,14 @@ fn populate(form: &mut Form, path: &str, ty: &ConfType, mode: Mode) {
 			{
 				populate(form, &join_path(path, &variant), variant_ty, mode);
 			}
-		},
+		}
 		ConfType::Bool(_) => assert_eq!(form.set_text(path, "true"), Ok(()), "{path}"),
 		ConfType::UInt(_) => assert_eq!(form.set_text(path, "5"), Ok(()), "{path}"),
 		ConfType::Int(_) => assert_eq!(form.set_text(path, "-5"), Ok(()), "{path}"),
 		ConfType::Float(_) => assert_eq!(form.set_text(path, "1.5"), Ok(()), "{path}"),
 		ConfType::RegEx(_) => assert_eq!(form.set_text(path, "^a.*$"), Ok(()), "{path}"),
 		ConfType::String(_) => assert_eq!(form.set_text(path, "text"), Ok(()), "{path}"),
-		ConfType::EnumValue | ConfType::Option(_) => {},
+		ConfType::EnumValue | ConfType::Option(_) => {}
 	}
 }
 
@@ -79,7 +79,9 @@ fn every_kind_roundtrips_in_every_variant_and_format() {
 		for (round, mode) in modes.enumerate() {
 			let mut form = Form::new((kind.schema)());
 			let schema = form.schema.clone();
-			let ConfType::Struct(root) = &schema else { panic!("root must be a struct") };
+			let ConfType::Struct(root) = &schema else {
+				panic!("root must be a struct")
+			};
 			for (name, ty) in root {
 				populate(&mut form, name, ty, mode);
 			}
@@ -96,8 +98,16 @@ fn every_kind_roundtrips_in_every_variant_and_format() {
 
 				let parsed = parse_text(&text, format).unwrap_or_default();
 				let (loaded, report) = form_from_value((kind.schema)(), &parsed);
-				assert!(report.is_clean(), "{} round {round} {format:?}: {report:?}\n{text}", kind.id);
-				assert_eq!(loaded.root, form.root, "{} round {round} {format:?}", kind.id);
+				assert!(
+					report.is_clean(),
+					"{} round {round} {format:?}: {report:?}\n{text}",
+					kind.id
+				);
+				assert_eq!(
+					loaded.root, form.root,
+					"{} round {round} {format:?}",
+					kind.id
+				);
 				checked += 1;
 			}
 		}
@@ -111,7 +121,11 @@ fn empty_forms_only_complain_about_required_fields() {
 		let form = Form::new((kind.schema)());
 		let issues = form_to_value(&form, Format::Toml).err().unwrap_or_default();
 		assert!(!issues.is_empty(), "{}", kind.id);
-		assert!(issues.iter().all(|i| i.path.starts_with("config.")), "{}: {issues:?}", kind.id);
+		assert!(
+			issues.iter().all(|i| i.path.starts_with("config.")),
+			"{}: {issues:?}",
+			kind.id
+		);
 	}
 }
 
@@ -139,7 +153,10 @@ source = "$.computerName"
 "#;
 	let value = parse_text(toml, Format::Toml).unwrap_or_default();
 	let found = crate::codec::detect(&value, kinds::all());
-	assert_eq!(found.iter().map(|k| k.id).collect::<Vec<_>>(), vec!["recv_polling"]);
+	assert_eq!(
+		found.iter().map(|k| k.id).collect::<Vec<_>>(),
+		vec!["recv_polling"]
+	);
 	let (form, report) = form_from_value((found[0].schema)(), &value);
 	assert!(report.is_clean(), "{report:?}");
 	assert!(form_to_value(&form, Format::Toml).is_ok());
@@ -147,9 +164,21 @@ source = "$.computerName"
 
 #[test]
 fn polling_endpoint_name_is_required() {
-	let value = parse_text("[config]\nname = \"p\"\n[[config.api]]\nuri = \"http://x\"\n", Format::Toml).unwrap_or_default();
-	let (form, report) = form_from_value((kinds::find("recv_polling").map(|k| k.schema).unwrap_or(|| Default::default()))(), &value);
+	let value = parse_text(
+		"[config]\nname = \"p\"\n[[config.api]]\nuri = \"http://x\"\n",
+		Format::Toml,
+	)
+	.unwrap_or_default();
+	let (form, report) = form_from_value(
+		(kinds::find("recv_polling")
+			.map(|k| k.schema)
+			.unwrap_or(|| Default::default()))(),
+		&value,
+	);
 	assert_eq!(report.missing, vec!["config.api.0.name"]);
 	let issues = form_to_value(&form, Format::Toml).err().unwrap_or_default();
-	assert!(issues.iter().any(|i| i.path == "config.api.0.name"), "{issues:?}");
+	assert!(
+		issues.iter().any(|i| i.path == "config.api.0.name"),
+		"{issues:?}"
+	);
 }

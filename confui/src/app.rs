@@ -6,10 +6,13 @@
 
 use std::cell::RefCell;
 
-use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
-use wasm_bindgen_futures::{spawn_local, JsFuture};
-use web_sys::{Blob, BlobPropertyBag, Document, Element, Event, HtmlAnchorElement, HtmlElement, HtmlInputElement, HtmlSelectElement, Url};
+use wasm_bindgen::prelude::*;
+use wasm_bindgen_futures::{JsFuture, spawn_local};
+use web_sys::{
+	Blob, BlobPropertyBag, Document, Element, Event, HtmlAnchorElement, HtmlElement,
+	HtmlInputElement, HtmlSelectElement, Url,
+};
 
 use crate::codec::{self, LoadReport};
 use crate::kinds::{self, ConfigKind};
@@ -69,7 +72,9 @@ fn js(e: JsValue) -> String {
 }
 
 fn document() -> Result<Document, String> {
-	web_sys::window().and_then(|w| w.document()).ok_or_else(|| "The page has no document".to_owned())
+	web_sys::window()
+		.and_then(|w| w.document())
+		.ok_or_else(|| "The page has no document".to_owned())
 }
 
 fn by_id(id: &str) -> Option<Element> {
@@ -91,7 +96,11 @@ fn set_text(id: &str, text: &str) {
 fn set_enabled(enabled: bool) {
 	for id in BUTTON_IDS {
 		if let Some(el) = by_id(id) {
-			let _ = if enabled { el.remove_attribute("disabled") } else { el.set_attribute("disabled", "") };
+			let _ = if enabled {
+				el.remove_attribute("disabled")
+			} else {
+				el.set_attribute("disabled", "")
+			};
 		}
 	}
 }
@@ -128,7 +137,11 @@ fn clear_doc() {
 fn element_for(doc: &Document, path: &str) -> Option<Element> {
 	let mut path = path;
 	loop {
-		let selector = format!("{}, {}", attr_selector("data-path", path), attr_selector("data-details", path));
+		let selector = format!(
+			"{}, {}",
+			attr_selector("data-path", path),
+			attr_selector("data-details", path)
+		);
 		if let Some(el) = doc.query_selector(&selector).ok().flatten() {
 			return Some(el);
 		}
@@ -191,7 +204,11 @@ fn open_details_in(root: &Element) -> Vec<String> {
 	let mut paths = Vec::new();
 	if let Ok(list) = root.query_selector_all("details[data-details][open]") {
 		for i in 0..list.length() {
-			if let Some(path) = list.item(i).and_then(|n| n.dyn_into::<Element>().ok()).and_then(|el| el.get_attribute("data-details")) {
+			if let Some(path) = list
+				.item(i)
+				.and_then(|n| n.dyn_into::<Element>().ok())
+				.and_then(|el| el.get_attribute("data-details"))
+			{
 				paths.push(path);
 			}
 		}
@@ -200,22 +217,36 @@ fn open_details_in(root: &Element) -> Vec<String> {
 }
 
 fn open_details(root: &Element, path: &str) {
-	if let Ok(Some(el)) = root.query_selector(&format!("details{}", attr_selector("data-details", path))) {
+	if let Ok(Some(el)) =
+		root.query_selector(&format!("details{}", attr_selector("data-details", path)))
+	{
 		let _ = el.set_attribute("open", "");
 	}
 }
 
 /// Renders the part of the form at `path` again and replaces it in the page.
 /// Containers which were open stay open, `removed` is the entry of a list which does not exist anymore.
-fn rerender(path: &str, removed: Option<(&str, usize)>, force_open: &[String]) -> Result<(), String> {
-	let html = with_app(|app| app.session.as_ref().map(|s| render::render_path(&s.form, path)))
-		.flatten()
-		.ok_or("There is no configuration to change")?
-		.map_err(|e| e.to_string())?;
+fn rerender(
+	path: &str,
+	removed: Option<(&str, usize)>,
+	force_open: &[String],
+) -> Result<(), String> {
+	let html = with_app(|app| {
+		app.session
+			.as_ref()
+			.map(|s| render::render_path(&s.form, path))
+	})
+	.flatten()
+	.ok_or("There is no configuration to change")?
+	.map_err(|e| e.to_string())?;
 
 	let doc = document()?;
 	let selector = attr_selector("data-node", path);
-	let old = doc.query_selector(&selector).ok().flatten().ok_or_else(|| format!("'{path}' is not in the page"))?;
+	let old = doc
+		.query_selector(&selector)
+		.ok()
+		.flatten()
+		.ok_or_else(|| format!("'{path}' is not in the page"))?;
 
 	let mut open = open_details_in(&old);
 	if let Some((list, index)) = removed {
@@ -232,8 +263,11 @@ fn rerender(path: &str, removed: Option<(&str, usize)>, force_open: &[String]) -
 }
 
 fn focus_path(path: &str) {
-	if let Some(el) = document().ok().and_then(|doc| doc.query_selector(&attr_selector("data-path", path)).ok().flatten())
-		&& let Some(html) = el.dyn_ref::<HtmlElement>()
+	if let Some(el) = document().ok().and_then(|doc| {
+		doc.query_selector(&attr_selector("data-path", path))
+			.ok()
+			.flatten()
+	}) && let Some(html) = el.dyn_ref::<HtmlElement>()
 	{
 		let _ = html.focus();
 	}
@@ -261,9 +295,17 @@ fn show_empty(heading: &str, text: &str) {
 
 /// Shows the form of the current session
 fn show_form() {
-	let view = with_app(|app| app.session.as_ref().map(|s| (s.kind.title, s.kind.description, render::form_html(&s.form)))).flatten();
+	let view = with_app(|app| {
+		app.session
+			.as_ref()
+			.map(|s| (s.kind.title, s.kind.description, render::form_html(&s.form)))
+	})
+	.flatten();
 	let Some((title, description, html)) = view else {
-		show_empty("Select a configuration type", r#"Choose from the "Create New" menu above or load a file."#);
+		show_empty(
+			"Select a configuration type",
+			r#"Choose from the "Create New" menu above or load a file."#,
+		);
 		return;
 	};
 	set_text(TITLE_ID, title);
@@ -276,18 +318,29 @@ fn show_form() {
 }
 
 fn open_session(kind: &'static ConfigKind, form: Form, file_name: String) {
-	with_app(|app| app.session = Some(Session { kind, initial: form.root.clone(), form, file_name }));
+	with_app(|app| {
+		app.session = Some(Session {
+			kind,
+			initial: form.root.clone(),
+			form,
+			file_name,
+		})
+	});
 	show_form();
 }
 
 fn start_new(kind_id: &str) -> Result<(), String> {
-	let kind = kinds::find(kind_id).ok_or_else(|| format!("Unknown configuration type '{kind_id}'"))?;
+	let kind =
+		kinds::find(kind_id).ok_or_else(|| format!("Unknown configuration type '{kind_id}'"))?;
 	if !kind.implemented() {
 		with_app(|app| {
 			app.session = None;
 			app.pending = None;
 		});
-		show_empty(&format!("{} is not available yet", kind.title), "The configuration of this type is not implemented yet.");
+		show_empty(
+			&format!("{} is not available yet", kind.title),
+			"The configuration of this type is not implemented yet.",
+		);
 		set_text(TITLE_ID, kind.title);
 		set_text(SUBTITLE_ID, kind.description);
 		close_menu();
@@ -323,9 +376,13 @@ fn load_text(name: &str, text: &str) {
 	let value = match parse_file(name, text) {
 		Ok(value) => value,
 		Err(message) => {
-			set_messages(&[render::messages_html(Level::Error, "The file could not be loaded", &[Issue::new("", message)])]);
+			set_messages(&[render::messages_html(
+				Level::Error,
+				"The file could not be loaded",
+				&[Issue::new("", message)],
+			)]);
 			return;
-		},
+		}
 	};
 
 	let fits = codec::rank(&value, kinds::all());
@@ -337,7 +394,13 @@ fn load_text(name: &str, text: &str) {
 	let ranked: Vec<&'static ConfigKind> = fits.iter().map(|fit| fit.kind).collect();
 	let chooser = (best > 1).then(|| render::chooser_html(name, &ranked, best));
 	let first = ranked[0];
-	with_app(|app| app.pending = Some(Pending { value: value.clone(), file_name: name.to_owned(), ranked }));
+	with_app(|app| {
+		app.pending = Some(Pending {
+			value: value.clone(),
+			file_name: name.to_owned(),
+			ranked,
+		})
+	});
 
 	match chooser {
 		None => open_loaded(first, &value, name),
@@ -345,7 +408,7 @@ fn load_text(name: &str, text: &str) {
 			with_app(|app| app.session = None);
 			show_empty("Which configuration is it?", "");
 			set_html(FORM_ID, &html);
-		},
+		}
 	}
 }
 
@@ -357,17 +420,43 @@ fn open_loaded(kind: &'static ConfigKind, value: &serde_json::Value, file_name: 
 	let (form, loaded): (Form, LoadReport) = codec::form_from_value((kind.schema)(), value);
 	open_session(kind, form, file_name.to_owned());
 
-	let mut blocks = vec![render::messages_html(Level::Info, &format!("Loaded {file_name} as {}", kind.title), &[])];
-	if let Some(html) = with_app(|app| app.pending.as_ref().map(|p| render::reopen_html(&p.ranked, kind.id))).flatten() {
+	let mut blocks = vec![render::messages_html(
+		Level::Info,
+		&format!("Loaded {file_name} as {}", kind.title),
+		&[],
+	)];
+	if let Some(html) = with_app(|app| {
+		app.pending
+			.as_ref()
+			.map(|p| render::reopen_html(&p.ranked, kind.id))
+	})
+	.flatten()
+	{
 		blocks.push(html);
 	}
 	for (heading, paths, message) in [
-		("Required values are missing in the file", &loaded.missing, "missing"),
-		("Values with the wrong type were ignored", &loaded.mismatched, "wrong type"),
-		("Unknown entries were ignored and will not be saved", &loaded.unknown, "unknown"),
+		(
+			"Required values are missing in the file",
+			&loaded.missing,
+			"missing",
+		),
+		(
+			"Values with the wrong type were ignored",
+			&loaded.mismatched,
+			"wrong type",
+		),
+		(
+			"Unknown entries were ignored and will not be saved",
+			&loaded.unknown,
+			"unknown",
+		),
 	] {
 		if !paths.is_empty() {
-			blocks.push(render::messages_html(Level::Warning, heading, &issues_of(paths, message)));
+			blocks.push(render::messages_html(
+				Level::Warning,
+				heading,
+				&issues_of(paths, message),
+			));
 		}
 	}
 	set_messages(&blocks);
@@ -376,7 +465,13 @@ fn open_loaded(kind: &'static ConfigKind, value: &serde_json::Value, file_name: 
 
 fn choose_kind(kind_id: &str) -> Result<(), String> {
 	let (value, file_name, kind) = with_app(|app| {
-		app.pending.as_ref().map(|p| (p.value.clone(), p.file_name.clone(), p.ranked.iter().copied().find(|k| k.id == kind_id)))
+		app.pending.as_ref().map(|p| {
+			(
+				p.value.clone(),
+				p.file_name.clone(),
+				p.ranked.iter().copied().find(|k| k.id == kind_id),
+			)
+		})
 	})
 	.flatten()
 	.ok_or("There is no file to open")?;
@@ -415,7 +510,11 @@ fn download(name: &str, text: &str, format: Format) -> Result<(), String> {
 	let blob = Blob::new_with_str_sequence_and_options(&parts, &options).map_err(js)?;
 	let url = Url::create_object_url_with_blob(&blob).map_err(js)?;
 
-	let anchor = document()?.create_element("a").map_err(js)?.dyn_into::<HtmlAnchorElement>().map_err(|_| "Unable to create a download link".to_owned())?;
+	let anchor = document()?
+		.create_element("a")
+		.map_err(js)?
+		.dyn_into::<HtmlAnchorElement>()
+		.map_err(|_| "Unable to create a download link".to_owned())?;
 	anchor.set_href(&url);
 	anchor.set_download(name);
 	anchor.click();
@@ -424,26 +523,44 @@ fn download(name: &str, text: &str, format: Format) -> Result<(), String> {
 
 fn save(format: Format) -> Result<(), String> {
 	clear_messages();
-	let (kind, generated, file_name) = with_app(|app| app.session.as_ref().map(|s| (s.kind, codec::form_to_value(&s.form, format), s.file_name.clone())))
-		.flatten()
-		.ok_or("There is nothing to save")?;
+	let (kind, generated, file_name) = with_app(|app| {
+		app.session.as_ref().map(|s| {
+			(
+				s.kind,
+				codec::form_to_value(&s.form, format),
+				s.file_name.clone(),
+			)
+		})
+	})
+	.flatten()
+	.ok_or("There is nothing to save")?;
 
 	let value = match generated {
 		Ok(value) => value,
 		Err(issues) => {
-			report("Fill in all required fields and fix the marked values", &issues);
+			report(
+				"Fill in all required fields and fix the marked values",
+				&issues,
+			);
 			return Ok(());
-		},
+		}
 	};
 	let text = codec::to_text(&value, format)?;
 	if let Err(issue) = (kind.check)(&text, format) {
-		report(&format!("The configuration is not accepted by the {}", kind.title), &[issue]);
+		report(
+			&format!("The configuration is not accepted by the {}", kind.title),
+			&[issue],
+		);
 		return Ok(());
 	}
 
 	let name = download_name(&file_name, format.extension());
 	download(&name, &text, format)?;
-	set_messages(&[render::messages_html(Level::Info, &format!("Saved as {name}"), &[])]);
+	set_messages(&[render::messages_html(
+		Level::Info,
+		&format!("Saved as {name}"),
+		&[],
+	)]);
 	Ok(())
 }
 
@@ -463,7 +580,8 @@ fn value_of(el: &Element) -> Option<String> {
 	if let Some(input) = el.dyn_ref::<HtmlInputElement>() {
 		Some(input.value())
 	} else {
-		el.dyn_ref::<HtmlSelectElement>().map(|select| select.value())
+		el.dyn_ref::<HtmlSelectElement>()
+			.map(|select| select.value())
 	}
 }
 
@@ -472,56 +590,69 @@ fn dispatch(action: &str, button: &Element) -> Result<(), String> {
 	match action {
 		"new" => start_new(&button.get_attribute("data-kind").unwrap_or_default()),
 		"load" => {
-			if let Some(input) = by_id(FILE_INPUT_ID).and_then(|el| el.dyn_into::<HtmlElement>().ok()) {
+			if let Some(input) =
+				by_id(FILE_INPUT_ID).and_then(|el| el.dyn_into::<HtmlElement>().ok())
+			{
 				input.click();
 			}
 			Ok(())
-		},
+		}
 		"reset" => {
 			reset();
 			Ok(())
-		},
+		}
 		"save" => {
-			let format = button.get_attribute("data-format").and_then(|name| Format::from_name(&name)).ok_or("Unknown file format")?;
+			let format = button
+				.get_attribute("data-format")
+				.and_then(|name| Format::from_name(&name))
+				.ok_or("Unknown file format")?;
 			save(format)
-		},
+		}
 		"list-add" => {
 			let index = edit(|form| form.list_add(&path))?;
 			let item = join_path(&path, &index.to_string());
 			rerender(&path, None, &[path.clone(), item.clone()])?;
 			let doc = document()?;
-			if let Some(input) = doc.query_selector(&format!("{} [data-path]", attr_selector("data-node", &item))).ok().flatten()
-				&& let Some(html) = input.dyn_ref::<HtmlElement>()
+			if let Some(input) = doc
+				.query_selector(&format!(
+					"{} [data-path]",
+					attr_selector("data-node", &item)
+				))
+				.ok()
+				.flatten() && let Some(html) = input.dyn_ref::<HtmlElement>()
 			{
 				let _ = html.focus();
 			}
 			Ok(())
-		},
+		}
 		"list-remove" => {
-			let (list, index) = path.rsplit_once('.').and_then(|(list, index)| Some((list, index.parse::<usize>().ok()?))).ok_or("Unknown entry")?;
+			let (list, index) = path
+				.rsplit_once('.')
+				.and_then(|(list, index)| Some((list, index.parse::<usize>().ok()?)))
+				.ok_or("Unknown entry")?;
 			edit(|form| form.list_remove(&path))?;
 			rerender(list, Some((list, index)), &[])
-		},
+		}
 		"opt-add" => {
 			edit(|form| form.set_present(&path, true))?;
 			rerender(&path, None, std::slice::from_ref(&path))
-		},
+		}
 		"opt-remove" => {
 			edit(|form| form.set_present(&path, false))?;
 			rerender(&path, None, &[])
-		},
+		}
 		"goto" => {
 			let doc = document()?;
 			if let Some(el) = element_for(&doc, &path) {
 				reveal(&el);
 			}
 			Ok(())
-		},
+		}
 		"choose-kind" => choose_kind(&button.get_attribute("data-kind").unwrap_or_default()),
 		"clear-doc" => {
 			clear_doc();
 			Ok(())
-		},
+		}
 		other => Err(format!("Unknown action '{other}'")),
 	}
 }
@@ -574,13 +705,17 @@ fn on_change(evt: &Event) {
 
 	let result = match el.get_attribute("data-kind").as_deref() {
 		Some("check") => {
-			let checked = el.dyn_ref::<HtmlInputElement>().is_some_and(|input| input.checked());
+			let checked = el
+				.dyn_ref::<HtmlInputElement>()
+				.is_some_and(|input| input.checked());
 			edit(|form| form.set_text(&path, if checked { "true" } else { "false" }))
-		},
+		}
 		Some("enum") => {
 			let variant = value_of(&el).unwrap_or_default();
-			edit(|form| form.set_variant(&path, &variant)).and_then(|_| rerender(&path, None, &[])).map(|_| focus_path(&path))
-		},
+			edit(|form| form.set_variant(&path, &variant))
+				.and_then(|_| rerender(&path, None, &[]))
+				.map(|_| focus_path(&path))
+		}
 		_ => Ok(()),
 	};
 	if let Err(message) = result {
@@ -589,10 +724,19 @@ fn on_change(evt: &Event) {
 }
 
 fn on_focusin(evt: &Event) {
-	let Some(path) = target_element(evt).and_then(|el| closest(&el, "[data-path]")).and_then(|el| el.get_attribute("data-path")) else {
+	let Some(path) = target_element(evt)
+		.and_then(|el| closest(&el, "[data-path]"))
+		.and_then(|el| el.get_attribute("data-path"))
+	else {
 		return;
 	};
-	if let Some((title, html)) = with_app(|app| app.session.as_ref().and_then(|s| render::doc_html(&s.form, &path))).flatten() {
+	if let Some((title, html)) = with_app(|app| {
+		app.session
+			.as_ref()
+			.and_then(|s| render::doc_html(&s.form, &path))
+	})
+	.flatten()
+	{
 		set_text(DOC_TITLE_ID, &title);
 		set_html(DOC_CONTENT_ID, &html);
 	}
@@ -612,7 +756,10 @@ pub fn init() -> Result<(), JsValue> {
 	let doc = document().map_err(|e| JsValue::from_str(&e))?;
 
 	set_html(SUB_NAV_ID, &render::nav_buttons_html(kinds::all()));
-	show_empty("Select a configuration type", r#"Choose from the "Create New" menu above or load a file."#);
+	show_empty(
+		"Select a configuration type",
+		r#"Choose from the "Create New" menu above or load a file."#,
+	);
 
 	listen(&doc, "click", on_click)?;
 	listen(&doc, "input", on_input)?;
@@ -628,7 +775,13 @@ mod tests {
 	#[test]
 	fn issues_of_keeps_paths() {
 		let issues = issues_of(&["config.a".to_owned(), "config.b".to_owned()], "missing");
-		assert_eq!(issues, vec![Issue::new("config.a", "missing"), Issue::new("config.b", "missing")]);
+		assert_eq!(
+			issues,
+			vec![
+				Issue::new("config.a", "missing"),
+				Issue::new("config.b", "missing")
+			]
+		);
 		assert!(issues_of(&[], "x").is_empty());
 	}
 
