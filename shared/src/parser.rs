@@ -1,16 +1,23 @@
-
-use std::{collections::HashMap, sync::{Arc, OnceLock}, thread::{self}, time::Duration};
+use std::{
+	collections::HashMap,
+	sync::{Arc, OnceLock},
+	thread::{self},
+	time::Duration,
+};
 
 use anyhow::Result;
-use opentelemetry::logs::{Logger, LoggerProvider, LogRecord, Severity, AnyValue};
+use opentelemetry::logs::{AnyValue, LogRecord, Logger, LoggerProvider, Severity};
 use opentelemetry_otlp::{LogExporter, Protocol, WithExportConfig};
-use opentelemetry_sdk::{ Resource, logs::{BatchConfigBuilder, BatchLogProcessor, SdkLogger, SdkLoggerProvider} };
+use opentelemetry_sdk::{
+	Resource,
+	logs::{BatchConfigBuilder, BatchLogProcessor, SdkLogger, SdkLoggerProvider},
+};
 use regex::Regex;
 use serde_json::Value;
 use serde_json_path::JsonPath;
-use tracing::{debug, info, error};
+use tracing::{debug, error, info};
 
-use crate::{queue, types, template::template_string};
+use crate::{queue, template::template_string, types};
 
 pub struct MessageParser<T> {
 	queue: Arc<queue::MessageQueue<T>>,
@@ -21,7 +28,11 @@ pub struct MessageParser<T> {
 }
 
 impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
-	pub fn new(queue: Arc<queue::MessageQueue<T>>, conf: types::Queue, parser: Vec<types::Parser>) -> Self {
+	pub fn new(
+		queue: Arc<queue::MessageQueue<T>>,
+		conf: types::Queue,
+		parser: Vec<types::Parser>,
+	) -> Self {
 		// Precompile
 		let regexes = Self::precompile_regex(&parser);
 		let jsonpath = Self::precompile_jsonpath(&parser);
@@ -37,36 +48,34 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 
 	fn precompile_regex(parser: &Vec<types::Parser>) -> HashMap<String, Regex> {
 		let mut regexes: HashMap<String, Regex> = HashMap::new();
+		let empty_regex = Regex::new("^$").unwrap();
 		for p in parser {
 			// Precompile the matcher Regex
 			let re = match Regex::new(&p.matcher) {
 				Ok(re) => {
 					info!(message="regex compile", regex=%p.matcher);
 					re
-				},
+				}
 				Err(e) => {
 					error!(message="regex compile", regex=%p.matcher, error=%e);
-					Regex::new("^$").unwrap()
+					empty_regex.clone()
 				}
 			};
 			regexes.insert(p.matcher.to_owned(), re);
 
 			// Precompile the Parser-Regex
-			match p.settings.clone() {
-				types::ParserSettings::Regex(setting) => {
-					let re = match Regex::new(&setting) {
-						Ok(re) => {
-							info!(message="regex compile", regex=%setting);
-							re
-						},
-						Err(e) => {
-							error!(message="regex compile", regex=%setting, error=%e);
-							Regex::new("^$").unwrap()
-						}
-					};
-					regexes.insert(setting.to_owned(), re);
-				},
-				_ => {},
+			if let types::ParserSettings::Regex(setting) = p.settings.clone() {
+				let re = match Regex::new(&setting) {
+					Ok(re) => {
+						info!(message="regex compile", regex=%setting);
+						re
+					}
+					Err(e) => {
+						error!(message="regex compile", regex=%setting, error=%e);
+						empty_regex.clone()
+					}
+				};
+				regexes.insert(setting.to_owned(), re);
 			};
 		}
 		regexes
@@ -77,21 +86,18 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 		jsonpath.insert(String::from("$"), JsonPath::parse("$").unwrap());
 
 		for p in parser {
-			match p.settings.clone() {
-				types::ParserSettings::Jpath(setting) => {
-					let jpath = match JsonPath::parse(&setting) {
-						Ok(jpath) => {
-							info!(message="json path compile", jsonpath=%setting);
-							jpath
-						},
-						Err(e) => {
-							error!(message="json path compile", jsonpath=%setting, error=%e);
-							JsonPath::parse("$").unwrap()
-						}
-					};
-					jsonpath.insert(setting.to_owned(), jpath);
-				},
-				_ => {},
+			if let types::ParserSettings::Jpath(setting) = p.settings.clone() {
+				let jpath = match JsonPath::parse(&setting) {
+					Ok(jpath) => {
+						info!(message="json path compile", jsonpath=%setting);
+						jpath
+					}
+					Err(e) => {
+						error!(message="json path compile", jsonpath=%setting, error=%e);
+						JsonPath::parse("$").unwrap()
+					}
+				};
+				jsonpath.insert(setting.to_owned(), jpath);
 			};
 		}
 		jsonpath
@@ -117,12 +123,18 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 					// Parse and return Structured JSON-String
 					let msgs = me.parse_message(&q_msg);
 					debug!(message="processed message", original=%q_msg);
-					info!(message="processed message", size=q_msg.len(), messages=msgs.len());
+					info!(
+						message = "processed message",
+						size = q_msg.len(),
+						messages = msgs.len()
+					);
 
 					for msg in msgs {
 						debug!(message="extracted message", msg=%msg);
-						match me.send_message(&otlp, &msg, max_msg, max_time) {
-							Ok(_) => debug!(message="enqueued message for otlp endpoint", endpoint=%otlp.endpoint, port=%otlp.port, service=%otlp.service),
+						match me.send_message(otlp, &msg, max_msg, max_time) {
+							Ok(_) => {
+								debug!(message="enqueued message for otlp endpoint", endpoint=%otlp.endpoint, port=%otlp.port, service=%otlp.service)
+							}
 							Err(e) => {
 								me.queue.push_front(msg.into());
 								error!(message="failed to enqueue message for otlp endpoint", endpoint=%otlp.endpoint, port=%otlp.port, service=%otlp.service, error=%e)
@@ -130,10 +142,9 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 						};
 					}
 				}
-
 			} else {
 				// Do not process any logs if there is no log receiver
-				info!(message="no log processing due to no otel_logger in queue-configuration");
+				info!(message = "no log processing due to no otel_logger in queue-configuration");
 				loop {
 					// drop all messages and wait
 					self.queue.pull_all();
@@ -155,7 +166,13 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 	/// # Results
 	///
 	/// Returns a Result indication wether the message was sent or not.
-	fn send_message(&self, conf: &types::OtelLogger, message: &String, count: u16, duration: Duration) -> Result<()> {
+	fn send_message(
+		&self,
+		conf: &types::OtelLogger,
+		message: &String,
+		count: u16,
+		duration: Duration,
+	) -> Result<()> {
 		match self.get_logger(conf, count, duration) {
 			Ok(logger) => {
 				let msg = message.to_owned();
@@ -165,7 +182,7 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 				record.set_body(AnyValue::String(msg.into()));
 				logger.emit(record);
 				Ok(())
-			},
+			}
 			Err(e) => Err(e),
 		}
 	}
@@ -181,14 +198,19 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 	/// # Returns
 	///
 	/// An OpenTelemetry Logger
-	fn get_logger(&self, conf: &types::OtelLogger, count: u16, duration: Duration) -> Result<SdkLogger> {
+	fn get_logger(
+		&self,
+		conf: &types::OtelLogger,
+		count: u16,
+		duration: Duration,
+	) -> Result<SdkLogger> {
 		static RESOURCE: OnceLock<Result<SdkLogger>> = OnceLock::new();
 		let res = RESOURCE.get_or_init(|| {
 			let exporter = LogExporter::builder()
-			.with_http()
-			.with_protocol(Protocol::HttpBinary)
-			.with_endpoint(&conf.get_endpoint("/v1/logs"))
-			.build()?;
+				.with_http()
+				.with_protocol(Protocol::HttpBinary)
+				.with_endpoint(conf.get_endpoint("/v1/logs"))
+				.build()?;
 
 			// Queue size and time handled by OTEL
 			let processor = BatchLogProcessor::builder(exporter)
@@ -203,12 +225,13 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 
 			Ok(SdkLoggerProvider::builder()
 				.with_resource(
-					Resource::builder().with_service_name(conf.service.clone()).build()
+					Resource::builder()
+						.with_service_name(conf.service.clone())
+						.build(),
 				)
 				.with_log_processor(processor)
 				.build()
-				.logger(conf.service.clone())
-			)
+				.logger(conf.service.clone()))
 		});
 
 		match res.as_ref() {
@@ -228,9 +251,11 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 	///
 	/// Returns the either the parsed or the raw message as a list
 	fn parse_message(&self, raw: &String) -> Vec<String> {
-		let parser = self.parser.iter()
-			.find_map(|parser| self.regexes.get(&parser.matcher)
-				.and_then(|re| if re.is_match(raw) { Some(parser) } else { None }) );
+		let parser = self.parser.iter().find_map(|parser| {
+			self.regexes
+				.get(&parser.matcher)
+				.and_then(|re| if re.is_match(raw) { Some(parser) } else { None })
+		});
 		self.apply_parser(raw, parser)
 	}
 
@@ -246,7 +271,7 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 	fn parser_by_name(&self, name: &str) -> Result<&types::Parser> {
 		for p in &self.parser {
 			if p.name.as_str() == name {
-				return Ok(&p);
+				return Ok(p);
 			}
 		}
 		Err(anyhow::anyhow!("no parser found by the name {}", name))
@@ -262,49 +287,48 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 					types::ParserKind::REGEX => {
 						let re = match parser.settings.clone() {
 							types::ParserSettings::Regex(s) => self.regexes.get(&s),
-							_ => None
+							_ => None,
 						};
-						re.and_then(|re| Some(self.parse_regex_message(&parser.mapping, raw, re)))
+						re.map(|re| self.parse_regex_message(&parser.mapping, raw, re))
 							.unwrap_or_else(|| vec![raw.to_owned()])
-					},
+					}
 
 					types::ParserKind::JSON => {
 						let jpath = match parser.settings.clone() {
 							types::ParserSettings::Jpath(s) => self.jsonpath.get(&s),
 							_ => self.jsonpath.get("$"),
 						};
-						jpath.and_then(|jpath| Some(self.parse_json_message(&parser.mapping, raw, &jpath)))
+						jpath
+							.map(|jpath| self.parse_json_message(&parser.mapping, raw, jpath))
 							.unwrap_or_else(|| vec![raw.to_owned()])
-					},
+					}
 
 					types::ParserKind::CSV => {
 						vec![raw.to_owned()]
-					},
+					}
 
 					types::ParserKind::LEEF => {
 						vec![raw.to_owned()]
-					},
+					}
 
 					types::ParserKind::CEF => {
 						vec![raw.to_owned()]
-					},
+					}
 
 					types::ParserKind::STRUCTURED => {
 						vec![raw.to_owned()]
-					},
+					}
 
 					types::ParserKind::RAW => {
 						vec![raw.to_owned()]
-					},
-
-					//_ => {
-					//	error!(message="not implemented parser", parser=%parser.kind.to_string());
-					//	raw.to_owned()
-					//}
+					} //_ => {
+					  //	error!(message="not implemented parser", parser=%parser.kind.to_string());
+					  //	raw.to_owned()
+					  //}
 				}
-			},
+			}
 			None => {
-				debug!(message="no parser found");
+				debug!(message = "no parser found");
 				vec![raw.to_owned()]
 			}
 		}
@@ -324,13 +348,21 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 	/// # Returns
 	///
 	/// A list of JSON serialized strings whith all the fields and values as defined in the `mapping` Configuration
-	fn parse_regex_message(&self, mapping: &Vec<types::FieldMapping>, raw: &String, re: &Regex) -> Vec<String> {
+	fn parse_regex_message(
+		&self,
+		mapping: &[types::FieldMapping],
+		raw: &str,
+		re: &Regex,
+	) -> Vec<String> {
 		let mut results: HashMap<String, String> = HashMap::new();
 		for capture in re.captures_iter(raw) {
 			for fld in mapping {
 				let mut val: String = String::new();
 				if !fld.source.is_empty() {
-					val = capture.name(&fld.source).map_or("", |v| v.as_str()).to_owned();
+					val = capture
+						.name(&fld.source)
+						.map_or("", |v| v.as_str())
+						.to_owned();
 				}
 				if val.is_empty() && fld.index > 0 {
 					val = capture.get(fld.index).map_or("", |v| v.as_str()).to_owned();
@@ -339,12 +371,15 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 				// Sub-Parser values are returned directly
 				// All other values are checked and added to the hashmap below
 				if !fld.parser.is_empty() && !val.is_empty() {
-					return match self.parser_by_name(fld.parser.as_str()).map(|p| self.apply_parser(&val, Some(p))) {
+					return match self
+						.parser_by_name(fld.parser.as_str())
+						.map(|p| self.apply_parser(&val, Some(p)))
+					{
 						Ok(s) => s,
 						Err(e) => {
 							error!("{:?}", e);
 							Vec::new()
-						},
+						}
 					};
 				}
 
@@ -376,15 +411,21 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 	/// # Returns
 	///
 	/// A list of JSON serialized strings with all the fields and values as defined in the `mapping` Configuration
-	fn parse_json_message(&self, mapping: &Vec<types::FieldMapping>, raw: &String, jpath: &JsonPath) -> Vec<String> {
+	fn parse_json_message(
+		&self,
+		mapping: &[types::FieldMapping],
+		raw: &str,
+		jpath: &JsonPath,
+	) -> Vec<String> {
 		// See https://docs.rs/serde_json_path/latest/serde_json_path/
 		// Test: https://serdejsonpath.live/
-		let json_root: Value = serde_json::from_str(raw.as_str()).map_or_else(|e|{
+		let json_root: Value = serde_json::from_str(raw).unwrap_or_else(|e| {
 			error!(message="json parsing error", json=%raw, error=%e);
 			Value::Null
-		}, |v| v);
+		});
 
-		jpath.query(&json_root)
+		jpath
+			.query(&json_root)
 			.iter()
 			.map(|obj| self.parse_json_string(mapping, Arc::new((**obj).clone())))
 			.collect()
@@ -400,7 +441,7 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 	/// # Returns
 	///
 	/// A JSON serialized string with all the fields and values as defined in the `mapping` Configuration
-	fn parse_json_string(&self, mapping: &Vec<types::FieldMapping>, json: Arc<Value>) -> String {
+	fn parse_json_string(&self, mapping: &[types::FieldMapping], json: Arc<Value>) -> String {
 		let mut results: HashMap<String, String> = HashMap::new();
 		for fld in mapping {
 			let mut val: String = String::new();
@@ -408,7 +449,7 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 				// If the source field nale starts with a / a JsonPointer is given,
 				// Otherwise a direct field name
 				let field_val = match fld.source.get(0..1) {
-					Some(c) if c == "/" => &json.pointer(&fld.source).unwrap_or_default(),
+					Some("/") => json.pointer(&fld.source).unwrap_or_default(),
 					_ => &json[&fld.source],
 				};
 
@@ -432,12 +473,15 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 			// Sub-Parser values are returned directly
 			// All other values are checked and added to the hashmap below
 			if !fld.parser.is_empty() && !val.is_empty() {
-				return match self.parser_by_name(fld.parser.as_str()).map(|p| self.apply_parser(&val, Some(p))) {
+				return match self
+					.parser_by_name(fld.parser.as_str())
+					.map(|p| self.apply_parser(&val, Some(p)))
+				{
 					Ok(s) => s.join(""),
 					Err(e) => {
 						error!("{:?}", e);
 						String::new()
-					},
+					}
 				};
 			}
 
@@ -448,9 +492,7 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 
 		serde_json::to_string(&results).map_or(String::new(), |s| s)
 	}
-
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -468,7 +510,6 @@ mod tests {
 				empty: true,
 				static_value: String::new(),
 			},
-
 			// Source Field by name
 			types::FieldMapping {
 				name: String::from("map2"),
@@ -478,7 +519,6 @@ mod tests {
 				empty: false,
 				static_value: String::new(),
 			},
-
 			// Source Field by index
 			types::FieldMapping {
 				name: String::from("map3"),
@@ -488,7 +528,6 @@ mod tests {
 				empty: false,
 				static_value: String::new(),
 			},
-
 			// Json Sub-Parser
 			types::FieldMapping {
 				name: String::from("map4"),
@@ -535,28 +574,28 @@ mod tests {
 
 	fn get_parser() -> Vec<types::Parser> {
 		vec![
-			types::Parser{
+			types::Parser {
 				name: String::from("regex"),
 				matcher: String::from("^regex.*"),
 				kind: types::ParserKind::REGEX,
 				settings: types::ParserSettings::Nothing,
 				mapping: prepare_field_mapping(),
 			},
-			types::Parser{
+			types::Parser {
 				name: String::from("regexsub"),
 				matcher: String::from("^regexsub.*"),
 				kind: types::ParserKind::REGEX,
 				settings: types::ParserSettings::Nothing,
 				mapping: prepare_field_mapping(),
 			},
-			types::Parser{
+			types::Parser {
 				name: String::from("json"),
 				matcher: String::from("^json.*"),
 				kind: types::ParserKind::JSON,
 				settings: types::ParserSettings::Nothing,
 				mapping: prepare_field_mapping(),
 			},
-			types::Parser{
+			types::Parser {
 				name: String::from("jsonsub"),
 				matcher: String::from("^jsonsub.*"),
 				kind: types::ParserKind::JSON,
@@ -569,7 +608,8 @@ mod tests {
 	#[test]
 	fn test_parse_json_string_empty() {
 		let queue = Arc::new(MessageQueue::<String>::new());
-		let parser = MessageParser::<String>::new(queue.clone(), types::Queue::default(), get_parser());
+		let parser =
+			MessageParser::<String>::new(queue.clone(), types::Queue::default(), get_parser());
 		let mapping = prepare_field_mapping();
 
 		let message = String::from("{ \"result\": { \"grp0\":\"foobar\" } }");
@@ -584,7 +624,8 @@ mod tests {
 	#[test]
 	fn test_parse_json_string_simple() {
 		let queue = Arc::new(MessageQueue::<String>::new());
-		let parser = MessageParser::<String>::new(queue.clone(), types::Queue::default(), get_parser());
+		let parser =
+			MessageParser::<String>::new(queue.clone(), types::Queue::default(), get_parser());
 		let mapping = prepare_field_mapping();
 
 		let message = String::from("{ \"result\": { \"grp1\":\"foobar\" } }");
@@ -599,10 +640,13 @@ mod tests {
 	#[test]
 	fn test_parse_json_string_multiple() {
 		let queue = Arc::new(MessageQueue::<String>::new());
-		let parser = MessageParser::<String>::new(queue.clone(), types::Queue::default(), get_parser());
+		let parser =
+			MessageParser::<String>::new(queue.clone(), types::Queue::default(), get_parser());
 		let mapping = prepare_field_mapping();
 
-		let message = String::from("{ \"result\": [ { \"grp1\":\"foobar1\" }, { \"grp1\":\"foobar2\" }, { \"grp1\":\"foobar3\" } ] }");
+		let message = String::from(
+			"{ \"result\": [ { \"grp1\":\"foobar1\" }, { \"grp1\":\"foobar2\" }, { \"grp1\":\"foobar3\" } ] }",
+		);
 		let jpath = JsonPath::parse("$.result.*").unwrap();
 
 		let res = parser.parse_json_message(&mapping, &message, &jpath);
@@ -621,7 +665,8 @@ mod tests {
 	#[test]
 	fn test_parse_json_string_pointer() {
 		let queue = Arc::new(MessageQueue::<String>::new());
-		let parser = MessageParser::<String>::new(queue.clone(), types::Queue::default(), get_parser());
+		let parser =
+			MessageParser::<String>::new(queue.clone(), types::Queue::default(), get_parser());
 		let mapping = prepare_field_mapping();
 
 		let message = String::from("{ \"result\": { \"grp1\":\"foobar\" } }");
@@ -636,7 +681,8 @@ mod tests {
 	#[test]
 	fn test_parse_json_string_parser() {
 		let queue = Arc::new(MessageQueue::<String>::new());
-		let parser = MessageParser::<String>::new(queue.clone(), types::Queue::default(), get_parser());
+		let parser =
+			MessageParser::<String>::new(queue.clone(), types::Queue::default(), get_parser());
 		let mapping = prepare_field_mapping();
 
 		let message = String::from("{ \"result\": { \"grp4\":{\"grp5\":{\"grp2\":\"foobar\"}} } }");
@@ -652,7 +698,8 @@ mod tests {
 	#[test]
 	fn test_parse_json_string_parser_override() {
 		let queue = Arc::new(MessageQueue::<String>::new());
-		let parser = MessageParser::<String>::new(queue.clone(), types::Queue::default(), get_parser());
+		let parser =
+			MessageParser::<String>::new(queue.clone(), types::Queue::default(), get_parser());
 		let mapping = prepare_field_mapping();
 
 		let message = String::from("{ \"result\": { \"grp4\":{\"grp5\":{\"grp1\":\"foobar\"}} } }");
@@ -667,7 +714,8 @@ mod tests {
 	#[test]
 	fn test_parse_json_string_static() {
 		let queue = Arc::new(MessageQueue::<String>::new());
-		let parser = MessageParser::<String>::new(queue.clone(), types::Queue::default(), get_parser());
+		let parser =
+			MessageParser::<String>::new(queue.clone(), types::Queue::default(), get_parser());
 		let mapping = prepare_field_mapping();
 
 		let message = String::from("{ \"result\": { \"grp\":{\"grp\":{\"grp\":\"foobar\"}} } }");
@@ -684,7 +732,8 @@ mod tests {
 	#[test]
 	fn test_parse_json_string_static_response() {
 		let queue = Arc::new(MessageQueue::<String>::new());
-		let parser = MessageParser::<String>::new(queue.clone(), types::Queue::default(), get_parser());
+		let parser =
+			MessageParser::<String>::new(queue.clone(), types::Queue::default(), get_parser());
 		let mapping = prepare_field_mapping();
 
 		let message = String::from("{ \"result\": { \"grp\":{\"grp\":{\"grp\":\"foobar\"}} } }");
@@ -696,11 +745,11 @@ mod tests {
 		assert_eq!(json["static_response"], String::from("Response: foobar"));
 	}
 
-
 	#[test]
 	fn test_parse_regex_message_empty() {
 		let queue = Arc::new(MessageQueue::<String>::new());
-		let parser = MessageParser::<String>::new(queue.clone(), types::Queue::default(), get_parser());
+		let parser =
+			MessageParser::<String>::new(queue.clone(), types::Queue::default(), get_parser());
 		let mapping = prepare_field_mapping();
 
 		let message = String::from("");
@@ -713,7 +762,8 @@ mod tests {
 	#[test]
 	fn test_parse_regex_message_named() {
 		let queue = Arc::new(MessageQueue::<String>::new());
-		let parser = MessageParser::<String>::new(queue.clone(), types::Queue::default(), get_parser());
+		let parser =
+			MessageParser::<String>::new(queue.clone(), types::Queue::default(), get_parser());
 		let mapping = prepare_field_mapping();
 
 		let message = String::from("grp1=foobar1 grp2=foobar2 grp3=foobar3");
@@ -731,7 +781,8 @@ mod tests {
 	#[test]
 	fn test_parse_regex_message_indexed() {
 		let queue = Arc::new(MessageQueue::<String>::new());
-		let parser = MessageParser::<String>::new(queue.clone(), types::Queue::default(), get_parser());
+		let parser =
+			MessageParser::<String>::new(queue.clone(), types::Queue::default(), get_parser());
 		let mapping = prepare_field_mapping();
 
 		let message = String::from("grp1=foobar1 grp2=foobar2 grp3=foobar3");
@@ -745,5 +796,4 @@ mod tests {
 		assert_eq!(json["map2"], String::from("foobar2"));
 		assert_eq!(json["map3"], String::from("foobar3"));
 	}
-
 }

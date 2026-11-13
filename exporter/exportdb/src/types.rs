@@ -1,12 +1,17 @@
 use serde::{Deserialize, Serialize};
+use shared::types::{ConfStruct, ConfType, leak_str};
 use shared::types::{DbField, OtelReceiver, Queue};
-use shared::types::{ConfStruct, ConfType};
 
 // Default-Wrapper Functions for Serde::Deserialize
-pub(crate) fn default_for_messages() -> String { String::from(".*") }
-pub(crate) fn default_postgres_port() -> u16 { 5432 }
-pub(crate) fn default_ssl_mode() -> SslMode { SslMode::Disable }
-
+pub(crate) fn default_for_messages() -> String {
+	String::from(".*")
+}
+pub(crate) fn default_postgres_port() -> u16 {
+	5432
+}
+pub(crate) fn default_ssl_mode() -> SslMode {
+	SslMode::Disable
+}
 
 // The main configuration for a Database
 #[cfg(feature = "types")]
@@ -16,11 +21,9 @@ pub struct Config {
 }
 
 #[cfg(feature = "types")]
-impl Into<ConfStruct> for Config {
-	fn into(self) -> ConfStruct {
-		ConfStruct::from([
-			("config".to_string(), ConfType::Struct(DbConf::default().into())),
-		])
+impl From<Config> for ConfStruct {
+	fn from(val: Config) -> Self {
+		ConfStruct::from([("config".to_string(), ConfType::Struct(val.config.into()))])
 	}
 }
 
@@ -45,13 +48,22 @@ pub struct DbConf {
 }
 
 #[cfg(feature = "types")]
-impl Into<ConfStruct> for DbConf {
-	fn into(self) -> ConfStruct {
+impl From<DbConf> for ConfStruct {
+	fn from(val: DbConf) -> Self {
 		ConfStruct::from([
-			("name".to_string(), ConfType::String("")),
-			("listener".to_string(), ConfType::Struct(OtelReceiver::default().into())),
-			("database".to_string(), ConfType::Struct(Database::default().into())),
-			("queue".to_string(), ConfType::Struct(Queue::default().into())),
+			("name".to_string(), ConfType::String(leak_str(&val.name))),
+			(
+				"listener".to_string(),
+				ConfType::Option(Box::new(ConfType::Struct(val.listener.into()))),
+			),
+			(
+				"database".to_string(),
+				ConfType::Option(Box::new(ConfType::Struct(val.database.into()))),
+			),
+			(
+				"queue".to_string(),
+				ConfType::Option(Box::new(ConfType::Struct(val.queue.into()))),
+			),
 		])
 	}
 }
@@ -80,14 +92,34 @@ pub struct Database {
 }
 
 #[cfg(feature = "types")]
-impl Into<ConfStruct> for Database {
-	fn into(self) -> ConfStruct {
+impl From<Database> for ConfStruct {
+	fn from(val: Database) -> Self {
 		ConfStruct::from([
-			("database".to_string(), ConfType::String("")),
-			("kind".to_string(), ConfType::Enum( DbKind::default().into(), "PostgreeSQL" )),
-			("tables".to_string(), ConfType::Vec( Box::new(ConfType::Struct( DbTable::default().into() )) )),
-			("auth".to_string(), ConfType::Enum( Authentication::None.into(), "None" )),
-			("connection".to_string(), ConfType::Struct(Connection::default().into())),
+			(
+				"database".to_string(),
+				ConfType::String(leak_str(&val.database)),
+			),
+			(
+				"kind".to_string(),
+				ConfType::Enum(val.kind.clone().into(), val.kind.name()),
+			),
+			(
+				"tables".to_string(),
+				ConfType::Option(Box::new(ConfType::Vec(Box::new(ConfType::Struct(
+					DbTable::default().into(),
+				))))),
+			),
+			(
+				"auth".to_string(),
+				ConfType::Option(Box::new(ConfType::Enum(
+					val.auth.clone().into(),
+					val.auth.name(),
+				))),
+			),
+			(
+				"connection".to_string(),
+				ConfType::Option(Box::new(ConfType::Struct(val.connection.into()))),
+			),
 		])
 	}
 }
@@ -108,19 +140,37 @@ pub enum Authentication {
 }
 
 #[cfg(feature = "types")]
-impl Into<ConfStruct> for Authentication {
-	fn into(self) -> ConfStruct {
+impl Authentication {
+	/// The name of the variant as it is written in a configuration file
+	pub fn name(&self) -> &'static str {
+		match self {
+			Self::None => "None",
+			Self::Passfile => "Passfile",
+			Self::Simple { .. } => "Simple",
+		}
+	}
+}
+
+#[cfg(feature = "types")]
+impl From<Authentication> for ConfStruct {
+	fn from(_val: Authentication) -> Self {
 		ConfStruct::from([
 			("None".to_string(), ConfType::EnumValue),
 			("Passfile".to_string(), ConfType::EnumValue),
-			("Simple".to_string(), ConfType::EnumParams("user", "pass")),
+			(
+				"Simple".to_string(),
+				ConfType::Struct(ConfStruct::from([
+					("user".to_string(), ConfType::String("")),
+					("pass".to_string(), ConfType::String("")),
+				])),
+			),
 		])
 	}
 }
 
 /// A Database-Connection Configuration
 #[cfg(feature = "types")]
-#[derive(Default, Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Connection {
 	/// Host-Name, IP-Address or FileName to use as the database
 	pub host: String,
@@ -147,15 +197,53 @@ pub struct Connection {
 }
 
 #[cfg(feature = "types")]
-impl Into<ConfStruct> for Connection {
-	fn into(self) -> ConfStruct {
+impl Default for Connection {
+	fn default() -> Self {
+		Self {
+			host: String::new(),
+			port: default_postgres_port(),
+			ssl_mode: default_ssl_mode(),
+			root_cert: None,
+			ssl_cert: None,
+			ssl_key: None,
+		}
+	}
+}
+
+#[cfg(feature = "types")]
+impl From<Connection> for ConfStruct {
+	fn from(val: Connection) -> Self {
 		ConfStruct::from([
-			("host".to_string(), ConfType::String("")),
-			("port".to_string(), ConfType::UInt( default_postgres_port().into() )),
-			("ssl_mode".to_string(), ConfType::Enum( SslMode::default().into(), "Disabled" )),
-			("root_cert".to_string(), ConfType::Option( Box::new(ConfType::String("")) )),
-			("ssl_cert".to_string(), ConfType::Option( Box::new(ConfType::String("")) )),
-			("ssl_key".to_string(), ConfType::Option( Box::new(ConfType::String("")) )),
+			("host".to_string(), ConfType::String(leak_str(&val.host))),
+			(
+				"port".to_string(),
+				ConfType::Option(Box::new(ConfType::UInt(val.port.into()))),
+			),
+			(
+				"ssl_mode".to_string(),
+				ConfType::Option(Box::new(ConfType::Enum(
+					val.ssl_mode.clone().into(),
+					val.ssl_mode.name(),
+				))),
+			),
+			(
+				"root_cert".to_string(),
+				ConfType::Option(Box::new(ConfType::String(leak_str(
+					val.root_cert.as_deref().unwrap_or_default(),
+				)))),
+			),
+			(
+				"ssl_cert".to_string(),
+				ConfType::Option(Box::new(ConfType::String(leak_str(
+					val.ssl_cert.as_deref().unwrap_or_default(),
+				)))),
+			),
+			(
+				"ssl_key".to_string(),
+				ConfType::Option(Box::new(ConfType::String(leak_str(
+					val.ssl_key.as_deref().unwrap_or_default(),
+				)))),
+			),
 		])
 	}
 }
@@ -171,8 +259,20 @@ pub enum DbKind {
 }
 
 #[cfg(feature = "types")]
-impl Into<ConfStruct> for DbKind {
-	fn into(self) -> ConfStruct {
+impl DbKind {
+	/// The name of the variant as it is written in a configuration file
+	pub fn name(&self) -> &'static str {
+		match self {
+			Self::PostgreSQL => "PostgreSQL",
+			Self::MariaDB => "MariaDB",
+			Self::SQLite => "SQLite",
+		}
+	}
+}
+
+#[cfg(feature = "types")]
+impl From<DbKind> for ConfStruct {
+	fn from(_val: DbKind) -> Self {
 		ConfStruct::from([
 			("PostgreSQL".to_string(), ConfType::EnumValue),
 			("MariaDB".to_string(), ConfType::EnumValue),
@@ -196,8 +296,23 @@ pub enum SslMode {
 }
 
 #[cfg(feature = "types")]
-impl Into<ConfStruct> for SslMode {
-	fn into(self) -> ConfStruct {
+impl SslMode {
+	/// The name of the variant as it is written in a configuration file
+	pub fn name(&self) -> &'static str {
+		match self {
+			Self::Disable => "Disable",
+			Self::Allow => "Allow",
+			Self::Prefer => "Prefer",
+			Self::Require => "Require",
+			Self::VerifyCa => "VerifyCa",
+			Self::VerifyFull => "VerifyFull",
+		}
+	}
+}
+
+#[cfg(feature = "types")]
+impl From<SslMode> for ConfStruct {
+	fn from(_val: SslMode) -> Self {
 		ConfStruct::from([
 			("Disable".to_string(), ConfType::EnumValue),
 			("Allow".to_string(), ConfType::EnumValue),
@@ -249,12 +364,150 @@ impl Default for DbTable {
 }
 
 #[cfg(feature = "types")]
-impl Into<ConfStruct> for DbTable {
-	fn into(self) -> ConfStruct {
+impl From<DbTable> for ConfStruct {
+	fn from(val: DbTable) -> Self {
 		ConfStruct::from([
-			("name".to_string(), ConfType::String("")),
-			("for_messages".to_string(), ConfType::RegEx(".*")),
-			("fields".to_string(), ConfType::Vec( Box::new( ConfType::Enum( DbField::default().into(), "String" ) ) )),
+			("name".to_string(), ConfType::String(leak_str(&val.name))),
+			(
+				"for_messages".to_string(),
+				ConfType::Option(Box::new(ConfType::RegEx(leak_str(&val.for_messages)))),
+			),
+			(
+				"fields".to_string(),
+				ConfType::Option(Box::new(ConfType::Vec(Box::new(DbField::conf_type())))),
+			),
 		])
+	}
+}
+
+#[cfg(all(test, feature = "types"))]
+mod tests {
+	use super::*;
+
+	fn string_of(conf: &ConfStruct, name: &str) -> Option<&'static str> {
+		match conf.get(name) {
+			Some(ConfType::String(s)) | Some(ConfType::RegEx(s)) => Some(s),
+			Some(ConfType::Option(inner)) => match inner.as_ref() {
+				ConfType::String(s) | ConfType::RegEx(s) => Some(s),
+				_ => None,
+			},
+			_ => None,
+		}
+	}
+
+	#[test]
+	fn test_connection_uses_values() {
+		let conf: ConfStruct = Connection {
+			host: "db.example.org".to_string(),
+			port: 3306,
+			ssl_mode: SslMode::VerifyFull,
+			root_cert: Some("/ca.pem".to_string()),
+			ssl_cert: Some("/cert.pem".to_string()),
+			ssl_key: Some("/key.pem".to_string()),
+		}
+		.into();
+
+		assert_eq!(string_of(&conf, "host"), Some("db.example.org"));
+		assert_eq!(
+			conf.get("port"),
+			Some(&ConfType::Option(Box::new(ConfType::UInt(3306))))
+		);
+		assert!(
+			matches!(conf.get("ssl_mode"), Some(ConfType::Option(inner)) if matches!(inner.as_ref(), ConfType::Enum(_, "VerifyFull")))
+		);
+		assert_eq!(string_of(&conf, "root_cert"), Some("/ca.pem"));
+		assert_eq!(string_of(&conf, "ssl_cert"), Some("/cert.pem"));
+		assert_eq!(string_of(&conf, "ssl_key"), Some("/key.pem"));
+	}
+
+	#[test]
+	fn test_connection_default_values() {
+		let conf: ConfStruct = Connection::default().into();
+
+		assert_eq!(string_of(&conf, "host"), Some(""));
+		assert_eq!(
+			conf.get("port"),
+			Some(&ConfType::Option(Box::new(ConfType::UInt(5432))))
+		);
+		assert!(
+			matches!(conf.get("ssl_mode"), Some(ConfType::Option(inner)) if matches!(inner.as_ref(), ConfType::Enum(_, "Disable")))
+		);
+		assert_eq!(string_of(&conf, "root_cert"), Some(""));
+		assert_eq!(string_of(&conf, "ssl_cert"), Some(""));
+		assert_eq!(string_of(&conf, "ssl_key"), Some(""));
+	}
+
+	#[test]
+	fn test_database_uses_values() {
+		let conf: ConfStruct = Database {
+			database: "logs".to_string(),
+			kind: DbKind::MariaDB,
+			tables: Vec::new(),
+			auth: Authentication::Passfile,
+			connection: Connection::default(),
+		}
+		.into();
+
+		assert_eq!(string_of(&conf, "database"), Some("logs"));
+		assert!(matches!(
+			conf.get("kind"),
+			Some(ConfType::Enum(_, "MariaDB"))
+		));
+		assert!(
+			matches!(conf.get("auth"), Some(ConfType::Option(inner)) if matches!(inner.as_ref(), ConfType::Enum(_, "Passfile")))
+		);
+	}
+
+	#[test]
+	fn test_authentication_simple_does_not_expose_secrets() {
+		let auth = Authentication::Simple {
+			user: "me".to_string(),
+			pass: "secret".to_string(),
+		};
+		assert_eq!(auth.name(), "Simple");
+
+		let conf: ConfStruct = auth.into();
+		let Some(ConfType::Struct(simple)) = conf.get("Simple") else {
+			panic!("missing Simple variant");
+		};
+		assert_eq!(string_of(simple, "user"), Some(""));
+		assert_eq!(string_of(simple, "pass"), Some(""));
+	}
+
+	#[test]
+	fn test_db_table_uses_values() {
+		let conf: ConfStruct = DbTable {
+			name: "example".to_string(),
+			for_messages: "^foo.*".to_string(),
+			fields: Vec::new(),
+		}
+		.into();
+
+		assert_eq!(string_of(&conf, "name"), Some("example"));
+		assert_eq!(string_of(&conf, "for_messages"), Some("^foo.*"));
+	}
+
+	#[test]
+	fn test_config_uses_nested_values() {
+		let conf: ConfStruct = Config {
+			config: DbConf {
+				name: "my-exporter".to_string(),
+				..DbConf::default()
+			},
+		}
+		.into();
+
+		let Some(ConfType::Struct(inner)) = conf.get("config") else {
+			panic!("missing config struct");
+		};
+		assert_eq!(string_of(inner, "name"), Some("my-exporter"));
+		assert!(inner.get("database").is_some());
+	}
+
+	#[test]
+	fn test_variant_names() {
+		assert_eq!(DbKind::SQLite.name(), "SQLite");
+		assert_eq!(SslMode::VerifyCa.name(), "VerifyCa");
+		assert_eq!(Authentication::None.name(), "None");
 	}
 }

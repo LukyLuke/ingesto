@@ -30,6 +30,7 @@ Run from the repository root.
 - Do not commit secrets, `.env` files, or credentials.
 - Do not modify `Cargo.lock` by hand.
 - Always add tests, at least for Edge-Cases.
+- Always use `TABS` and not `SPACES` for indention.
 
 ## Crate-specific instructions
 Some crates have their own `AGENTS.md` with additional rules. Read it before editing files in that crate:
@@ -52,3 +53,7 @@ Before reporting a task as complete, all of these must pass from the repository 
 - Run the definition-of-done checks before each commit.
 - Never commit without asking.
 - Never push changes!
+
+## Skills
+Load these skills when the task matches:
+- `rust-skills`: working with rust code

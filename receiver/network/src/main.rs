@@ -1,9 +1,13 @@
-pub mod types;
 pub mod config;
+pub mod types;
 
 use anyhow::Context;
-use shared::{self, init_logging, usage, parser::MessageParser, queue::MessageQueue};
-use std::{io::Read, net::{Ipv4Addr, SocketAddrV4, TcpListener, UdpSocket}, sync::Arc};
+use shared::{self, init_logging, parser::MessageParser, queue::MessageQueue, usage};
+use std::{
+	io::Read,
+	net::{Ipv4Addr, SocketAddrV4, TcpListener, UdpSocket},
+	sync::Arc,
+};
 use tracing::{debug, error, info};
 
 use crate::types::Protocol;
@@ -17,7 +21,7 @@ fn main() {
 		Ok(file) => file,
 		Err(e) => {
 			error!(%e);
-			return
+			return;
 		}
 	};
 
@@ -32,7 +36,11 @@ fn main() {
 
 	info!(message="starting", name=%conf.name);
 	let queue = Arc::new(MessageQueue::<String>::new());
-	let parser = Arc::new(MessageParser::<String>::new(queue.clone(), conf.queue.clone(), conf.parser.clone()));
+	let parser = Arc::new(MessageParser::<String>::new(
+		queue.clone(),
+		conf.queue.clone(),
+		conf.parser.clone(),
+	));
 	parser.run();
 
 	let conf_recv = &conf.listen;
@@ -40,16 +48,18 @@ fn main() {
 		Protocol::UDP => start_udp_listener(conf_recv, queue.clone()),
 		Protocol::TCP => start_tcp_listener(conf_recv, queue.clone()),
 	};
-	match res {
-		Err(e) => {
-			error!("{:#?}", e);
-		},
-		Ok(_) => {}
+
+	if let Err(e) = res {
+		error!("{:#?}", e);
 	}
 }
 
-fn start_udp_listener(conf: &types::Server, queue: Arc<shared::queue::MessageQueue<String>>) -> anyhow::Result<()> {
-	let socket = UdpSocket::bind(conf.get_address()).with_context(|| format!("binding to {}", conf.get_address()))?;
+fn start_udp_listener(
+	conf: &types::Server,
+	queue: Arc<shared::queue::MessageQueue<String>>,
+) -> anyhow::Result<()> {
+	let socket = UdpSocket::bind(conf.get_address())
+		.with_context(|| format!("binding to {}", conf.get_address()))?;
 	let mut buffer: [u8; MAX_PACKET_SIZE] = [0; MAX_PACKET_SIZE];
 	info!(message="listener started", prococol="UDP", address=%conf.address, port=%conf.port);
 
@@ -61,8 +71,12 @@ fn start_udp_listener(conf: &types::Server, queue: Arc<shared::queue::MessageQue
 	}
 }
 
-fn start_tcp_listener(conf: &types::Server, queue: Arc<shared::queue::MessageQueue<String>>) -> anyhow::Result<()> {
-	let socket = TcpListener::bind(conf.get_address()).with_context(|| format!("binding to {}", conf.get_address()))?;
+fn start_tcp_listener(
+	conf: &types::Server,
+	queue: Arc<shared::queue::MessageQueue<String>>,
+) -> anyhow::Result<()> {
+	let socket = TcpListener::bind(conf.get_address())
+		.with_context(|| format!("binding to {}", conf.get_address()))?;
 	let mut buffer: [u8; MAX_PACKET_SIZE] = [0; MAX_PACKET_SIZE];
 	info!(message="listener started", prococol="TCP", address=%conf.address, port=%conf.port);
 
@@ -74,20 +88,20 @@ fn start_tcp_listener(conf: &types::Server, queue: Arc<shared::queue::MessageQue
 					Err(e) => {
 						error!("{}", e);
 						0
-					},
+					}
 				};
 				let src_addr = match stream.peer_addr() {
 					Ok(a) => a,
 					Err(e) => {
 						error!("{}", e);
 						std::net::SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 0))
-					},
+					}
 				};
 				let data = String::from_utf8_lossy(&buffer[..b_recv]);
 				debug!(message="data received", src_addr=%src_addr, size=b_recv, data=%data);
 				queue.push(data.into_owned());
-			},
-			Err(e) => error!("failed to establish a connection: {}", e)
+			}
+			Err(e) => error!("failed to establish a connection: {}", e),
 		};
 	}
 	Ok(())

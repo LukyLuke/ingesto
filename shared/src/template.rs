@@ -2,14 +2,14 @@ use core::fmt;
 use std::sync::Arc;
 
 use dashmap::DashMap;
-use once_cell::sync::Lazy;
 use jiff::{Timestamp, Zoned, tz::TimeZone};
+use once_cell::sync::Lazy;
 use serde_json::Value;
 use tracing::warn;
 use uuid::Uuid;
 
 /// Static Lazy-Loaded template cache
-static TEMPLATE_CACHE: Lazy<DashMap<String, Template>> = Lazy::new(|| DashMap::new());
+static TEMPLATE_CACHE: Lazy<DashMap<String, Template>> = Lazy::new(DashMap::new);
 
 // ISO-8601 Date-Format in UTC
 // "%+" is equal to "%FT%T%.6f%:z" is equal to "%Y-%m-%dT%H:%M:%S%.6f%:z"
@@ -32,7 +32,7 @@ static FORMAT_ISO8601: &str = "%FT%T%.6f%:z";
 /// let key = String::from("fixed_key");
 /// shared::template::template_string_parse(&key, &tpl);
 /// ```
-pub fn template_string_parse(key: &String, value: &String) {
+pub fn template_string_parse(key: &String, value: &str) {
 	TEMPLATE_CACHE.insert(key.to_owned(), Template::parse(value));
 }
 
@@ -63,11 +63,14 @@ pub fn template_string(tpl: &String, values: Arc<Value>) -> String {
 		TEMPLATE_CACHE.get(tpl)
 	}) {
 		let res = template.render(values.clone());
-		return if res == "null" { "".to_string() } else { res }
+		return if res == "null" { "".to_string() } else { res };
 	}
 
-	warn!("Template-Cache for '{}' not found and not able to build. Using EMPTY String.", tpl);
-	return String::from("");
+	warn!(
+		"Template-Cache for '{}' not found and not able to build. Using EMPTY String.",
+		tpl
+	);
+	String::from("")
 }
 
 /// Represents the Template-Parsing engine.
@@ -86,7 +89,7 @@ impl Template {
 	///
 	/// * `$uuid` - A simple UUID-v4.
 	/// * `$now(FORMAT)` - The current Date/Time. If `FORMAT` is not given, the value `%Y-%m-%d` is used.
-	/// * `$date(DATE#FORMAT)` - The Date/Time value given in `DATE` or the current DateTime value (now). If `FORMAT` is not given, the value `%Y-%m-%d` is used.
+	/// * `$date(DATE#FORMAT)` - The Date/Time value given in `DATE`, a response value like `$response/JSON/POINTER` or the current DateTime value (now). If `FORMAT` is not given, the value `%Y-%m-%d` is used.
 	/// * `$response/JSON/POINTER` - A JSON-Pointer value which is evaluated against the value given in `render(value)`. The format is `/key/key` for objects and in case of array indexes like `/key/0/key/33`.
 	///
 	/// Every Token is encapsulated in `{{ ... }}`.
@@ -116,31 +119,35 @@ impl Template {
 
 		// Start Position of '{{'
 		while let Some(mut pos) = iter.position(|x| x == '{') {
-			if let Some(pos_end) = iter.next() && pos_end == '{' {
+			if let Some(pos_end) = iter.next()
+				&& pos_end == '{'
+			{
 				// End Position of '}}'
 				while let Some(end) = iter.position(|x| x == '}') {
-					if let Some(end_end) = iter.next() && end_end == '}' {
+					if let Some(end_end) = iter.next()
+						&& end_end == '}'
+					{
 						// Update start position
-						pos = last_end + pos;
+						pos += last_end;
 
 						// save static string
 						let static_token = String::from(&s[last_end..pos]);
 						if !static_token.is_empty() {
-							tokens.push(TemplateToken::Static( static_token ));
+							tokens.push(TemplateToken::Static(static_token));
 						}
 
 						// Update Param-End Position, which is before the '}}'
-						pos = pos + 2;
+						pos += 2;
 						last_end = pos + end;
 
 						// save param
 						let param_token = String::from(s[pos..last_end].trim());
 						if !param_token.is_empty() {
-							tokens.push(TemplateToken::Param( ParamParser::from(param_token) ));
+							tokens.push(TemplateToken::Param(ParamParser::from(param_token)));
 						}
 
 						// Update next start position, which is after '}}'
-						last_end = last_end + 2;
+						last_end += 2;
 
 						// break the inner loop to find the next '{{' position within the outer loop
 						num_param += 1;
@@ -152,13 +159,13 @@ impl Template {
 
 		// Add the last static string
 		if last_end < s.len() {
-			tokens.push(TemplateToken::Static( String::from(&s[last_end..]) ));
+			tokens.push(TemplateToken::Static(String::from(&s[last_end..])));
 		}
 
-		return Self {
+		Self {
 			tokens,
-			capacity: (s.len() + (num_param * 24)) // Predict each param is max 24 chars long
-		};
+			capacity: (s.len() + (num_param * 24)), // Predict each param is max 24 chars long
+		}
 	}
 
 	/// Renders the Template based on the JSON-Value.
@@ -195,91 +202,106 @@ impl Template {
 		for token in &self.tokens {
 			match token {
 				// Append the static string value
-				TemplateToken::Static(val) => {
-					out.push_str(&val)
-				},
+				TemplateToken::Static(val) => out.push_str(val),
 				// Append the 'PARAM-Value' or '{{PARAM}}' if no value is set
 				TemplateToken::Param(val) => {
-					let v = match &val {
+					let v = match val {
 						// UUIDs
-						&ParamParser::Uuid => {
-							let uuid = Uuid::new_v4().to_string();
-							&format!("{}", uuid)
-						},
+						ParamParser::Uuid => Uuid::new_v4().to_string(),
 
 						// Current Date-Time Values
-						&ParamParser::Now(format) => {
-							let formatted = if format.is_empty() {
-								Zoned::now().with_time_zone(TimeZone::UTC).strftime("%Y-%m-%d").to_string()
+						ParamParser::Now(format) => {
+							if format.is_empty() {
+								Zoned::now()
+									.with_time_zone(TimeZone::UTC)
+									.strftime("%Y-%m-%d")
+									.to_string()
 							} else {
-								Zoned::now().with_time_zone(TimeZone::UTC).strftime(if format == "iso8601" {FORMAT_ISO8601} else {format}).to_string()
-							};
-							&format!("{}", formatted)
-						},
+								Zoned::now()
+									.with_time_zone(TimeZone::UTC)
+									.strftime(if format == "iso8601" {
+										FORMAT_ISO8601
+									} else {
+										format
+									})
+									.to_string()
+							}
+						}
 
 						// Any DateTime formats, including relative dates like "-5 days"
-						&ParamParser::Date(d, format) => {
+						ParamParser::Date(d, format) => {
 							let date = if d == "$now" {
 								Zoned::now().with_time_zone(TimeZone::UTC)
-
 							} else {
 								// Check the result for a DateTime value, parse it and use the UTC value
-								let date_val = if d.get(0..4).unwrap_or_default() == "$res" {
-									// TODO: implement $date($response/foo/bar#%Y-%m-%d)
-									// Enable `test_render_date_result()` afterwards
-									d.to_owned()
-								} else {
-									d.to_owned()
+								let date_val = match d.strip_prefix("$response") {
+									Some(json_path) => value
+										.pointer(json_path)
+										.map(json_to_string)
+										.unwrap_or_default(),
+									None => d.to_owned(),
 								};
 
 								// Try to parse a normal date in one of the most common formats,
 								// if this fails, try to parse it as a relative date format like "-5 days"
 								match dateparser::parse(&date_val) {
 									Ok(d) => {
-										let ts: Timestamp = d.to_rfc3339().parse().unwrap_or_default();
+										let ts: Timestamp =
+											d.to_rfc3339().parse().unwrap_or_default();
 										ts.to_zoned(TimeZone::UTC)
-									},
-									Err(_) => {
-										match parse_datetime::parse_datetime(&date_val) {
-											Ok(p) => p.into_zoned().unwrap_or_default().with_time_zone(TimeZone::UTC),
-											Err(_) => Zoned::now().with_time_zone(TimeZone::UTC)
-										}
 									}
+									Err(_) => match parse_datetime::parse_datetime(&date_val) {
+										Ok(p) => p
+											.into_zoned()
+											.unwrap_or_default()
+											.with_time_zone(TimeZone::UTC),
+										Err(_) => Zoned::now().with_time_zone(TimeZone::UTC),
+									},
 								}
 							};
 
-							let formatted = if format.is_empty() {
+							// Return the formatted date
+							if format.is_empty() {
 								date.strftime("%Y-%m-%d").to_string()
 							} else {
-								date.strftime(if format == "iso8601" {FORMAT_ISO8601} else {format}).to_string()
-							};
-							&format!("{}", formatted)
-						},
+								date.strftime(if format == "iso8601" {
+									FORMAT_ISO8601
+								} else {
+									format
+								})
+								.to_string()
+							}
+						}
 
 						// Value from the last response
-						&ParamParser::Response(json_path) => {
-							let v = match &value.pointer(json_path.as_str()).unwrap_or(&Value::Null) {
-								&Value::Bool(v) => format!("{}", v),
-								&Value::Number(v) => format!("{}", v.as_f64().unwrap_or(0.0)),
-								&Value::String(v) => if v == "null" { "".to_string() } else { v.clone() },
-								_ => String::new()
-							};
-							&format!("{}", v)
-						},
+						ParamParser::Response(json_path) => value
+							.pointer(json_path.as_str())
+							.map(json_to_string)
+							.unwrap_or_default(),
 
 						// Just a static value
-						&ParamParser::Static(token) => {
-							&format!("{{{{{}}}}}", token)
-						},
+						ParamParser::Static(token) => {
+							format!("{{{{{}}}}}", token)
+						}
 					};
-					out.push_str(v);
+					out.push_str(&v);
 				}
 			}
 		}
-		return out;
+		out
 	}
 }
 
+/// Converts a scalar JSON-Value into its string representation.
+/// Objects, arrays, `null` and the string `"null"` result in an empty string.
+fn json_to_string(value: &Value) -> String {
+	match value {
+		Value::Bool(v) => v.to_string(),
+		Value::Number(v) => v.as_f64().unwrap_or(0.0).to_string(),
+		Value::String(v) if v != "null" => v.clone(),
+		_ => String::new(),
+	}
+}
 
 /// Represents a static string or a token which has to be evaluated
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -334,7 +356,7 @@ impl ParamParser {
 	/// * [JSON-Pointer RFC6901](https://datatracker.ietf.org/doc/html/rfc6901)
 	/// * [Date Time Formatting](https://docs.rs/chrono/latest/chrono/format/strftime/index.html)
 	pub fn from(val: String) -> Self {
-		return match &val[..4] {
+		match &val[..4] {
 			// A simple UUID
 			"$uui" => Self::Uuid,
 
@@ -345,11 +367,11 @@ impl ParamParser {
 				let s = val.find('(').unwrap_or(0);
 				let e = val.rfind(')').unwrap_or(0);
 				if s > 0 && e > s {
-					Self::Now(val[s+1..e].to_string())
+					Self::Now(val[s + 1..e].to_string())
 				} else {
 					Self::Now(String::new())
 				}
-			},
+			}
 
 			// $date(2006-05-04T15:16:17.0001)
 			// $date(2006-05-04T15:16:17.0001#%Y-%m-%dT%H:%M:%sZ)
@@ -361,16 +383,16 @@ impl ParamParser {
 
 				// Date-String with a Format string
 				let (date, format) = if s > 0 && p > s && e > p {
-					(val[s+1..p].to_string(), val[p+1..e].to_string())
+					(val[s + 1..p].to_string(), val[p + 1..e].to_string())
 				// Only a Date-String
 				} else if s > 0 && e > s {
-					(val[s+1..e].to_string(), String::new())
+					(val[s + 1..e].to_string(), String::new())
 				// No Date-String
 				} else {
 					("$now".to_string(), String::new())
 				};
 				Self::Date(date, format)
-			},
+			}
 
 			// $response/FIELD/INDEX/FIELD
 			// $response/RFC6901
@@ -388,24 +410,23 @@ impl fmt::Display for ParamParser {
 	}
 }
 
-
 #[cfg(test)]
 mod tests {
-	use std::sync::Arc;
 	use jiff::ToSpan;
 	use serde_json::json;
+	use std::sync::Arc;
 
 	use super::*;
 
 	#[test]
 	fn test_template_string_existing() {
 		let response = Arc::new(
-			json!({ "paging":{"cursor":"xxx","pages":77}, "data":[ {"foo":"bar"}, {"foo":"barrr"}, {"foo":"bar"} ] })
+			json!({ "paging":{"cursor":"xxx","pages":77}, "data":[ {"foo":"bar"}, {"foo":"barrr"}, {"foo":"bar"} ] }),
 		);
 
 		let key = String::from("test-key");
 		let value = String::from("foo: {{ $response/data/1/foo }}");
-		template_string_parse(&key,  &value);
+		template_string_parse(&key, &value);
 
 		let result = template_string(&key, response.clone());
 
@@ -415,11 +436,11 @@ mod tests {
 	#[test]
 	fn test_template_string_new() {
 		let response = Arc::new(
-			json!({ "paging":{"cursor":"xxx","pages":77}, "data":[ {"foo":"bar"}, {"foo":"barrr"}, {"foo":"lastbar"} ] })
+			json!({ "paging":{"cursor":"xxx","pages":77}, "data":[ {"foo":"bar"}, {"foo":"barrr"}, {"foo":"lastbar"} ] }),
 		);
 
 		let key = String::from("dummy-key");
-		TEMPLATE_CACHE.insert(key.to_owned(),  Template::parse("No real value"));
+		TEMPLATE_CACHE.insert(key.to_owned(), Template::parse("No real value"));
 
 		let value = String::from("foo: {{ $response/data/2/foo }}");
 		let result = template_string(&value, response.clone());
@@ -433,27 +454,49 @@ mod tests {
 		let params = Arc::new(Value::Null);
 
 		let res = tpl.render(params);
-		assert_eq!(res, String::from("Param:{{$PARAM_A}}; Param:{{PARAM_B}}; NoValue:{{PARAM_C}}"));
+		assert_eq!(
+			res,
+			String::from("Param:{{$PARAM_A}}; Param:{{PARAM_B}}; NoValue:{{PARAM_C}}")
+		);
 	}
 
 	#[test]
 	fn test_render_dates() {
-		let tpl = Template::parse("Now:{{ $now }}; dmY:{{ $now(%d-%m-%Y) }}; Date:{{ $date(2008-10-12) }}; Date-dmY:{{ $date(2008-10-12#%d-%m-%Y) }};");
+		let tpl = Template::parse(
+			"Now:{{ $now }}; dmY:{{ $now(%d-%m-%Y) }}; Date:{{ $date(2008-10-12) }}; Date-dmY:{{ $date(2008-10-12#%d-%m-%Y) }};",
+		);
 		let params = Arc::new(Value::Null);
 		let now = Zoned::now().with_time_zone(TimeZone::UTC);
 
 		let res = tpl.render(params);
-		assert_eq!(res, String::from(format!("Now:{}; dmY:{}; Date:2008-10-12; Date-dmY:12-10-2008;", now.strftime("%Y-%m-%d"), now.strftime("%d-%m-%Y"))));
+		assert_eq!(
+			res,
+			String::from(format!(
+				"Now:{}; dmY:{}; Date:2008-10-12; Date-dmY:12-10-2008;",
+				now.strftime("%Y-%m-%d"),
+				now.strftime("%d-%m-%Y")
+			))
+		);
 	}
 
 	#[test]
 	fn test_render_relative_dates() {
-		let tpl = Template::parse("Relative:{{ $date(-5days) }}; Date-dmY:{{ $date(-5days#%d-%m-%Y) }};");
+		let tpl =
+			Template::parse("Relative:{{ $date(-5days) }}; Date-dmY:{{ $date(-5days#%d-%m-%Y) }};");
 		let params = Arc::new(Value::Null);
-		let date = Zoned::now().saturating_sub(5.days()).with_time_zone(TimeZone::UTC);
+		let date = Zoned::now()
+			.saturating_sub(5.days())
+			.with_time_zone(TimeZone::UTC);
 
 		let res = tpl.render(params);
-		assert_eq!(res, String::from(format!("Relative:{}; Date-dmY:{};", date.strftime("%Y-%m-%d"), date.strftime("%d-%m-%Y"))));
+		assert_eq!(
+			res,
+			String::from(format!(
+				"Relative:{}; Date-dmY:{};",
+				date.strftime("%Y-%m-%d"),
+				date.strftime("%d-%m-%Y")
+			))
+		);
 	}
 
 	#[test]
@@ -464,7 +507,10 @@ mod tests {
 
 		let res = tpl.render(params);
 		// Do not check seconds-fraction '%.6f' which will never be the same anyways - even seconds is critical to test
-		assert_eq!(res.get(0..29), String::from(format!("ISO-8601:{}", date.strftime("%FT%T%.6f%:z"))).get(0..29));
+		assert_eq!(
+			res.get(0..29),
+			String::from(format!("ISO-8601:{}", date.strftime("%FT%T%.6f%:z"))).get(0..29)
+		);
 	}
 
 	#[test]
@@ -475,19 +521,68 @@ mod tests {
 
 		let res = tpl.render(params);
 		// Do not check seconds-fraction '%.6f' which will never be the same anyways - even seconds is critical to test
-		assert_eq!(res.get(0..29), String::from(format!("ISO-8601:{}", date.strftime("%FT%T%.6f%:z"))).get(0..29));
+		assert_eq!(
+			res.get(0..29),
+			String::from(format!("ISO-8601:{}", date.strftime("%FT%T%.6f%:z"))).get(0..29)
+		);
 	}
 
 	#[test]
-	#[ignore]
 	fn test_render_date_result() {
-		let tpl = Template::parse("Response:{{ $date($response/data/foo) }}; Date-dmY:{{ $date($response/data/foo#%d-%m-%Y) }};");
+		let tpl = Template::parse(
+			"Response:{{ $date($response/data/foo) }}; Date-dmY:{{ $date($response/data/foo#%d-%m-%Y) }};",
+		);
 		let params = Arc::new(
-			json!({ "paging":{"cursor":"xxx","pages":77}, "data":{ "foo": "2008-10-12 10:12:14" } })
+			json!({ "paging":{"cursor":"xxx","pages":77}, "data":{ "foo": "2008-10-12 10:12:14" } }),
 		);
 
 		let res = tpl.render(params);
-		assert_eq!(res, String::from("Response:2008-10-12; Date-dmY: 12-10-2008"));
+		assert_eq!(
+			res,
+			String::from("Response:2008-10-12; Date-dmY:12-10-2008;")
+		);
+	}
+
+	#[test]
+	fn test_render_date_result_iso8601() {
+		let tpl = Template::parse("{{ $date($response/data/foo#iso8601) }}");
+		let params = Arc::new(json!({ "data":{ "foo": "2008-10-12T10:12:14Z" } }));
+
+		let res = tpl.render(params);
+		assert_eq!(res, "2008-10-12T10:12:14.000000+00:00");
+	}
+
+	#[test]
+	fn test_render_date_result_unix_timestamp() {
+		let tpl = Template::parse("{{ $date($response/data/foo#%Y-%m-%d %H:%M:%S) }}");
+		let params = Arc::new(json!({ "data":{ "foo": 1223806334 } }));
+
+		let res = tpl.render(params);
+		assert_eq!(res, "2008-10-12 10:12:14");
+	}
+
+	#[test]
+	fn test_render_date_result_missing_falls_back_to_now() {
+		let tpl =
+			Template::parse("{{ $date($response/data/missing) }}|{{ $date($response/data#%Y) }}");
+		let params = Arc::new(json!({ "data":{ "foo": "2008-10-12" } }));
+		let now = Zoned::now().with_time_zone(TimeZone::UTC);
+
+		let res = tpl.render(params);
+		assert_eq!(
+			res,
+			format!("{}|{}", now.strftime("%Y-%m-%d"), now.strftime("%Y"))
+		);
+	}
+
+	#[test]
+	fn test_render_date_result_invalid_falls_back_to_now() {
+		let tpl = Template::parse("{{ $date($response/data/foo) }}");
+		let params = Arc::new(json!({ "data":{ "foo": "not a date" } }));
+		let now = Zoned::now().with_time_zone(TimeZone::UTC);
+
+		let res = tpl.render(params);
+		assert_eq!(res, now.strftime("%Y-%m-%d").to_string());
 	}
 
 	#[test]
@@ -503,9 +598,11 @@ mod tests {
 
 	#[test]
 	fn test_render_result() {
-		let tpl = Template::parse("foo: {{ $response/data/0/foo }}; cursor: {{ $response/paging/cursor }}");
+		let tpl = Template::parse(
+			"foo: {{ $response/data/0/foo }}; cursor: {{ $response/paging/cursor }}",
+		);
 		let params = Arc::new(
-			json!({ "paging":{"cursor":"xxx","pages":77}, "data":[ {"foo":"bar"}, {"foo":"bar"}, {"foo":"bar"} ] })
+			json!({ "paging":{"cursor":"xxx","pages":77}, "data":[ {"foo":"bar"}, {"foo":"bar"}, {"foo":"bar"} ] }),
 		);
 
 		let res = tpl.render(params);
@@ -514,15 +611,15 @@ mod tests {
 
 	#[test]
 	fn test_render_no_result() {
-		let tpl = Template::parse("foo: {{ $response/data/foo }}; cursor: {{ $response/paging/cursor }}");
+		let tpl =
+			Template::parse("foo: {{ $response/data/foo }}; cursor: {{ $response/paging/cursor }}");
 		let params = Arc::new(
-			json!({ "paging":{"cursor":"xxx","pages":77}, "data":[ {"foo":"bar"}, {"foo":"bar"}, {"foo":"bar"} ] })
+			json!({ "paging":{"cursor":"xxx","pages":77}, "data":[ {"foo":"bar"}, {"foo":"bar"}, {"foo":"bar"} ] }),
 		);
 
 		let res = tpl.render(params);
 		assert_eq!(res, String::from("foo: ; cursor: xxx"));
 	}
-
 
 	#[test]
 	fn test_parse_inner() {
@@ -530,11 +627,26 @@ mod tests {
 		let result = Template::parse(&s);
 
 		assert_eq!(result.tokens.len(), 5);
-		assert_eq!(result.tokens[0], TemplateToken::Static(String::from("foo ")));
-		assert_eq!(result.tokens[1], TemplateToken::Param(ParamParser::Static("PARAM1".to_string())));
-		assert_eq!(result.tokens[2], TemplateToken::Static(String::from(" bar ")));
-		assert_eq!(result.tokens[3], TemplateToken::Param(ParamParser::Static("PARAM2".to_string())));
-		assert_eq!(result.tokens[4], TemplateToken::Static(String::from(" end")));
+		assert_eq!(
+			result.tokens[0],
+			TemplateToken::Static(String::from("foo "))
+		);
+		assert_eq!(
+			result.tokens[1],
+			TemplateToken::Param(ParamParser::Static("PARAM1".to_string()))
+		);
+		assert_eq!(
+			result.tokens[2],
+			TemplateToken::Static(String::from(" bar "))
+		);
+		assert_eq!(
+			result.tokens[3],
+			TemplateToken::Param(ParamParser::Static("PARAM2".to_string()))
+		);
+		assert_eq!(
+			result.tokens[4],
+			TemplateToken::Static(String::from(" end"))
+		);
 	}
 
 	#[test]
@@ -543,9 +655,18 @@ mod tests {
 		let result = Template::parse(&s);
 
 		assert_eq!(result.tokens.len(), 3);
-		assert_eq!(result.tokens[0], TemplateToken::Param(ParamParser::Static("PARAM1".to_string())));
-		assert_eq!(result.tokens[1], TemplateToken::Static(String::from(" bar ")));
-		assert_eq!(result.tokens[2], TemplateToken::Param(ParamParser::Static("PARAM2".to_string())));
+		assert_eq!(
+			result.tokens[0],
+			TemplateToken::Param(ParamParser::Static("PARAM1".to_string()))
+		);
+		assert_eq!(
+			result.tokens[1],
+			TemplateToken::Static(String::from(" bar "))
+		);
+		assert_eq!(
+			result.tokens[2],
+			TemplateToken::Param(ParamParser::Static("PARAM2".to_string()))
+		);
 	}
 
 	#[test]
@@ -554,7 +675,10 @@ mod tests {
 		let result = Template::parse(&s);
 
 		assert_eq!(result.tokens.len(), 1);
-		assert_eq!(result.tokens[0], TemplateToken::Static(String::from("foo bar")));
+		assert_eq!(
+			result.tokens[0],
+			TemplateToken::Static(String::from("foo bar"))
+		);
 	}
 
 	#[test]
@@ -563,7 +687,10 @@ mod tests {
 		let result = Template::parse(&s);
 
 		assert_eq!(result.tokens.len(), 1);
-		assert_eq!(result.tokens[0], TemplateToken::Param(ParamParser::Static("PARAM".to_string())));
+		assert_eq!(
+			result.tokens[0],
+			TemplateToken::Param(ParamParser::Static("PARAM".to_string()))
+		);
 	}
 
 	#[test]
@@ -572,8 +699,14 @@ mod tests {
 		let result = Template::parse(&s);
 
 		assert_eq!(result.tokens.len(), 2);
-		assert_eq!(result.tokens[0], TemplateToken::Param(ParamParser::Static("PARAM1".to_string())));
-		assert_eq!(result.tokens[1], TemplateToken::Param(ParamParser::Static("PARAM2".to_string())));
+		assert_eq!(
+			result.tokens[0],
+			TemplateToken::Param(ParamParser::Static("PARAM1".to_string()))
+		);
+		assert_eq!(
+			result.tokens[1],
+			TemplateToken::Param(ParamParser::Static("PARAM2".to_string()))
+		);
 	}
 
 	#[test]
@@ -582,8 +715,14 @@ mod tests {
 		let result = Template::parse(&s);
 
 		assert_eq!(result.tokens.len(), 2);
-		assert_eq!(result.tokens[0], TemplateToken::Param(ParamParser::Static("PARAM1".to_string())));
-		assert_eq!(result.tokens[1], TemplateToken::Static(String::from(" foo }}")));
+		assert_eq!(
+			result.tokens[0],
+			TemplateToken::Param(ParamParser::Static("PARAM1".to_string()))
+		);
+		assert_eq!(
+			result.tokens[1],
+			TemplateToken::Static(String::from(" foo }}"))
+		);
 	}
 
 	#[test]
@@ -592,7 +731,13 @@ mod tests {
 		let result = Template::parse(&s);
 
 		assert_eq!(result.tokens.len(), 2);
-		assert_eq!(result.tokens[0], TemplateToken::Param(ParamParser::Static("PARAM1 {{TEST".to_string())));
-		assert_eq!(result.tokens[1], TemplateToken::Static(String::from(" foo")));
+		assert_eq!(
+			result.tokens[0],
+			TemplateToken::Param(ParamParser::Static("PARAM1 {{TEST".to_string()))
+		);
+		assert_eq!(
+			result.tokens[1],
+			TemplateToken::Static(String::from(" foo"))
+		);
 	}
 }

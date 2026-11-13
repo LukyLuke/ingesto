@@ -43,3 +43,13 @@ main details > summary::before {
 main details[open] > summary::before {
 	transform: rotate(0deg);
 }
+
+/* Fields with a problem */
+input[aria-invalid="true"],
+select[aria-invalid="true"] {
+	@apply border-red-500 ring-2 ring-red-300;
+}
+
+details[aria-invalid="true"] > summary {
+	@apply ring-2 ring-red-400;
+}

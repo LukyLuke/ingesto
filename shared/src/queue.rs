@@ -1,10 +1,10 @@
-use std::sync::{Condvar, Mutex};
 use std::collections::VecDeque;
+use std::sync::{Condvar, Mutex};
 use std::time::Duration;
 
 pub struct MessageQueue<T> {
 	m: Mutex<VecDeque<T>>,
-	cv: Condvar
+	cv: Condvar,
 }
 
 impl<T: Into<String>> MessageQueue<T> {
@@ -14,19 +14,24 @@ impl<T: Into<String>> MessageQueue<T> {
 			cv: Condvar::new(),
 		}
 	}
+}
 
+impl<T: Into<String>> Default for MessageQueue<T> {
+	fn default() -> Self {
+		Self::new()
+	}
+}
+
+impl<T: Into<String>> MessageQueue<T> {
 	pub fn push(&self, val: T)
 	where
-		T: Clone + TryInto<String>,
+		T: Clone + Into<String>,
 	{
-		match val.clone().try_into() {
-			Ok(s) if !s.is_empty() => {
-				let mut guard = self.m.lock().unwrap();
-				guard.push_back(val);
-				self.cv.notify_one();
-			},
-			// empty values or not strings
-			_ => {}
+		let s = val.clone().into();
+		if !s.is_empty() {
+			let mut guard = self.m.lock().unwrap();
+			guard.push_back(val);
+			self.cv.notify_one();
 		}
 	}
 
@@ -37,30 +42,25 @@ impl<T: Into<String>> MessageQueue<T> {
 	}
 
 	pub fn pull(&self, timeout: Duration) -> Option<T> {
-		let (mut guard, _res) = self.cv.wait_timeout_while(
-				self.m.lock().unwrap(),
-				timeout,
-				|queue| queue.is_empty()
-			).unwrap();
+		let (mut guard, _res) = self
+			.cv
+			.wait_timeout_while(self.m.lock().unwrap(), timeout, |queue| queue.is_empty())
+			.unwrap();
 		guard.pop_front()
 	}
 
 	pub fn pull_num(&self, num: usize) -> Vec<T> {
-		let mut guard = self.cv.wait_while(
-				self.m.lock().unwrap(), |queue| queue.is_empty()
-			).unwrap();
+		let mut guard = self
+			.cv
+			.wait_while(self.m.lock().unwrap(), |queue| queue.is_empty())
+			.unwrap();
 
 		let max = if num == 0 { guard.len() } else { num };
 		let mut values: Vec<T> = Vec::new();
-		loop {
-			match guard.pop_front() {
-				Some(val) => {
-					values.push(val);
-					if values.len() >= max {
-						break;
-					}
-				},
-				None => { break; }
+		while let Some(val) = guard.pop_front() {
+			values.push(val);
+			if values.len() >= max {
+				break;
 			}
 		}
 		values
