@@ -13,9 +13,6 @@
 /bin/
 **/bin/
 
-/Cargo.lock
-**/Cargo.lock
-
 # wasm-pack build
 /pkg/
 **/pkg/
