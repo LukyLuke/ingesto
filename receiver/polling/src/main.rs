@@ -263,7 +263,7 @@ pub mod test {
 		);
 
 		let res = call_api(
-			Arc::new(&conf),
+			&conf,
 			queue.clone(),
 			call_api_internal,
 			queue_message_internal,
@@ -310,7 +310,7 @@ pub mod test {
 		);
 
 		let res = call_api(
-			Arc::new(&conf),
+			&conf,
 			queue.clone(),
 			call_api_internal_nojson,
 			queue_message_internal,
