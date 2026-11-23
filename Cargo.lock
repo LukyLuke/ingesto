@@ -478,6 +478,7 @@ dependencies = [
  "ingesto-file-reader",
  "ingesto-network-listener",
  "ingesto-network-polling",
+ "ingesto-processor-polling",
  "ingesto-webhook-listener",
  "ipnetwork",
  "js-sys",
@@ -1475,6 +1476,20 @@ dependencies = [
  "serde_json",
  "shared",
  "thiserror",
+ "tracing",
+]
+
+[[package]]
+name = "ingesto-processor-polling"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "http",
+ "regex",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "shared",
  "tracing",
 ]
 

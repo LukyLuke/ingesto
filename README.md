@@ -6,7 +6,8 @@ Ingesto is a simple but fully and heavily configurable data pipeline kind of log
 
 1. A **receiver** is started to eiter listen or fetch data
 2. A **parser** is converting the data into a structured format
-3. An **exporter** is sending the structured data to any kind of storage
+3. A **processor** can enrich the structured data with data from other sources
+4. An **exporter** is sending the structured data to any kind of storage
 
 ## Receivers
 
@@ -19,6 +20,12 @@ The structured data is afterwards sent to an exporter or an OpenTelemetry Log Re
 * The [**Network-Receiver**](/doc/receiver-network.md) opens either a UPD or a TCP Socket and listens for data.
 * The [**Polling-Receiver**](/doc/receiver-polling.md) calls an HTTP-Endpoint, including paging and templating parameters for more dynamic requests.
 * The [**Webhook-Receiver**](/doc/receiver-webhook.md) listens as an HTTP-Endpoint and parses the received data.
+
+## Processors
+
+Processors receive OpenTelemetry Logs, enrich or transform each message and send the result as an OpenTelemetry Log to the next receiver or exporter.
+
+* The [**Polling-Processor**](doc/processor-polling.md) calls an HTTP-Endpoint for each received message, using values of the message in the request, and forwards the answer.
 
 ## Exporters
 

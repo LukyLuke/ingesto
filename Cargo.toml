@@ -3,6 +3,7 @@ members = [
 	"confui",
 	"exporter/*",
 	"receiver/*",
+	"processor/*",
 	"shared",
 ]
 resolver = "3"

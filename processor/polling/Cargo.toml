@@ -1,0 +1,31 @@
+[package]
+name = "ingesto-processor-polling"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[features]
+default = [ "runtime" ]
+runtime = [
+	"types",
+	"dep:shared",
+	"dep:reqwest",
+]
+types = [ "dep:shared" ]
+
+[dependencies]
+shared = { path = "../../shared", optional = true, default-features = false }
+
+reqwest = { version = "0", features = [ "blocking" ], optional = true }
+
+anyhow = { workspace = true }
+regex = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+http = { version = "1" }
