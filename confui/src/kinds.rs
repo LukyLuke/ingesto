@@ -83,7 +83,7 @@ macro_rules! kind {
 	};
 }
 
-static KINDS: [ConfigKind; 7] = [
+static KINDS: [ConfigKind; 8] = [
 	kind!(
 		"recv_webhook",
 		"Webhook",
@@ -118,6 +118,13 @@ static KINDS: [ConfigKind; 7] = [
 		"database",
 		"Reads data from one Database, based on a SQL-Query, a forwards a structured message to an exporter.",
 		recv_database::types::Config
+	),
+	kind!(
+		"proc_polling",
+		"API Polling Processor",
+		"processor-polling",
+		"Receives OpenTelemetry Logs, calls an API with values from each message and forwards the answer.",
+		proc_polling::types::Config
 	),
 	kind!(
 		"exp_exportdb",
@@ -176,6 +183,7 @@ mod tests {
 				"recv_polling",
 				"recv_network",
 				"recv_file",
+				"proc_polling",
 				"exp_exportdb"
 			]
 		);

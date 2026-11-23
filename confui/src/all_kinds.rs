@@ -112,7 +112,7 @@ fn every_kind_roundtrips_in_every_variant_and_format() {
 			}
 		}
 	}
-	assert_eq!(checked, 5 * 13 * 2);
+	assert_eq!(checked, 6 * 13 * 2);
 }
 
 #[test]
@@ -173,6 +173,61 @@ fn polling_endpoint_name_is_required() {
 		(kinds::find("recv_polling")
 			.map(|k| k.schema)
 			.unwrap_or(|| Default::default()))(),
+		&value,
+	);
+	assert_eq!(report.missing, vec!["config.api.0.name"]);
+	let issues = form_to_value(&form, Format::Toml).err().unwrap_or_default();
+	assert!(
+		issues.iter().any(|i| i.path == "config.api.0.name"),
+		"{issues:?}"
+	);
+}
+
+#[test]
+fn a_real_world_polling_processor_file_loads_without_errors() {
+	let toml = r#"
+[config]
+name = "Agent Enrichment"
+
+[config.listener]
+address = "0.0.0.0"
+port = 4318
+
+[[config.api]]
+name = "Agent details"
+for_messages = "\"agent_id\""
+uri = "https://example.com/web/api/v2.1/agents/{{ $response/agent_id }}"
+method = "GET"
+auth = { Header = { header = "Authorization", value = "ApiToken x" } }
+header = [ { name = "X-Request-Id", value = "{{ $uuid }}" } ]
+
+[config.queue.otel_logger]
+endpoint = "127.0.0.1"
+port = 4319
+"#;
+	let value = parse_text(toml, Format::Toml).unwrap_or_default();
+	let found = crate::codec::detect(&value, kinds::all());
+	assert_eq!(
+		found.iter().map(|k| k.id).collect::<Vec<_>>(),
+		vec!["proc_polling"]
+	);
+	let (form, report) = form_from_value((found[0].schema)(), &value);
+	assert!(report.is_clean(), "{report:?}");
+	assert!(form_to_value(&form, Format::Toml).is_ok());
+	assert!((found[0].check)(toml, Format::Toml).is_ok());
+}
+
+#[test]
+fn polling_processor_endpoint_name_is_required() {
+	let value = parse_text(
+		"[config]\nname = \"p\"\n[[config.api]]\nuri = \"http://x\"\n",
+		Format::Toml,
+	)
+	.unwrap_or_default();
+	let (form, report) = form_from_value(
+		(kinds::find("proc_polling")
+			.map(|k| k.schema)
+			.unwrap_or(Default::default))(),
 		&value,
 	);
 	assert_eq!(report.missing, vec!["config.api.0.name"]);

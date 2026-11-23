@@ -36,6 +36,8 @@ recv_network = { package = "ingesto-network-listener", path = "../receiver/netwo
 recv_polling = { package = "ingesto-network-polling", path = "../receiver/polling", default-features = false, features = [ "types" ] }
 recv_webhook = { package = "ingesto-webhook-listener", path = "../receiver/webhook", default-features = false, features = [ "types" ] }
 
+proc_polling = { package = "ingesto-processor-polling", path = "../processor/polling", default-features = false, features = [ "types" ] }
+
 anyhow = { workspace = true }
 chrono = { workspace = true }
 dateparser = { workspace = true }
