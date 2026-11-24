@@ -137,3 +137,10 @@ features = [
 
 [workspace.dependencies.wasm-bindgen-futures]
 version = "0.4"
+
+[workspace.dependencies.http]
+version = "1"
+
+[workspace.dependencies.reqwest]
+version = "0"
+features = [ "blocking" ]

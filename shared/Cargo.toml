@@ -22,6 +22,9 @@ runtime = [
 env = { version = "1" }
 serde_json_path = { version = "0" }
 
+http = { workspace = true }
+reqwest = { workspace = true }
+
 anyhow = { workspace = true }
 bytes = { workspace = true  }
 clap = { workspace = true }

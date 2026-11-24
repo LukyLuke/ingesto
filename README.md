@@ -4,12 +4,14 @@
 
 Ingesto is a simple but fully and heavily configurable data pipeline kind of log routing.
 
+## Components
+
 1. A **receiver** is started to eiter listen or fetch data
 2. A **parser** is converting the data into a structured format
 3. A **processor** can enrich the structured data with data from other sources
 4. An **exporter** is sending the structured data to any kind of storage
 
-## Receivers
+### Receivers
 
 A receiver is polling or listening for data and converts it to a structured format.
 
@@ -21,13 +23,13 @@ The structured data is afterwards sent to an exporter or an OpenTelemetry Log Re
 * The [**Polling-Receiver**](/doc/receiver-polling.md) calls an HTTP-Endpoint, including paging and templating parameters for more dynamic requests.
 * The [**Webhook-Receiver**](/doc/receiver-webhook.md) listens as an HTTP-Endpoint and parses the received data.
 
-## Processors
+### Processors
 
 Processors receive OpenTelemetry Logs, enrich or transform each message and send the result as an OpenTelemetry Log to the next receiver or exporter.
 
 * The [**Polling-Processor**](doc/processor-polling.md) calls an HTTP-Endpoint for each received message, using values of the message in the request, and forwards the answer.
 
-## Exporters
+### Exporters
 
 Exporters receive OpenTelemetry Logs and try to process the contained data to store it in a specific format.
 
@@ -35,6 +37,77 @@ The log format must be structured JSON so different fields and values can be set
 
 * The [**Database-Exporter**](doc/exporter-database.md) saves data in a PostgreSQL, Maria/MySQL or SqLite Database.
 * The [**AzureDCR-Exporter**](doc/exporter-azuredcr.md) sends data to an Azure DCR (Data Collection Rule).
+
+### Example
+
+```mermaid
+flowchart TB
+    subgraph Internet
+        Web["Webseite"]
+    end
+
+    subgraph PublicAPIs ["Public APIs"]
+        API1["Öffentliche API 1"]
+        API2["Öffentliche API 2"]
+        API3["Öffentliche API 3"]
+        API4["Öffentliche API 4"]
+    end
+
+    subgraph Internal
+        Server["Server"]
+    end
+
+    subgraph Ingesto
+        direction TB
+        subgraph Receiver
+            direction LR
+            WH["WebHook-Receiver"]
+            Syslog["Syslog-Receiver"]
+            Polling["Polling-Service"]
+        end
+
+        subgraph Processors
+            direction LR
+            P1["Processor 1"]
+            P2["Processor 2"]
+        end
+
+        subgraph Exporters
+            direction LR
+            DB1["DB-Exporter 1"]
+            DB2["DB-Exporter 2"]
+            DB3["DB-Exporter 3"]
+            Azure["Azure-Exporter"]
+        end
+    end
+
+    subgraph DataLake ["Data lake"]
+        S1[(DB Storage 1)]
+        S2[(DB Storage 2)]
+        S3[(DB Storage 3)]
+        S4[(Azure Loganalytics)]
+    end
+
+    Web -->|Sends| WH
+    Server -->|Sends| Syslog
+    Polling -->|Call| API1
+    Polling -->|Sends| P1
+    P1 -->|Call| API2
+    P1 -->|Call| API3
+    P1 -->|Sends| P2
+    P2 -->|Call| API4
+    P1 -->|Sends| DB1
+    P2 -->|Sends| DB2
+    WH -->|Sends| Azure
+    Syslog -->|Sends| DB3
+
+    DB1 -->|Sends| S1
+    DB2 -->|Sends| S2
+    DB3 -->|Sends| S3
+    Azure -->|Sends| S4
+
+    Server ~~~ Polling
+```
 
 
 ## Build and Run
@@ -97,3 +170,5 @@ $ podman build -t ingesto-network-listener:latest -f Containerfile.network-liste
 $ podman run --network host -d -p 1514:1514 -v ./secrets:/app/secrets -v ./configs:/app/config localhost/ingesto-network-listener:latest
 $ podman run --network host -d -p 1514:1514 -v ./secrets:/app/secrets -v ./configs:/app/config localhost/ingesto-network-listener:latest config/second-listener.toml
 ```
+
+
