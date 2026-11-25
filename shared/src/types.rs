@@ -1,5 +1,6 @@
+use std::fmt;
+#[cfg(feature = "runtime")]
 use std::{
-	fmt,
 	sync::Arc,
 	net::Ipv4Addr,
 };
@@ -144,7 +145,8 @@ pub enum ConfType {
 	/// A List of ConfType's
 	Vec(Box<ConfType>),
 }
-#[cfg(feature = "runtime")]
+
+#[cfg(feature = "types")]
 impl fmt::Display for ConfType {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		write!(f, "{:?}", self)
@@ -188,6 +190,7 @@ fn default_collect() -> bool {
 	false
 }
 
+#[cfg(feature = "types")]
 impl Default for Queue {
 	fn default() -> Self {
 		Self {
@@ -323,6 +326,7 @@ pub enum ParserKind {
 	// Structured Syslog Messages are similar to CEF/LEEF but have a different Key-Value pair format
 	STRUCTURED,
 }
+#[cfg(feature = "types")]
 fn default_parser_kind() -> ParserKind {
 	ParserKind::default()
 }
@@ -342,6 +346,7 @@ impl From<ParserKind> for ConfStruct {
 	}
 }
 
+#[cfg(feature = "types")]
 impl fmt::Display for ParserKind {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		write!(f, "{:?}", self)
@@ -368,6 +373,8 @@ pub enum ParserSettings {
 	// If it is a header, the `source` can be used in the matcher for the column name, otherwise the `index` defines the column number
 	Csv(bool),
 }
+
+#[cfg(feature = "types")]
 fn default_parser_setting() -> ParserSettings {
 	ParserSettings::default()
 }
@@ -384,6 +391,7 @@ impl From<ParserSettings> for ConfStruct {
 	}
 }
 
+#[cfg(feature = "types")]
 impl fmt::Display for ParserSettings {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		write!(f, "{:?}", self)
@@ -479,6 +487,7 @@ fn default_otel_port() -> u16 {
 	4318
 }
 
+#[cfg(feature = "types")]
 impl Default for OtelLogger {
 	fn default() -> Self {
 		Self {
@@ -511,6 +520,7 @@ impl From<OtelLogger> for ConfStruct {
 	}
 }
 
+#[cfg(feature = "runtime")]
 impl OtelLogger {
 	pub fn get_endpoint(&self, path: &str) -> String {
 		let mut p = path.to_owned();
@@ -542,6 +552,7 @@ fn default_logs_path() -> String {
 	String::from("/v1/logs")
 }
 
+#[cfg(feature = "types")]
 impl Default for OtelReceiver {
 	fn default() -> Self {
 		Self {
@@ -574,6 +585,7 @@ impl From<OtelReceiver> for ConfStruct {
 	}
 }
 
+#[cfg(feature = "runtime")]
 impl OtelReceiver {
 	pub fn get_address(&self) -> String {
 		format!("{}:{}", self.address, self.port)
@@ -812,6 +824,7 @@ pub enum DbField {
 	},
 }
 
+#[cfg(feature = "types")]
 impl Default for DbField {
 	fn default() -> Self {
 		Self::String {
@@ -867,6 +880,7 @@ impl From<DbField> for ConfStruct {
 	}
 }
 
+#[cfg(feature = "types")]
 fn default_method() -> Method {
 	Method::GET
 }
@@ -1162,12 +1176,14 @@ impl From<PagingRequestUntil> for ConfStruct {
 	}
 }
 
+#[cfg(feature = "types")]
 impl fmt::Display for Method {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		write!(f, "{:?}", self)
 	}
 }
 
+#[cfg(feature = "types")]
 impl fmt::Display for Authentication {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		match self {
@@ -1203,12 +1219,14 @@ impl fmt::Display for Authentication {
 	}
 }
 
+#[cfg(feature = "types")]
 impl fmt::Display for Param {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		write!(f, "[{:?}]='{:?}'", self.name, self.value)
 	}
 }
 
+#[cfg(feature = "types")]
 impl fmt::Display for PagingRequest {
 	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
 		write!(
@@ -1219,6 +1237,7 @@ impl fmt::Display for PagingRequest {
 	}
 }
 
+#[cfg(feature = "runtime")]
 impl PagingRequestUntil {
 	/// Checks if the PagingRequestUntil matches the received response
 	///
