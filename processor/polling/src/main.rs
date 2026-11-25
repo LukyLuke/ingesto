@@ -1,19 +1,11 @@
 pub mod config;
 pub mod types;
 
-use std::{
-	sync::Arc,
-	thread,
-	time::Duration,
-};
 use anyhow::{Context, Result};
-use reqwest::{
-	blocking::{RequestBuilder, Response},
-};
+use reqwest::blocking::{RequestBuilder, Response};
 use serde_json::Value;
 use shared::{
-	self,
-	init_logging,
+	self, init_logging,
 	parser::MessageParser,
 	queue::MessageQueue,
 	receiver::start_otel_listener,
@@ -21,6 +13,7 @@ use shared::{
 	types::{Authentication, Endpoint},
 	usage,
 };
+use std::{sync::Arc, thread, time::Duration};
 use tracing::{debug, error, info};
 
 fn main() {
@@ -109,7 +102,8 @@ fn start_processor(
 			};
 
 			debug!(message="processing message", msg=%msg);
-			let _json: Arc<Value> = Arc::new( serde_json::from_str(&msg).context("message is not a valid json")? );
+			let json: Arc<Value> =
+				Arc::new(serde_json::from_str(&msg).context("message is not a valid json")?);
 			let conf_t = Arc::clone(&conf);
 			let output_t = Arc::clone(&output);
 			thread::spawn(move || {
@@ -118,6 +112,7 @@ fn start_processor(
 					// TODO: pass in json for templating
 					call_api(
 						endpoint,
+						Some(json.clone()),
 						output_t.clone(),
 						call_api_internal,
 						queue_message_internal,
@@ -130,7 +125,6 @@ fn start_processor(
 
 	Ok(())
 }
-
 
 fn call_api_internal(req: RequestBuilder) -> Result<Response, reqwest::Error> {
 	req.send()

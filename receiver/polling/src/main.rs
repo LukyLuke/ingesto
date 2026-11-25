@@ -81,6 +81,7 @@ fn run_scheduler(
 					// queue_message is for adding the received data to the queue (dep-injection for test)
 					call_api(
 						&Arc::new(c),
+						None,
 						queue_t.clone(),
 						call_api_internal,
 						queue_message_internal,

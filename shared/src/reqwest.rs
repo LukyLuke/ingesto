@@ -18,6 +18,7 @@ static MAX_PAGING_REQUESTS: u16 = 1024;
 
 pub fn call_api(
 	conf: &types::Endpoint,
+	data: Option<Arc<Value>>,
 	queue: Arc<queue::MessageQueue<String>>,
 	send_reqwest: impl Fn(RequestBuilder) -> Result<Response, reqwest::Error>,
 	queue_message: impl Fn(String, Arc<queue::MessageQueue<String>>),
@@ -28,11 +29,15 @@ pub fn call_api(
 
 	while paging {
 		// Parse URI and Body
-		let mut uri = template::template_string(&conf.uri, Arc::clone(&response));
-		let send_body = template::template_string(
-			&conf.body.as_deref().unwrap_or_default().to_owned(),
-			Arc::clone(&response),
-		);
+		// First apply the data, after the last response
+		let mut uri = String::from(conf.uri.as_str());
+		let mut send_body = String::from(&conf.body.as_deref().unwrap_or_default().to_owned());
+		if let Some(d) = &data {
+			uri = template::template_string(&uri, Arc::clone(&d));
+			send_body = template::template_string(&send_body, Arc::clone(&d));
+		}
+		uri = template::template_string(&uri, Arc::clone(&response));
+		send_body = template::template_string(&send_body, Arc::clone(&response));
 
 		// Append Paging if available
 		if let Some(pg) = conf.paging.as_ref()
@@ -171,6 +176,7 @@ pub mod test {
 
 		let res = call_api(
 			&conf,
+			None,
 			queue.clone(),
 			call_api_internal,
 			queue_message_internal,
@@ -218,6 +224,7 @@ pub mod test {
 
 		let res = call_api(
 			&conf,
+			None,
 			queue.clone(),
 			call_api_internal_nojson,
 			queue_message_internal,

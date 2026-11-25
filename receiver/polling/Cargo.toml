@@ -5,7 +5,6 @@ edition.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
-homepage.workspace = true
 
 [features]
 default = [ "runtime" ]
@@ -24,7 +23,7 @@ reqwest = { workspace = true }
 
 anyhow = { workspace = true }
 chrono = { workspace = true }
-notify = { workspace = true }
+#notify = { workspace = true }
 once_cell = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
