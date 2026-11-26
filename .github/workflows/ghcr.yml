@@ -6,7 +6,7 @@ on:
       - main
     tags:
       - v*
-  pull_requests:
+  pull_request:
 
 env:
   IMAGE_NAME: ingesto
@@ -14,7 +14,7 @@ env:
 jobs:
   push:
     runs-on: ubuntu-latest
-    permission:
+    permissions:
       packages: write
       contents: read
     steps:
