@@ -2,7 +2,7 @@ ARG INGESTO_VERSION=0.2.0
 
 # Base is to have cargo build with cache
 FROM rust:1.100 as base
-COPY .cargo.toml.* .cargo/config.toml
+COPY .cargo .cargo
 RUN cargo install sccache --version ^0.16
 RUN cargo install cargo-chef --version ^0.1
 
@@ -13,7 +13,7 @@ ARG SCCACHE_DIR=/sccache
 # First: Create a recipe which is cached
 FROM base AS prepare
 WORKDIR /app
-COPY .cargo.toml.* .cargo/config.toml
+COPY .cargo .cargo
 COPY . .
 RUN --mount=type=cache,target=$SCCACHE_DIR,sharing=locked,uid=1000 \
   cargo chef prepare --recipe-path recipe.json
@@ -22,7 +22,7 @@ RUN --mount=type=cache,target=$SCCACHE_DIR,sharing=locked,uid=1000 \
 # Then: Use cargo chef to download all third-party crates
 FROM base AS cook
 WORKDIR /app
-COPY .cargo.toml.* .cargo/config.toml
+COPY .cargo .cargo
 COPY --from=prepare /app/recipe.json recipe.json
 RUN --mount=type=cache,target=$SCCACHE_DIR,sharing=locked,uid=1000 \
   cargo chef cook --release --recipe-path recipe.json
@@ -31,7 +31,7 @@ RUN --mount=type=cache,target=$SCCACHE_DIR,sharing=locked,uid=1000 \
 # As last: Build the project with the cached crates
 FROM cook AS build
 WORKDIR /app
-COPY .cargo.toml.* .cargo/config.toml
+COPY .cargo .cargo
 COPY . .
 RUN --mount=type=cache,target=$SCCACHE_DIR,sharing=locked,uid=1000 \
   cargo build --release
