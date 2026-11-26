@@ -175,7 +175,7 @@ pub struct Queue {
 
 	// Where to send the log messages to
 	#[serde(default)]
-	pub otel_logger: Option<OtelLogger>,
+	pub otel_logger: Vec<OtelLogger>,
 }
 fn default_messages() -> u16 {
 	1024
@@ -198,7 +198,7 @@ impl Default for Queue {
 			max_seconds: default_time(),
 			max_size: default_size(),
 			collect_messages: default_collect(),
-			otel_logger: None,
+			otel_logger: vec![],
 		}
 	}
 }
@@ -206,8 +206,6 @@ impl Default for Queue {
 #[cfg(feature = "types")]
 impl From<Queue> for ConfStruct {
 	fn from(val: Queue) -> Self {
-		let otel_logger: ConfStruct = val.otel_logger.unwrap_or_default().into();
-
 		ConfStruct::from([
 			(
 				"max_messages".to_string(),
@@ -227,7 +225,9 @@ impl From<Queue> for ConfStruct {
 			),
 			(
 				"otel_logger".to_string(),
-				ConfType::Option(Box::new(ConfType::Struct(otel_logger))),
+				ConfType::Option(Box::new(ConfType::Vec(Box::new(ConfType::Struct(
+					FieldMapping::default().into(),
+				))))),
 			),
 		])
 	}
@@ -479,9 +479,15 @@ pub struct OtelLogger {
 
 	#[serde(default = "default_otel_service")]
 	pub service: String,
+
+	#[serde(default = "default_otel_regex")]
+	pub for_message: String,
 }
 fn default_otel_service() -> String {
 	String::from("ingesto")
+}
+fn default_otel_regex() -> String {
+	String::from(".*")
 }
 fn default_otel_port() -> u16 {
 	4318
@@ -494,6 +500,7 @@ impl Default for OtelLogger {
 			endpoint: String::from("0.0.0.0"),
 			port: default_otel_port(),
 			service: default_otel_service(),
+			for_message: default_otel_regex(),
 		}
 	}
 }
@@ -514,6 +521,12 @@ impl From<OtelLogger> for ConfStruct {
 				"service".to_string(),
 				ConfType::Option(Box::new(ConfType::String(Box::leak(Box::new(
 					String::from(&val.service),
+				))))),
+			),
+			(
+				"for_message".to_string(),
+				ConfType::Option(Box::new(ConfType::String(Box::leak(Box::new(
+					String::from(&val.for_message),
 				))))),
 			),
 		])
@@ -1314,6 +1327,7 @@ mod test {
 			endpoint: "endpoint".to_string(),
 			port: 6543,
 			service: "service".to_string(),
+			for_message: ".*".to_string(),
 		};
 		assert_eq!(
 			logger.get_endpoint("/path/value"),
@@ -1324,6 +1338,7 @@ mod test {
 			endpoint: "http://endpoint".to_string(),
 			port: 6543,
 			service: "service".to_string(),
+			for_message: ".*".to_string(),
 		};
 		assert_eq!(
 			http.get_endpoint("/path/value"),

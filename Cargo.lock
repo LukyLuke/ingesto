@@ -466,7 +466,7 @@ dependencies = [
 
 [[package]]
 name = "confui"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1398,7 +1398,7 @@ dependencies = [
 
 [[package]]
 name = "ingesto-azuredcr-exporter"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "serde",
@@ -1410,7 +1410,7 @@ dependencies = [
 
 [[package]]
 name = "ingesto-database-exporter"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "dateparser",
@@ -1427,7 +1427,7 @@ dependencies = [
 
 [[package]]
 name = "ingesto-database-reader"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "serde",
@@ -1439,7 +1439,7 @@ dependencies = [
 
 [[package]]
 name = "ingesto-file-reader"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "notify",
@@ -1451,7 +1451,7 @@ dependencies = [
 
 [[package]]
 name = "ingesto-network-listener"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "serde",
@@ -1462,7 +1462,7 @@ dependencies = [
 
 [[package]]
 name = "ingesto-network-polling"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1479,7 +1479,7 @@ dependencies = [
 
 [[package]]
 name = "ingesto-processor-polling"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "http",
@@ -1493,7 +1493,7 @@ dependencies = [
 
 [[package]]
 name = "ingesto-webhook-listener"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "base64",
@@ -2814,7 +2814,7 @@ dependencies = [
 
 [[package]]
 name = "shared"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "bytes",

@@ -2,8 +2,7 @@ use serde::{Deserialize, Serialize};
 use shared::types;
 
 #[cfg(feature = "types")]
-use shared::types::{ConfStruct, ConfType, Endpoint, OtelReceiver, leak_str};
-
+use shared::types::{leak_str, ConfStruct, ConfType, Endpoint, OtelReceiver};
 
 /// The main Polling-Processor configuration
 #[cfg(feature = "types")]
@@ -73,8 +72,6 @@ impl From<Processor> for ConfStruct {
 	}
 }
 
-
-
 #[cfg(all(test, feature = "types"))]
 mod tests {
 	use super::*;
@@ -90,7 +87,6 @@ mod tests {
 		}
 	}
 
-
 	#[test]
 	fn processor_uses_values_and_defaults() {
 		let json = serde_json::json!({
@@ -102,7 +98,7 @@ mod tests {
 		assert_eq!(processor.api.len(), 2);
 		assert_eq!(processor.listener.port, 4318);
 		assert_eq!(processor.listener.path, "/v1/logs");
-		assert!(processor.queue.otel_logger.is_none());
+		assert!(processor.queue.otel_logger.is_empty());
 		assert!(processor.parser.is_empty());
 	}
 
@@ -131,5 +127,4 @@ mod tests {
 		assert!(inner.get("parser").is_some());
 		assert!(inner.get("timer").is_none());
 	}
-
 }
