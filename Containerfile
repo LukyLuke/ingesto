@@ -1,7 +1,7 @@
 ARG INGESTO_VERSION=0.2.0
 
 # Base is to have cargo build with cache
-FROM rust:1.100 as base
+FROM rust:1.100 AS base
 COPY .cargo .cargo
 RUN cargo install sccache --version ^0.16
 RUN cargo install cargo-chef --version ^0.1
