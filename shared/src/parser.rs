@@ -9,8 +9,8 @@ use anyhow::Result;
 use opentelemetry::logs::{AnyValue, LogRecord, Logger, LoggerProvider, Severity};
 use opentelemetry_otlp::{LogExporter, Protocol, WithExportConfig};
 use opentelemetry_sdk::{
-	logs::{BatchConfigBuilder, BatchLogProcessor, SdkLogger, SdkLoggerProvider},
 	Resource,
+	logs::{BatchConfigBuilder, BatchLogProcessor, SdkLogger, SdkLoggerProvider},
 };
 use regex::Regex;
 use serde_json::Value;
@@ -166,7 +166,7 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 					debug!(message="extracted message", msg=%msg);
 					me.conf.otel_logger.iter().for_each(|otlp| {
 						if let Some(re) = me.regexes.get(&otlp.for_message) && re.is_match(&msg) {
-							match me.send_message(&otlp, &msg, max_msg, max_time) {
+							match me.send_message(otlp, &msg, max_msg, max_time) {
 								Ok(_) => {
 									info!(message="enqueued message for otlp endpoint", endpoint=%otlp.endpoint, port=%otlp.port, service=%otlp.service)
 								}
@@ -272,12 +272,12 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 				);
 
 				// If everything worked as expected, there must be a new OtelLogger Provider which can be returned
-				return match map.get(&key) {
+				match map.get(&key) {
 					Some(otel) => Ok(otel.clone()),
 					None => Err(anyhow::anyhow!(
 						"OpenTelemetry Endpoint not found and unable to create"
 					)),
-				};
+				}
 			}
 			Err(e) => Err(anyhow::anyhow!("Mutex-Unlock OpenTelemetryLogger: {:?}", e)),
 		}
@@ -295,13 +295,9 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 	/// Returns the either the parsed or the raw message as a list
 	fn parse_message(&self, raw: &String) -> Vec<String> {
 		let parser = self.parser.iter().find_map(|parser| {
-			self.regexes.get(&parser.matcher).and_then(|re| {
-				if re.is_match(raw) {
-					Some(parser)
-				} else {
-					None
-				}
-			})
+			self.regexes
+				.get(&parser.matcher)
+				.and_then(|re| if re.is_match(raw) { Some(parser) } else { None })
 		});
 		self.apply_parser(raw, parser)
 	}
@@ -368,10 +364,7 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 
 					types::ParserKind::RAW => {
 						vec![raw.to_owned()]
-					} //_ => {
-					  //	error!(message="not implemented parser", parser=%parser.kind.to_string());
-					  //	raw.to_owned()
-					  //}
+					}
 				}
 			}
 			None => {
@@ -440,7 +433,7 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 		if results.is_empty() {
 			vec![]
 		} else {
-			vec![serde_json::to_string(&results).map_or(String::new(), |s| s)]
+			vec![serde_json::to_string(&results).unwrap_or_default()]
 		}
 	}
 
@@ -505,8 +498,8 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 					Value::String(s) => String::from(s),
 					Value::Bool(b) => format!("{}", b),
 					Value::Number(n) => format!("{}", n),
-					Value::Array(v) => serde_json::to_string(v).map_or(String::new(), |s| s),
-					Value::Object(v) => serde_json::to_string(v).map_or(String::new(), |s| s),
+					Value::Array(v) => serde_json::to_string(v).unwrap_or(String::new()),
+					Value::Object(v) => serde_json::to_string(v).unwrap_or(String::new()),
 					_ => String::new(),
 				};
 			}
@@ -537,7 +530,7 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 			}
 		}
 
-		serde_json::to_string(&results).map_or(String::new(), |s| s)
+		serde_json::to_string(&results).unwrap_or_default()
 	}
 }
 

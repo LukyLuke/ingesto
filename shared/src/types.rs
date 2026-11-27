@@ -1,9 +1,6 @@
 use std::fmt;
 #[cfg(feature = "runtime")]
-use std::{
-	sync::Arc,
-	net::Ipv4Addr,
-};
+use std::{net::Ipv4Addr, sync::Arc};
 
 use chrono::{DateTime, Utc};
 use ipnetwork::IpNetwork;
@@ -629,7 +626,7 @@ impl DbValue {
 	}
 
 	fn convert(val: &DbField, json: &serde_json::Value) -> (String, DbValue) {
-    use ipnetwork::Ipv4Network;
+		use ipnetwork::Ipv4Network;
 
 		match val {
 			DbField::String {
@@ -643,10 +640,10 @@ impl DbValue {
 						.unwrap_or(
 							&default
 								.as_ref()
-								.map_or_else(|| Value::Null, |s| Value::String(s.to_string())),
+								.map_or(Value::Null, |s| Value::String(s.to_string())),
 						)
 						.as_str()
-						.unwrap_or(default.as_ref().map_or_else(|| "", |s| s))
+						.unwrap_or(default.as_ref().map_or("", |s| s))
 						.to_string(),
 				),
 			),
@@ -661,13 +658,13 @@ impl DbValue {
 						.unwrap_or(
 							&default
 								.as_ref()
-								.map_or_else(|| Value::Null, |s| Value::String(s.to_string())),
+								.map_or(Value::Null, |s| Value::String(s.to_string())),
 						)
 						.as_f64()
 						.unwrap_or(
 							default
 								.as_ref()
-								.map_or_else(|| 0.0, |s| s.parse().unwrap_or_default()),
+								.map_or(0.0, |s| s.parse().unwrap_or_default()),
 						),
 				),
 			),
@@ -679,10 +676,11 @@ impl DbValue {
 				String::from(name),
 				Self::Bool(
 					json.get(origin.as_ref().unwrap_or(name))
-						.unwrap_or(&default.as_ref().map_or_else(
-							|| Value::Bool(false),
-							|s| serde_json::from_str(s).unwrap_or_default(),
-						))
+						.unwrap_or(
+							&default
+								.as_ref()
+								.map_or(Value::Bool(false), |s| serde_json::from_str(s).unwrap_or_default())
+						)
 						.as_bool()
 						.unwrap_or_default(),
 				),
@@ -698,13 +696,13 @@ impl DbValue {
 						.unwrap_or(
 							&default
 								.as_ref()
-								.map_or_else(|| Value::Null, |s| Value::String(s.to_string())),
+								.map_or(Value::Null, |s| Value::String(s.to_string())),
 						)
 						.as_i64()
 						.unwrap_or(
 							default
 								.as_ref()
-								.map_or_else(|| 0, |s| s.parse().unwrap_or_default()),
+								.map_or(0, |s| s.parse().unwrap_or_default()),
 						),
 				),
 			),
@@ -717,7 +715,7 @@ impl DbValue {
 				Self::DateTimeUtc({
 					let def = default
 						.as_ref()
-						.map_or_else(|| Value::Null, |s| Value::String(s.to_string()));
+						.map_or(Value::Null, |s| Value::String(s.to_string()));
 					let ds = json
 						.get(origin.as_ref().unwrap_or(name))
 						.unwrap_or(&def)
@@ -740,7 +738,7 @@ impl DbValue {
 						.unwrap_or(
 							&default
 								.as_ref()
-								.map_or_else(|| Value::Null, |s| Value::String(s.to_string())),
+								.map_or(Value::Null, |s| Value::String(s.to_string())),
 						)
 						.as_str()
 						.unwrap_or_default()
@@ -761,7 +759,7 @@ impl DbValue {
 						.unwrap_or(
 							&default
 								.as_ref()
-								.map_or_else(|| Value::Null, |s| Value::String(s.to_string())),
+								.map_or(Value::Null, |s| Value::String(s.to_string())),
 						)
 						.as_str()
 						.unwrap_or_default()
@@ -777,10 +775,11 @@ impl DbValue {
 				String::from(name),
 				Self::Json(
 					json.get(origin.as_ref().unwrap_or(name))
-						.unwrap_or(&default.as_ref().map_or_else(
-							|| Value::Null,
-							|s| serde_json::from_str(s).unwrap_or_default(),
-						))
+						.unwrap_or(
+							&default
+								.as_ref()
+								.map_or(Value::Null, |s| serde_json::from_str(s).unwrap_or_default())
+						)
 						.clone(),
 				),
 			),
@@ -1053,7 +1052,7 @@ impl From<Authentication> for ConfStruct {
 				ConfType::Struct(ConfStruct::from([
 					("user".to_string(), ConfType::String("")),
 					("pass".to_string(), ConfType::String("")),
-			])),
+				])),
 			),
 			("Bearer".to_string(), ConfType::String("")),
 			(
@@ -1116,15 +1115,15 @@ impl From<PagingRequest> for ConfStruct {
 			(
 				"param".to_string(),
 				ConfType::Option(Box::new(ConfType::Struct(
-				val.param.unwrap_or_default().into(),
-			))),
+					val.param.unwrap_or_default().into(),
+				))),
 			),
 			(
 				"until".to_string(),
 				ConfType::Option(Box::new(ConfType::Enum(
-				val.until.clone().into(),
-				val.until.name(),
-			))),
+					val.until.clone().into(),
+					val.until.name(),
+				))),
 			),
 			(
 				"timeout".to_string(),
@@ -1202,31 +1201,25 @@ impl fmt::Display for Authentication {
 		match self {
 			Authentication::None => write!(f, "None"),
 			Authentication::Basic { user, pass } => write!(f, "Basic '{}: {}****'", user, {
-				if let Some(sub) = pass.get(0..4)
-					&& sub == "file"
-					{
-						pass
-					} else {
-						pass.get(0..4).unwrap_or_default()
-					}
+				if let Some(sub) = pass.get(0..4) && sub == "file" {
+					pass
+				} else {
+					pass.get(0..4).unwrap_or_default()
+				}
 			}),
 			Authentication::Bearer(bearer) => write!(f, "Bearer {}****", {
-				if let Some(sub) = bearer.get(0..4)
-					&& sub == "file"
-					{
-						bearer
-					} else {
-						bearer.get(0..4).unwrap_or_default()
-					}
+				if let Some(sub) = bearer.get(0..4) && sub == "file" {
+					bearer
+				} else {
+					bearer.get(0..4).unwrap_or_default()
+				}
 			}),
 			Authentication::Header { header, value } => write!(f, "Header '{}: {}****'", header, {
-				if let Some(sub) = value.get(0..4)
-					&& sub == "file"
-					{
-						value.as_str()
-					} else {
-						value.get(0..4).unwrap_or_default()
-					}
+				if let Some(sub) = value.get(0..4) && sub == "file" {
+					value.as_str()
+				} else {
+					value.get(0..4).unwrap_or_default()
+				}
 			}),
 		}
 	}
@@ -1293,9 +1286,7 @@ impl PagingRequestUntil {
 		let json = Arc::<Value>::new(serde_json::from_str(value.as_str()).unwrap_or_default());
 		match self {
 			// Parse JSON-Pointer value and compare to empty
-			Self::EmptyValue(val) => {
-				crate::template::template_string(val, json.clone()).is_empty()
-			}
+			Self::EmptyValue(val) => crate::template::template_string(val, json.clone()).is_empty(),
 
 			// Parse JSON-Pointer value and compare to the value
 			Self::Equals(left, right) => {
@@ -1304,7 +1295,8 @@ impl PagingRequestUntil {
 					left = crate::template::template_string(left, json.clone()),
 					right = crate::template::template_string(right, json.clone())
 				);
-				crate::template::template_string(left, json.clone()) == crate::template::template_string(right, json.clone())
+				crate::template::template_string(left, json.clone())
+					== crate::template::template_string(right, json.clone())
 			}
 
 			// Anything else (should be handled above in the first match clause)
@@ -1312,7 +1304,6 @@ impl PagingRequestUntil {
 		}
 	}
 }
-
 
 #[cfg(test)]
 mod test {
@@ -1971,53 +1962,43 @@ mod test {
 	fn test_paging_request_equal_value() {
 		let paging_a = PagingRequestUntil::Equals(
 			String::from("{{ $response/paging/cursor }}"),
-																							String::from("Paging-Cursor"),
+			String::from("Paging-Cursor"),
 		);
 		let paging_b = PagingRequestUntil::Equals(
 			String::from("Paging-Cursor"),
-																							String::from("{{ $response/paging/cursor }}"),
+			String::from("{{ $response/paging/cursor }}"),
 		);
 		let paging_c = PagingRequestUntil::Equals(
 			String::from("{{ $response/paging/cursor }}"),
-																							String::from("{{ $response/paging/last }}"),
+			String::from("{{ $response/paging/last }}"),
 		);
 		let paging_d = PagingRequestUntil::Equals(
 			String::from("{{ $response/paging/cursor }}"),
-																							String::from("null"),
+			String::from("null"),
 		);
 
 		let result_a_ok = paging_a.check(
 			200,
-			String::from(
-				"{ \"foo\":\"bar\",\"paging\":{ \"cursor\":\"Paging-Cursor\", \"last\":\"Paging-Cursor\" } }",
-			),
+			String::from("{ \"foo\":\"bar\",\"paging\":{ \"cursor\":\"Paging-Cursor\", \"last\":\"Paging-Cursor\" } }"),
 		);
 		let result_a_nok = paging_a.check(200, String::from("{ \"foo\":\"bar\",\"paging\":{ \"cursor\":\"No-Paging-Cursor\", \"last\":\"Paging-Cursor\" } }"));
 		let result_b_ok = paging_b.check(
 			200,
-			String::from(
-				"{ \"foo\":\"bar\",\"paging\":{ \"cursor\":\"Paging-Cursor\", \"last\":\"Paging-Cursor\" } }",
-			),
+			String::from("{ \"foo\":\"bar\",\"paging\":{ \"cursor\":\"Paging-Cursor\", \"last\":\"Paging-Cursor\" } }"),
 		);
 		let result_b_nok = paging_b.check(200, String::from("{ \"foo\":\"bar\",\"paging\":{ \"cursor\":\"No-Paging-Cursor\", \"last\":\"Paging-Cursor\" } }"));
 		let result_c_ok = paging_c.check(
 			200,
-			String::from(
-				"{ \"foo\":\"bar\",\"paging\":{ \"cursor\":\"Paging-Cursor\", \"last\":\"Paging-Cursor\" } }",
-			),
+			String::from("{ \"foo\":\"bar\",\"paging\":{ \"cursor\":\"Paging-Cursor\", \"last\":\"Paging-Cursor\" } }"),
 		);
 		let result_c_nok = paging_c.check(200, String::from("{ \"foo\":\"bar\",\"paging\":{ \"cursor\":\"No-Paging-Cursor\", \"last\":\"Paging-Cursor\" } }"));
 		let result_d_ok = paging_d.check(
 			200,
-			String::from(
-				"{ \"foo\":\"bar\",\"paging\":{ \"cursor\":null, \"last\":\"Paging-Cursor\" } }",
-			),
+			String::from("{ \"foo\":\"bar\",\"paging\":{ \"cursor\":null, \"last\":\"Paging-Cursor\" } }"),
 		);
 		let result_d_nok = paging_d.check(
 			200,
-			String::from(
-				"{ \"foo\":\"bar\",\"paging\":{ \"cursor\":\"NotNull\", \"last\":\"Paging-Cursor\" } }",
-			),
+			String::from("{ \"foo\":\"bar\",\"paging\":{ \"cursor\":\"NotNull\", \"last\":\"Paging-Cursor\" } }"),
 		);
 
 		assert_eq!(result_a_ok, true);
@@ -2033,8 +2014,7 @@ mod test {
 	#[test]
 	fn endpoint_name_is_read_from_the_config() {
 		let endpoint: Endpoint =
-		serde_json::from_str(r#"{ "name": "SentinelOne Agents", "uri": "http://x" }"#)
-		.unwrap_or_default();
+		serde_json::from_str(r#"{ "name": "SentinelOne Agents", "uri": "http://x" }"#).unwrap_or_default();
 		assert_eq!(endpoint.name, "SentinelOne Agents");
 		assert_eq!(endpoint.uri, "http://x");
 	}
@@ -2059,10 +2039,10 @@ mod test {
 		let schema: ConfStruct = Endpoint::default().into();
 		assert_eq!(
 			schema
-			.iter()
-			.next()
-			.map(|(name, ty)| (name.as_str(), matches!(ty, ConfType::String(_)))),
-							 Some(("name", true))
+				.iter()
+				.next()
+				.map(|(name, ty)| (name.as_str(), matches!(ty, ConfType::String(_)))),
+			Some(("name", true))
 		);
 	}
 
@@ -2112,11 +2092,11 @@ mod test {
 		};
 		assert_eq!(
 			paging.get("timeout"),
-							 Some(&ConfType::Option(Box::new(ConfType::UInt(250))))
+			Some(&ConfType::Option(Box::new(ConfType::UInt(250))))
 		);
 		assert_eq!(
 			paging.get("max_pages"),
-							 Some(&ConfType::Option(Box::new(ConfType::UInt(7))))
+			Some(&ConfType::Option(Box::new(ConfType::UInt(7))))
 		);
 	}
 
@@ -2138,7 +2118,7 @@ mod test {
 		assert_eq!(PagingRequestUntil::StatusCode(200).name(), "StatusCode");
 		assert_eq!(
 			PagingRequestUntil::Equals("a".to_string(), "b".to_string()).name(),
-							 "Equals"
+			"Equals"
 		);
 
 		let conf: ConfStruct = PagingRequest {
@@ -2161,7 +2141,7 @@ mod test {
 		assert_eq!(string_of(&conf, "name"), Some("cursor"));
 		assert_eq!(
 			string_of(&conf, "value"),
-							 Some("{{ $response/paging/cursor }}")
+			Some("{{ $response/paging/cursor }}")
 		);
 	}
 

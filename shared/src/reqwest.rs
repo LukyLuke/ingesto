@@ -1,18 +1,12 @@
-use std::sync::Arc;
-use serde_json::{Value, json};
 use reqwest::{
-	self,
-	StatusCode,
+	self, StatusCode,
 	blocking::{RequestBuilder, Response},
 };
+use serde_json::{Value, json};
+use std::sync::Arc;
 use tracing::{debug, error};
 
-use crate::{
-	secrets_string,
-	queue,
-	template,
-	types,
-};
+use crate::{queue, secrets_string, template, types};
 
 static MAX_PAGING_REQUESTS: u16 = 1024;
 
@@ -33,8 +27,8 @@ pub fn call_api(
 		let mut uri = String::from(conf.uri.as_str());
 		let mut send_body = String::from(&conf.body.as_deref().unwrap_or_default().to_owned());
 		if let Some(d) = &data {
-			uri = template::template_string(&uri, Arc::clone(&d));
-			send_body = template::template_string(&send_body, Arc::clone(&d));
+			uri = template::template_string(&uri, Arc::clone(d));
+			send_body = template::template_string(&send_body, Arc::clone(d));
 		}
 		uri = template::template_string(&uri, Arc::clone(&response));
 		send_body = template::template_string(&send_body, Arc::clone(&response));
@@ -43,98 +37,96 @@ pub fn call_api(
 		if let Some(pg) = conf.paging.as_ref()
 			&& let Some(param) = pg.param.as_ref()
 			&& !param.name.is_empty()
+		{
+			let page_val = template::template_string(&param.value, Arc::clone(&response));
+			let sep = if uri.find('?').is_some() { "&" } else { "?" };
+			uri = format!(
+				"{}{}{}={}",
+				uri,
+				sep,
+				param.name.as_str(),
+				page_val.as_str()
+			);
+		}
+		debug!(message="calling api", api=conf.uri, uri=%uri);
+
+		// Create the Request
+		let client = reqwest::blocking::Client::new();
+		let mut req = match conf.method {
+			types::Method::GET => client.get(uri),
+			types::Method::POST => client.post(uri).body(send_body),
+			types::Method::HEAD => client.head(uri),
+			_ => client.get(uri),
+		};
+
+		// Authentication
+		req = match &conf.auth {
+			Some(types::Authentication::Header { header, value }) => req.header(
+				header,
+				template::template_string(
+					&secrets_string(value).unwrap_or_default(),
+					Arc::clone(&response),
+				),
+			),
+
+			Some(types::Authentication::Basic { user, pass }) => req.basic_auth(
+				secrets_string(user).unwrap_or_default(),
+				secrets_string(pass).ok(),
+			),
+
+			Some(types::Authentication::Bearer(token)) => {
+				if token.starts_with("Bearer") {
+					req.bearer_auth(secrets_string(token.get(7..).unwrap_or_default()).unwrap_or_default())
+				} else {
+					req.bearer_auth(secrets_string(token).unwrap_or_default())
+				}
+			}
+
+			_ => req,
+		};
+
+		// Additional Headers
+		req = req.header("User-Agent", "ingesto-polling/1.0");
+		for header in &conf.header {
+			req = req.header(
+				header.name.to_string(),
+				template::template_string(&header.value, Arc::clone(&response)),
+			);
+		}
+
+		let resp = send_reqwest(req)?;
+		let status = resp.status();
+		let body = resp.text().unwrap_or_default();
+		if status != StatusCode::OK {
+			error!(message="calling api", api=conf.uri, status=%status.as_u16(), error=body.to_owned());
+			break;
+		}
+
+		debug!(message = "data received", data = body.to_owned());
+		queue_message(body.to_owned(), queue.clone());
+
+		// Check for paging
+		if let Some(pg) = conf.paging.as_ref() {
+			pages += 1;
+			debug!(message="paging", conf=%pg, pages=pages, max_pages=MAX_PAGING_REQUESTS);
+			if pg.until == types::PagingRequestUntil::None
+				|| pages >= pg.max_pages
+				|| pages >= MAX_PAGING_REQUESTS
 			{
-				let page_val = template::template_string(&param.value, Arc::clone(&response));
-				let sep = if uri.find('?').is_some() { "&" } else { "?" };
-				uri = format!(
-					"{}{}{}={}",
-					uri,
-					sep,
-					param.name.as_str(),
-					page_val.as_str()
-				);
-			}
-			debug!(message="calling api", api=conf.uri, uri=%uri);
-
-			// Create the Request
-			let client = reqwest::blocking::Client::new();
-			let mut req = match conf.method {
-				types::Method::GET => client.get(uri),
-				types::Method::POST => client.post(uri).body(send_body),
-				types::Method::HEAD => client.head(uri),
-				_ => client.get(uri),
-			};
-
-			// Authentication
-			req = match &conf.auth {
-				Some(types::Authentication::Header { header, value }) => req.header(
-					header,
-					template::template_string(
-						&secrets_string(value).unwrap_or_default(),
-						Arc::clone(&response),
-					),
-				),
-
-				Some(types::Authentication::Basic { user, pass }) => req.basic_auth(
-					secrets_string(user).unwrap_or_default(),
-					secrets_string(pass).ok(),
-				),
-
-				Some(types::Authentication::Bearer(token)) => {
-					if token.starts_with("Bearer") {
-						req.bearer_auth(
-							secrets_string(token.get(7..).unwrap_or_default()).unwrap_or_default(),
-						)
-					} else {
-						req.bearer_auth(secrets_string(token).unwrap_or_default())
-					}
-				}
-
-				_ => req,
-			};
-
-			// Additional Headers
-			req = req.header("User-Agent", "ingesto-polling/1.0");
-			for header in &conf.header {
-				req = req.header(
-					header.name.to_string(),
-					template::template_string(&header.value, Arc::clone(&response)),
-				);
-			}
-
-			let resp = send_reqwest(req)?;
-			let status = resp.status();
-			let body = resp.text().unwrap_or_default();
-			if status != StatusCode::OK {
-				error!(message="calling api", api=conf.uri, status=%status.as_u16(), error=body.to_owned());
 				break;
 			}
 
-			debug!(message = "data received", data = body.to_owned());
-			queue_message(body.to_owned(), queue.clone());
-
-			// Check for paging
-			if let Some(pg) = conf.paging.as_ref() {
-				pages += 1;
-				debug!(message="paging", conf=%pg, pages=pages, max_pages=MAX_PAGING_REQUESTS);
-				if pg.until == types::PagingRequestUntil::None
-					|| pages >= pg.max_pages
-					|| pages >= MAX_PAGING_REQUESTS
-					{
-						break;
-					}
-
-					paging = !pg.until.check(status.as_u16(), body.to_owned());
-				debug!(message = "apply paging", apply = paging);
-				if paging {
-					match serde_json::from_str(body.to_owned().as_str()).unwrap_or_default() {
-						Value::Null => break,
-						j => response = Arc::<Value>::new(j),
-					}
+			paging = !pg.until.check(status.as_u16(), body.to_owned());
+			debug!(message = "apply paging", apply = paging);
+			if paging {
+				match serde_json::from_str(body.to_owned().as_str()).unwrap_or_default() {
+					Value::Null => break,
+					j => response = Arc::<Value>::new(j),
 				}
-			} else {
-				break;
 			}
+		} else {
+			break;
+		}
 	}
 
 	Ok(())
