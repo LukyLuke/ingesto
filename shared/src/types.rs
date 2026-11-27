@@ -226,7 +226,7 @@ impl From<Queue> for ConfStruct {
 			(
 				"otel_logger".to_string(),
 				ConfType::Option(Box::new(ConfType::Vec(Box::new(ConfType::Struct(
-					FieldMapping::default().into(),
+					OtelLogger::default().into(),
 				))))),
 			),
 		])

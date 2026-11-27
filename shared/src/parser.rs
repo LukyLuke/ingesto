@@ -172,7 +172,7 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 								}
 								Err(e) => {
 									me.queue.push_front(String::from(msg.as_str()).into());
-									error!(message="failed to enqueue message for otlp endpoint", endpoint=%otlp.endpoint, port=%otlp.port, service=%otlp.service, error=%e)
+									error!(message="failed to enqueue message for otlp endpoint", endpoint=%otlp.endpoint, port=%otlp.port, service=%otlp.service, for_msgs=%otlp.for_message, error=%e)
 								}
 							}
 						}
@@ -259,7 +259,7 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 
 				// Insert a new Log-Provider to the cached HashMap
 				map.insert(
-					key,
+					key.to_owned(),
 					SdkLoggerProvider::builder()
 						.with_resource(
 							Resource::builder()
@@ -272,7 +272,7 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 				);
 
 				// If everything worked as expected, there must be a new OtelLogger Provider which can be returned
-				return match map.get(&conf.endpoint) {
+				return match map.get(&key) {
 					Some(otel) => Ok(otel.clone()),
 					None => Err(anyhow::anyhow!(
 						"OpenTelemetry Endpoint not found and unable to create"
