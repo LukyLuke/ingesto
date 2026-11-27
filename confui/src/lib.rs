@@ -4,8 +4,6 @@
 
 use wasm_bindgen::prelude::*;
 
-#[cfg(test)]
-mod all_kinds;
 mod app;
 mod codec;
 mod kinds;

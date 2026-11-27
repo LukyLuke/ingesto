@@ -6,7 +6,6 @@ edition.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
-homepage.workspace = true
 
 [lib]
 crate-type = ["cdylib", "rlib"]
@@ -16,7 +15,7 @@ default = ["console_error_panic_hook"]
 
 [dependencies]
 wasm-bindgen = "0.2"
-serde-wasm-bindgen = "0.6"
+#serde-wasm-bindgen = "0.6"
 wasm-bindgen-futures = { workspace = true }
 js-sys = { workspace = true }
 web-sys = { version = "0.3", features = [
@@ -35,6 +34,8 @@ recv_file = { package = "ingesto-file-reader", path = "../receiver/file", defaul
 recv_network = { package = "ingesto-network-listener", path = "../receiver/network", default-features = false, features = [ "types" ] }
 recv_polling = { package = "ingesto-network-polling", path = "../receiver/polling", default-features = false, features = [ "types" ] }
 recv_webhook = { package = "ingesto-webhook-listener", path = "../receiver/webhook", default-features = false, features = [ "types" ] }
+
+proc_polling = { package = "ingesto-processor-polling", path = "../processor/polling", default-features = false, features = [ "types" ] }
 
 anyhow = { workspace = true }
 chrono = { workspace = true }

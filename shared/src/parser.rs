@@ -1,6 +1,6 @@
 use std::{
 	collections::HashMap,
-	sync::{Arc, OnceLock},
+	sync::{Arc, Mutex, OnceLock},
 	thread::{self},
 	time::Duration,
 };
@@ -9,8 +9,8 @@ use anyhow::Result;
 use opentelemetry::logs::{AnyValue, LogRecord, Logger, LoggerProvider, Severity};
 use opentelemetry_otlp::{LogExporter, Protocol, WithExportConfig};
 use opentelemetry_sdk::{
-	Resource,
 	logs::{BatchConfigBuilder, BatchLogProcessor, SdkLogger, SdkLoggerProvider},
+	Resource,
 };
 use regex::Regex;
 use serde_json::Value;
@@ -34,7 +34,7 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 		parser: Vec<types::Parser>,
 	) -> Self {
 		// Precompile
-		let regexes = Self::precompile_regex(&parser);
+		let regexes = Self::precompile_regex(&parser, &conf.otel_logger);
 		let jsonpath = Self::precompile_jsonpath(&parser);
 
 		Self {
@@ -46,9 +46,14 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 		}
 	}
 
-	fn precompile_regex(parser: &Vec<types::Parser>) -> HashMap<String, Regex> {
+	fn precompile_regex(
+		parser: &[types::Parser],
+		otel: &[types::OtelLogger],
+	) -> HashMap<String, Regex> {
 		let mut regexes: HashMap<String, Regex> = HashMap::new();
 		let empty_regex = Regex::new("^$").unwrap();
+
+		// Parser Regexes
 		for p in parser {
 			// Precompile the matcher Regex
 			let re = match Regex::new(&p.matcher) {
@@ -78,6 +83,25 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 				regexes.insert(setting.to_owned(), re);
 			};
 		}
+
+		// OtelLogger Message-Regexes
+		for otlp in otel {
+			let re = match Regex::new(&otlp.for_message) {
+				Ok(re) => {
+					info!(message="regex compile", regex=%otlp.for_message);
+					re
+				}
+				Err(e) => {
+					error!(message="regex compile", regex=%otlp.for_message, error=%e);
+					empty_regex.clone()
+				}
+			};
+			regexes.insert(otlp.for_message.to_owned(), re);
+		}
+
+		// As last, add a precompiled version of a Catch-All Regex
+		regexes.insert(".*".to_string(), Regex::new(".*").unwrap());
+
 		regexes
 	}
 
@@ -110,45 +134,49 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 
 		info!(message="start processing", max_time=%max_time.as_secs_f32(), max_messages=%max_msg);
 		thread::spawn(move || {
-			if let Some(otlp) = me.conf.otel_logger.as_ref() {
-				loop {
-					let q_msg = match me.queue.pull(max_time) {
-						Some(m) => m.into().trim().to_string(),
-						None => {
-							info!(message="queue empty", waited=%max_time.as_secs_f32());
-							continue;
-						}
-					};
-
-					// Parse and return Structured JSON-String
-					let msgs = me.parse_message(&q_msg);
-					debug!(message="processed message", original=%q_msg);
-					info!(
-						message = "processed message",
-						size = q_msg.len(),
-						messages = msgs.len()
-					);
-
-					for msg in msgs {
-						debug!(message="extracted message", msg=%msg);
-						match me.send_message(otlp, &msg, max_msg, max_time) {
-							Ok(_) => {
-								debug!(message="enqueued message for otlp endpoint", endpoint=%otlp.endpoint, port=%otlp.port, service=%otlp.service)
-							}
-							Err(e) => {
-								me.queue.push_front(msg.into());
-								error!(message="failed to enqueue message for otlp endpoint", endpoint=%otlp.endpoint, port=%otlp.port, service=%otlp.service, error=%e)
-							}
-						};
-					}
-				}
-			} else {
-				// Do not process any logs if there is no log receiver
+			// Do not process any logs if there is no log receiver
+			// drop all messages from time to time to not run in an OOM
+			if me.conf.otel_logger.is_empty() {
 				info!(message = "no log processing due to no otel_logger in queue-configuration");
 				loop {
-					// drop all messages and wait
 					self.queue.pull_all();
 					thread::sleep(max_time);
+				}
+			}
+
+			loop {
+				let q_msg = match me.queue.pull(max_time) {
+					Some(m) => m.into().trim().to_string(),
+					None => {
+						info!(message="queue empty", waited=%max_time.as_secs_f32());
+						continue;
+					}
+				};
+
+				// Parse and return Structured JSON-String
+				let msgs = me.parse_message(&q_msg);
+				debug!(message="processed message", original=%q_msg);
+				info!(
+					message = "processed messages",
+					size = q_msg.len(),
+					messages = msgs.len()
+				);
+
+				for msg in msgs {
+					debug!(message="extracted message", msg=%msg);
+					me.conf.otel_logger.iter().for_each(|otlp| {
+						if let Some(re) = me.regexes.get(&otlp.for_message) && re.is_match(&msg) {
+							match me.send_message(&otlp, &msg, max_msg, max_time) {
+								Ok(_) => {
+									info!(message="enqueued message for otlp endpoint", endpoint=%otlp.endpoint, port=%otlp.port, service=%otlp.service)
+								}
+								Err(e) => {
+									me.queue.push_front(String::from(msg.as_str()).into());
+									error!(message="failed to enqueue message for otlp endpoint", endpoint=%otlp.endpoint, port=%otlp.port, service=%otlp.service, for_msgs=%otlp.for_message, error=%e)
+								}
+							}
+						}
+					});
 				}
 			}
 		});
@@ -204,39 +232,54 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 		count: u16,
 		duration: Duration,
 	) -> Result<SdkLogger> {
-		static RESOURCE: OnceLock<Result<SdkLogger>> = OnceLock::new();
-		let res = RESOURCE.get_or_init(|| {
-			let exporter = LogExporter::builder()
-				.with_http()
-				.with_protocol(Protocol::HttpBinary)
-				.with_endpoint(conf.get_endpoint("/v1/logs"))
-				.build()?;
+		static RESOURCE: OnceLock<Mutex<HashMap<String, SdkLogger>>> = OnceLock::new();
+		let key = conf.get_endpoint("/v1/logs");
+		match RESOURCE.get_or_init(|| Mutex::new(HashMap::new())).lock() {
+			Ok(mut map) => {
+				if let Some(otel) = map.get(&key) {
+					return Ok(otel.clone());
+				}
 
-			// Queue size and time handled by OTEL
-			let processor = BatchLogProcessor::builder(exporter)
-				.with_batch_config(
-					BatchConfigBuilder::default()
-						.with_max_queue_size(2048)
-						.with_max_export_batch_size(count.into())
-						.with_scheduled_delay(duration)
-						.build(),
-				)
-				.build();
+				let exporter = LogExporter::builder()
+					.with_http()
+					.with_protocol(Protocol::HttpBinary)
+					.with_endpoint(conf.get_endpoint("/v1/logs"))
+					.build()?;
 
-			Ok(SdkLoggerProvider::builder()
-				.with_resource(
-					Resource::builder()
-						.with_service_name(conf.service.clone())
-						.build(),
-				)
-				.with_log_processor(processor)
-				.build()
-				.logger(conf.service.clone()))
-		});
+				// Queue size and time handled by OTEL
+				let processor = BatchLogProcessor::builder(exporter)
+					.with_batch_config(
+						BatchConfigBuilder::default()
+							.with_max_queue_size(2048)
+							.with_max_export_batch_size(count.into())
+							.with_scheduled_delay(duration)
+							.build(),
+					)
+					.build();
 
-		match res.as_ref() {
-			Ok(logger) => Ok(logger.clone()),
-			Err(e) => Err(anyhow::anyhow!(e)),
+				// Insert a new Log-Provider to the cached HashMap
+				map.insert(
+					key.to_owned(),
+					SdkLoggerProvider::builder()
+						.with_resource(
+							Resource::builder()
+								.with_service_name(conf.service.clone())
+								.build(),
+						)
+						.with_log_processor(processor)
+						.build()
+						.logger(conf.service.clone()),
+				);
+
+				// If everything worked as expected, there must be a new OtelLogger Provider which can be returned
+				return match map.get(&key) {
+					Some(otel) => Ok(otel.clone()),
+					None => Err(anyhow::anyhow!(
+						"OpenTelemetry Endpoint not found and unable to create"
+					)),
+				};
+			}
+			Err(e) => Err(anyhow::anyhow!("Mutex-Unlock OpenTelemetryLogger: {:?}", e)),
 		}
 	}
 
@@ -252,9 +295,13 @@ impl<T: Send + 'static + Into<String> + From<String>> MessageParser<T> {
 	/// Returns the either the parsed or the raw message as a list
 	fn parse_message(&self, raw: &String) -> Vec<String> {
 		let parser = self.parser.iter().find_map(|parser| {
-			self.regexes
-				.get(&parser.matcher)
-				.and_then(|re| if re.is_match(raw) { Some(parser) } else { None })
+			self.regexes.get(&parser.matcher).and_then(|re| {
+				if re.is_match(raw) {
+					Some(parser)
+				} else {
+					None
+				}
+			})
 		});
 		self.apply_parser(raw, parser)
 	}

@@ -5,7 +5,6 @@ edition.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
-homepage.workspace = true
 
 [features]
 default = [ "runtime" ]
@@ -21,6 +20,9 @@ runtime = [
 [dependencies]
 env = { version = "1" }
 serde_json_path = { version = "0" }
+
+http = { workspace = true }
+reqwest = { workspace = true }
 
 anyhow = { workspace = true }
 bytes = { workspace = true  }

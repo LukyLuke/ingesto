@@ -5,7 +5,6 @@ edition.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
-homepage.workspace = true
 
 [features]
 default = [ "runtime" ]
@@ -19,12 +18,12 @@ types = [ "dep:shared" ]
 shared = { path = "../../shared", optional = true, default-features = false }
 
 cron = { version = "0" }
-http = { version = "1" }
-reqwest = { version = "0", features = [ "blocking" ] }
+http = { workspace = true }
+reqwest = { workspace = true }
 
 anyhow = { workspace = true }
 chrono = { workspace = true }
-notify = { workspace = true }
+#notify = { workspace = true }
 once_cell = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

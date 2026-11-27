@@ -466,7 +466,7 @@ dependencies = [
 
 [[package]]
 name = "confui"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -478,12 +478,12 @@ dependencies = [
  "ingesto-file-reader",
  "ingesto-network-listener",
  "ingesto-network-polling",
+ "ingesto-processor-polling",
  "ingesto-webhook-listener",
  "ipnetwork",
  "js-sys",
  "regex",
  "serde",
- "serde-wasm-bindgen",
  "serde_json",
  "serde_path_to_error",
  "serde_yaml",
@@ -1398,7 +1398,7 @@ dependencies = [
 
 [[package]]
 name = "ingesto-azuredcr-exporter"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "serde",
@@ -1410,7 +1410,7 @@ dependencies = [
 
 [[package]]
 name = "ingesto-database-exporter"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "dateparser",
@@ -1427,7 +1427,7 @@ dependencies = [
 
 [[package]]
 name = "ingesto-database-reader"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "serde",
@@ -1439,7 +1439,7 @@ dependencies = [
 
 [[package]]
 name = "ingesto-file-reader"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "notify",
@@ -1451,7 +1451,7 @@ dependencies = [
 
 [[package]]
 name = "ingesto-network-listener"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "serde",
@@ -1462,13 +1462,12 @@ dependencies = [
 
 [[package]]
 name = "ingesto-network-polling"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "chrono",
  "cron",
  "http",
- "notify",
  "once_cell",
  "reqwest",
  "serde",
@@ -1479,8 +1478,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "ingesto-processor-polling"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "http",
+ "regex",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "shared",
+ "tracing",
+]
+
+[[package]]
 name = "ingesto-webhook-listener"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "base64",
@@ -2642,17 +2655,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "serde-wasm-bindgen"
-version = "0.6.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8302e169f0eddcc139c70f139d19d6467353af16f9fce27e8c30158036a1e16b"
-dependencies = [
- "js-sys",
- "serde",
- "wasm-bindgen",
-]
-
-[[package]]
 name = "serde_core"
 version = "1.0.228"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2812,7 +2814,7 @@ dependencies = [
 
 [[package]]
 name = "shared"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "bytes",
@@ -2821,6 +2823,7 @@ dependencies = [
  "dashmap",
  "dateparser",
  "env",
+ "http",
  "ipnetwork",
  "jiff",
  "once_cell",
@@ -2831,6 +2834,7 @@ dependencies = [
  "parse_datetime",
  "prost",
  "regex",
+ "reqwest",
  "serde",
  "serde_json",
  "serde_json_path",

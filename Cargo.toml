@@ -3,14 +3,14 @@ members = [
 	"confui",
 	"exporter/*",
 	"receiver/*",
+	"processor/*",
 	"shared",
 ]
 resolver = "3"
 
 [workspace.package]
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Ingesto Contributors"]
-homepage = "https://github.com/lukyluke/ingesto"
 license = "MIT or Apache-2.0"
 repository = "https://github.com/lukyluke/ingesto"
 edition = "2024"
@@ -136,3 +136,10 @@ features = [
 
 [workspace.dependencies.wasm-bindgen-futures]
 version = "0.4"
+
+[workspace.dependencies.http]
+version = "1"
+
+[workspace.dependencies.reqwest]
+version = "0"
+features = [ "blocking" ]

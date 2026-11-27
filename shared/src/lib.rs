@@ -9,6 +9,8 @@ pub mod queue;
 pub mod receiver;
 #[cfg(feature = "runtime")]
 pub mod template;
+#[cfg(feature = "runtime")]
+pub mod reqwest;
 
 #[cfg(feature = "runtime")]
 use clap::{Arg, Command, builder::PathBufValueParser};

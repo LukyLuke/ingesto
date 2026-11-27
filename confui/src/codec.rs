@@ -842,12 +842,31 @@ mod tests {
 
 	#[test]
 	fn detection_prefers_the_best_fit() {
-		let polling = json("config:\n  name: x\n  api:\n    - name: a\n      uri: http://x\n");
+		let polling = json(
+			"config:\n  name: x\n  timer: '0 */1 * * * *'\n  api:\n    - name: a\n      uri: http://x\n",
+		);
 		let found: Vec<&str> = detect(&polling, kinds::all())
 			.iter()
 			.map(|k| k.id)
 			.collect();
 		assert_eq!(found, vec!["recv_polling"]);
+
+		let processor = json(
+			"config:\n  name: x\n  listener:\n    address: 0.0.0.0\n  api:\n    - name: a\n      uri: http://x\n",
+		);
+		let found: Vec<&str> = detect(&processor, kinds::all())
+			.iter()
+			.map(|k| k.id)
+			.collect();
+		assert_eq!(found, vec!["proc_polling"]);
+
+		// Without a `timer` or a `listener` the polling receiver and processor are not distinguishable
+		let ambiguous = json("config:\n  name: x\n  api:\n    - name: a\n      uri: http://x\n");
+		let found: Vec<&str> = detect(&ambiguous, kinds::all())
+			.iter()
+			.map(|k| k.id)
+			.collect();
+		assert_eq!(found, vec!["recv_polling", "proc_polling"]);
 
 		let file = json("config:\n  name: x\n  file:\n    path: /var/log/x.log\n");
 		let found: Vec<&str> = detect(&file, kinds::all()).iter().map(|k| k.id).collect();
@@ -921,7 +940,7 @@ mod tests {
 	fn rank_lists_all_implemented_kinds_best_first() {
 		let value = json("config:\n  name: x\n  api:\n    - name: a\n      uri: http://x\n");
 		let fits = rank(&value, kinds::all());
-		assert_eq!(fits.len(), 5);
+		assert_eq!(fits.len(), 6);
 		assert_eq!(fits[0].kind.id, "recv_polling");
 		assert_eq!(fits[0].total, 0);
 		assert!(fits.windows(2).all(|w| w[0].rank() <= w[1].rank()));

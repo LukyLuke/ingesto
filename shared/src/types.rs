@@ -1,12 +1,14 @@
 use std::fmt;
+#[cfg(feature = "runtime")]
+use std::{
+	sync::Arc,
+	net::Ipv4Addr,
+};
 
 use chrono::{DateTime, Utc};
 use ipnetwork::IpNetwork;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-
-#[cfg(feature = "runtime")]
-use {ipnetwork::Ipv4Network, std::net::Ipv4Addr};
 
 /// The ConfStruct is used to define the config struct format and use it for example in a web ui
 /// Each Configuration Struct should have implemented the "Into" Trait to define all fields and values
@@ -143,6 +145,8 @@ pub enum ConfType {
 	/// A List of ConfType's
 	Vec(Box<ConfType>),
 }
+
+#[cfg(feature = "types")]
 impl fmt::Display for ConfType {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		write!(f, "{:?}", self)
@@ -171,7 +175,7 @@ pub struct Queue {
 
 	// Where to send the log messages to
 	#[serde(default)]
-	pub otel_logger: Option<OtelLogger>,
+	pub otel_logger: Vec<OtelLogger>,
 }
 fn default_messages() -> u16 {
 	1024
@@ -186,6 +190,7 @@ fn default_collect() -> bool {
 	false
 }
 
+#[cfg(feature = "types")]
 impl Default for Queue {
 	fn default() -> Self {
 		Self {
@@ -193,7 +198,7 @@ impl Default for Queue {
 			max_seconds: default_time(),
 			max_size: default_size(),
 			collect_messages: default_collect(),
-			otel_logger: None,
+			otel_logger: vec![],
 		}
 	}
 }
@@ -201,8 +206,6 @@ impl Default for Queue {
 #[cfg(feature = "types")]
 impl From<Queue> for ConfStruct {
 	fn from(val: Queue) -> Self {
-		let otel_logger: ConfStruct = val.otel_logger.unwrap_or_default().into();
-
 		ConfStruct::from([
 			(
 				"max_messages".to_string(),
@@ -222,7 +225,9 @@ impl From<Queue> for ConfStruct {
 			),
 			(
 				"otel_logger".to_string(),
-				ConfType::Option(Box::new(ConfType::Struct(otel_logger))),
+				ConfType::Option(Box::new(ConfType::Vec(Box::new(ConfType::Struct(
+					OtelLogger::default().into(),
+				))))),
 			),
 		])
 	}
@@ -321,6 +326,7 @@ pub enum ParserKind {
 	// Structured Syslog Messages are similar to CEF/LEEF but have a different Key-Value pair format
 	STRUCTURED,
 }
+#[cfg(feature = "types")]
 fn default_parser_kind() -> ParserKind {
 	ParserKind::default()
 }
@@ -340,6 +346,7 @@ impl From<ParserKind> for ConfStruct {
 	}
 }
 
+#[cfg(feature = "types")]
 impl fmt::Display for ParserKind {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		write!(f, "{:?}", self)
@@ -366,6 +373,8 @@ pub enum ParserSettings {
 	// If it is a header, the `source` can be used in the matcher for the column name, otherwise the `index` defines the column number
 	Csv(bool),
 }
+
+#[cfg(feature = "types")]
 fn default_parser_setting() -> ParserSettings {
 	ParserSettings::default()
 }
@@ -382,6 +391,7 @@ impl From<ParserSettings> for ConfStruct {
 	}
 }
 
+#[cfg(feature = "types")]
 impl fmt::Display for ParserSettings {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		write!(f, "{:?}", self)
@@ -469,20 +479,28 @@ pub struct OtelLogger {
 
 	#[serde(default = "default_otel_service")]
 	pub service: String,
+
+	#[serde(default = "default_otel_regex")]
+	pub for_message: String,
 }
 fn default_otel_service() -> String {
 	String::from("ingesto")
+}
+fn default_otel_regex() -> String {
+	String::from(".*")
 }
 fn default_otel_port() -> u16 {
 	4318
 }
 
+#[cfg(feature = "types")]
 impl Default for OtelLogger {
 	fn default() -> Self {
 		Self {
 			endpoint: String::from("0.0.0.0"),
 			port: default_otel_port(),
 			service: default_otel_service(),
+			for_message: default_otel_regex(),
 		}
 	}
 }
@@ -505,10 +523,17 @@ impl From<OtelLogger> for ConfStruct {
 					String::from(&val.service),
 				))))),
 			),
+			(
+				"for_message".to_string(),
+				ConfType::Option(Box::new(ConfType::String(Box::leak(Box::new(
+					String::from(&val.for_message),
+				))))),
+			),
 		])
 	}
 }
 
+#[cfg(feature = "runtime")]
 impl OtelLogger {
 	pub fn get_endpoint(&self, path: &str) -> String {
 		let mut p = path.to_owned();
@@ -540,6 +565,7 @@ fn default_logs_path() -> String {
 	String::from("/v1/logs")
 }
 
+#[cfg(feature = "types")]
 impl Default for OtelReceiver {
 	fn default() -> Self {
 		Self {
@@ -572,6 +598,7 @@ impl From<OtelReceiver> for ConfStruct {
 	}
 }
 
+#[cfg(feature = "runtime")]
 impl OtelReceiver {
 	pub fn get_address(&self) -> String {
 		format!("{}:{}", self.address, self.port)
@@ -602,6 +629,8 @@ impl DbValue {
 	}
 
 	fn convert(val: &DbField, json: &serde_json::Value) -> (String, DbValue) {
+    use ipnetwork::Ipv4Network;
+
 		match val {
 			DbField::String {
 				name,
@@ -808,6 +837,7 @@ pub enum DbField {
 	},
 }
 
+#[cfg(feature = "types")]
 impl Default for DbField {
 	fn default() -> Self {
 		Self::String {
@@ -863,11 +893,432 @@ impl From<DbField> for ConfStruct {
 	}
 }
 
+#[cfg(feature = "types")]
+fn default_method() -> Method {
+	Method::GET
+}
+
+/// An Endpoint where and how to send a request to
+#[cfg(feature = "types")]
+#[derive(Default, Debug, Clone, Deserialize, Serialize)]
+pub struct Endpoint {
+	/// Name of the API, to know what this endpoint is for. It is used in logs.
+	pub name: String,
+
+	/// FQDN where to send a request to.
+	/// Can contain Template-Parameters: {{ $uuid }}, {{ $date([$response/json/pointer/value]#FORMAT) }}, {{ $response/json/pointer/value }}
+	pub uri: String,
+
+	/// In case of a POST, the Body to send.
+	/// Can contain Template-Parameters
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub body: Option<String>,
+
+	/// Method to use to send a request
+	/// Can be GET, POST, HEAD, OPTION
+	#[serde(default = "default_method")]
+	pub method: Method,
+
+	/// Authentication Configuration
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub auth: Option<Authentication>,
+
+	/// Custom Header Pairs
+	#[serde(default, skip_serializing_if = "Vec::is_empty")]
+	pub header: Vec<Param>,
+
+	/// Paging-Request Configuration
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub paging: Option<PagingRequest>,
+}
+
+#[cfg(feature = "types")]
+impl From<Endpoint> for ConfStruct {
+	fn from(val: Endpoint) -> Self {
+		let auth = val.auth.unwrap_or_default();
+		let mut map = ConfStruct::new();
+		map.insert("name".to_string(), ConfType::String(leak_str(&val.name)));
+		map.insert("uri".to_string(), ConfType::String(leak_str(&val.uri)));
+		map.insert(
+			"body".to_string(),
+			ConfType::Option(Box::new(ConfType::String(leak_str(
+				val.body.as_deref().unwrap_or_default(),
+			)))),
+		);
+		map.insert(
+			"method".to_string(),
+			ConfType::Option(Box::new(ConfType::Enum(
+				val.method.clone().into(),
+				val.method.name(),
+			))),
+		);
+		map.insert(
+			"auth".to_string(),
+			ConfType::Option(Box::new(ConfType::Enum(auth.clone().into(), auth.name()))),
+		);
+		map.insert(
+			"header".to_string(),
+			ConfType::Option(Box::new(ConfType::Vec(Box::new(ConfType::Struct(
+				Param::default().into(),
+			))))),
+		);
+		map.insert(
+			"paging".to_string(),
+			ConfType::Option(Box::new(ConfType::Struct(
+				val.paging.unwrap_or_default().into(),
+			))),
+		);
+		map
+	}
+}
+
+/// Request-Methods
+#[cfg(feature = "types")]
+#[derive(Default, Debug, Clone, Deserialize, Serialize)]
+pub enum Method {
+	#[default]
+	GET,
+	POST,
+	HEAD,
+	OPTION,
+}
+
+#[cfg(feature = "types")]
+impl Method {
+	/// The name of the variant as it is written in a configuration file
+	pub fn name(&self) -> &'static str {
+		match self {
+			Self::GET => "GET",
+			Self::POST => "POST",
+			Self::HEAD => "HEAD",
+			Self::OPTION => "OPTION",
+		}
+	}
+}
+
+#[cfg(feature = "types")]
+impl From<Method> for ConfStruct {
+	fn from(_val: Method) -> Self {
+		let mut map = ConfStruct::new();
+		map.insert("GET".to_string(), ConfType::EnumValue);
+		map.insert("POST".to_string(), ConfType::EnumValue);
+		map.insert("HEAD".to_string(), ConfType::EnumValue);
+		map.insert("OPTION".to_string(), ConfType::EnumValue);
+		map
+	}
+}
+
+/// Authentication on an Endpoint
+#[cfg(feature = "types")]
+#[derive(Default, Debug, Clone, Deserialize, Serialize)]
+pub enum Authentication {
+	/// No Authenticaton
+	#[default]
+	None,
+
+	/// Basic-Auth with a User and Password
+	/// use `file:/FILE` or `env:ENV_VAR` for a secure configuration of user and password values
+	Basic { user: String, pass: String },
+
+	/// A Bearer Token
+	/// With/out 'Bearer' prefix
+	/// use `file:/FILE` or `env:ENV_VAR` for a secure configuration of user and password values
+	Bearer(String),
+
+	/// Header Authentication with a key and a value.
+	/// use `file:/FILE` or `env:ENV_VAR` for a secure configuration of user and password values
+	Header { header: String, value: String },
+}
+
+#[cfg(feature = "types")]
+impl Authentication {
+	/// The name of the variant as it is written in a configuration file
+	pub fn name(&self) -> &'static str {
+		match self {
+			Self::None => "None",
+			Self::Basic { .. } => "Basic",
+			Self::Bearer(_) => "Bearer",
+			Self::Header { .. } => "Header",
+		}
+	}
+}
+
+#[cfg(feature = "types")]
+impl From<Authentication> for ConfStruct {
+	fn from(_val: Authentication) -> Self {
+		ConfStruct::from([
+			("None".to_string(), ConfType::EnumValue),
+			(
+				"Basic".to_string(),
+				ConfType::Struct(ConfStruct::from([
+					("user".to_string(), ConfType::String("")),
+					("pass".to_string(), ConfType::String("")),
+			])),
+			),
+			("Bearer".to_string(), ConfType::String("")),
+			(
+				"Header".to_string(),
+				ConfType::Struct(ConfStruct::from([
+					("header".to_string(), ConfType::String("")),
+					("value".to_string(), ConfType::String("")),
+				])),
+			),
+		])
+	}
+}
+
+/// A simple Key-Value pair used for different representations
+/// The Value can be a Template-Param in most constructs: {{ ... }}
+#[cfg(feature = "types")]
+#[derive(Default, Debug, Clone, Deserialize, Serialize)]
+pub struct Param {
+	pub name: String,
+	pub value: String,
+}
+
+#[cfg(feature = "types")]
+impl From<Param> for ConfStruct {
+	fn from(val: Param) -> Self {
+		ConfStruct::from([
+			("name".to_string(), ConfType::String(leak_str(&val.name))),
+			("value".to_string(), ConfType::String(leak_str(&val.value))),
+		])
+	}
+}
+
+/// Paging Requests can be used if an Endpoint sends a lot of data which are split over multiple requests and responses
+#[cfg(feature = "types")]
+#[derive(Default, Debug, Clone, Deserialize, Serialize)]
+pub struct PagingRequest {
+	/// Name and Value for the parameter which is added on the Endpoints URI
+	/// The Value can/should be a Template-Value which normally contains a value from the response, like: `{{ $response/paging/cursor }}`
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub param: Option<Param>,
+
+	/// Defines how to check if there is no more pages
+	#[serde(default)]
+	pub until: PagingRequestUntil,
+
+	/// Timeout between paging requests in milliseconds
+	#[serde(default)]
+	pub timeout: u32,
+
+	/// Maximum number of paging requests
+	/// Exit-Strategy to avoid too many requests
+	#[serde(default)]
+	pub max_pages: u16,
+}
+
+#[cfg(feature = "types")]
+impl From<PagingRequest> for ConfStruct {
+	fn from(val: PagingRequest) -> Self {
+		ConfStruct::from([
+			(
+				"param".to_string(),
+				ConfType::Option(Box::new(ConfType::Struct(
+				val.param.unwrap_or_default().into(),
+			))),
+			),
+			(
+				"until".to_string(),
+				ConfType::Option(Box::new(ConfType::Enum(
+				val.until.clone().into(),
+				val.until.name(),
+			))),
+			),
+			(
+				"timeout".to_string(),
+				ConfType::Option(Box::new(ConfType::UInt(val.timeout.into()))),
+			),
+			(
+				"max_pages".to_string(),
+				ConfType::Option(Box::new(ConfType::UInt(val.max_pages.into()))),
+			),
+		])
+	}
+}
+
+/// Defines the paging
+#[cfg(feature = "types")]
+#[derive(Default, Debug, Clone, Deserialize, Serialize, PartialEq)]
+pub enum PagingRequestUntil {
+	/// No Paging
+	#[default]
+	None,
+
+	/// An empty response
+	Empty,
+
+	/// A defined status code
+	StatusCode(u16),
+
+	/// An empty value inside the json-response
+	EmptyValue(String),
+
+	/// Two values from inside the json-response or static strings have to match
+	Equals(String, String),
+}
+
+#[cfg(feature = "types")]
+impl PagingRequestUntil {
+	/// The name of the variant as it is written in a configuration file
+	pub fn name(&self) -> &'static str {
+		match self {
+			Self::None => "None",
+			Self::Empty => "Empty",
+			Self::StatusCode(_) => "StatusCode",
+			Self::EmptyValue(_) => "EmptyValue",
+			Self::Equals(_, _) => "Equals",
+		}
+	}
+}
+
+#[cfg(feature = "types")]
+impl From<PagingRequestUntil> for ConfStruct {
+	fn from(_val: PagingRequestUntil) -> Self {
+		ConfStruct::from([
+			("None".to_string(), ConfType::EnumValue),
+			("Empty".to_string(), ConfType::EnumValue),
+			("StatusCode".to_string(), ConfType::UInt(0)),
+			("EmptyValue".to_string(), ConfType::String("")),
+			(
+				"Equals".to_string(),
+				ConfType::Tuple(vec![ConfType::String(""), ConfType::String("")]),
+			),
+		])
+	}
+}
+
+#[cfg(feature = "types")]
+impl fmt::Display for Method {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		write!(f, "{:?}", self)
+	}
+}
+
+#[cfg(feature = "types")]
+impl fmt::Display for Authentication {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		match self {
+			Authentication::None => write!(f, "None"),
+			Authentication::Basic { user, pass } => write!(f, "Basic '{}: {}****'", user, {
+				if let Some(sub) = pass.get(0..4)
+					&& sub == "file"
+					{
+						pass
+					} else {
+						pass.get(0..4).unwrap_or_default()
+					}
+			}),
+			Authentication::Bearer(bearer) => write!(f, "Bearer {}****", {
+				if let Some(sub) = bearer.get(0..4)
+					&& sub == "file"
+					{
+						bearer
+					} else {
+						bearer.get(0..4).unwrap_or_default()
+					}
+			}),
+			Authentication::Header { header, value } => write!(f, "Header '{}: {}****'", header, {
+				if let Some(sub) = value.get(0..4)
+					&& sub == "file"
+					{
+						value.as_str()
+					} else {
+						value.get(0..4).unwrap_or_default()
+					}
+			}),
+		}
+	}
+}
+
+#[cfg(feature = "types")]
+impl fmt::Display for Param {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		write!(f, "[{:?}]='{:?}'", self.name, self.value)
+	}
+}
+
+#[cfg(feature = "types")]
+impl fmt::Display for PagingRequest {
+	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+		write!(
+			f,
+			"PagingRequest: [param]={:?}; [timeout]={:?}; [max]={:?}; [until]={:?};",
+			self.param, self.timeout, self.max_pages, self.until
+		)
+	}
+}
+
+#[cfg(feature = "runtime")]
+impl PagingRequestUntil {
+	/// Checks if the PagingRequestUntil matches the received response
+	///
+	/// # Arguments
+	///
+	/// * `status` - Status Code from the web request/response
+	/// * `value` - Response value; a JSON String
+	///
+	/// # Returns
+	///
+	/// A boolean if the given PagingRequestUntil matches the value
+	/// If this function returns true, this mostly means that a next page has to be requested
+	///
+	/// # Examples
+	///
+	/// ```
+	/// use shared::types::PagingRequestUntil;
+	/// PagingRequestUntil::None.check(200, String::from("")); // -> false
+	/// PagingRequestUntil::Empty.check(200, String::from("")); // -> true
+	/// PagingRequestUntil::Empty.check(200, String::from("{}")); // -> false
+	/// PagingRequestUntil::StatusCode(200).check(200, String::from("")); // -> true
+	/// PagingRequestUntil::StatusCode(202).check(200, String::from("")); // -> false
+	/// PagingRequestUntil::EmptyValue(String::from("{{ $response/foo }}")).check(200, String::from("{ \"foo\":\"\" }")); // -> true
+	/// PagingRequestUntil::EmptyValue(String::from("{{ $response/foo }}")).check(200, String::from("{ \"foo\":\"bar\" }")); // -> false
+	/// PagingRequestUntil::Equals(String::from("{{ $response/foo }}"), String::from("{{ $response/bar }}")).check(200, String::from("{ \"foo\":\"bar\", \"bar\":\"bar\" }")); // -> true
+	/// PagingRequestUntil::Equals(String::from("{{ $response/foo }}"), String::from("bar")).check(200, String::from("{ \"foo\":\"bar\", \"bar\":\"bar\" }")); // -> true
+	/// PagingRequestUntil::Equals(String::from("bar"), String::from("{{ $response/foo }}")).check(200, String::from("{ \"foo\":\"bar\", \"bar\":\"bar\" }")); // -> true
+	/// PagingRequestUntil::Equals(String::from("bar"), String::from("foo")).check(200, String::from("")); // -> false
+	/// ```
+	pub fn check(&self, status: u16, value: String) -> bool {
+		// Some simple checks with an **early return** and without parsing the vaulue
+		match self {
+			Self::None => return true,
+			Self::Empty => return value.is_empty(),
+			Self::StatusCode(code) => return *code == status,
+			_ => {}
+		}
+
+		// Try to parse the response as JSON
+		let json = Arc::<Value>::new(serde_json::from_str(value.as_str()).unwrap_or_default());
+		match self {
+			// Parse JSON-Pointer value and compare to empty
+			Self::EmptyValue(val) => {
+				crate::template::template_string(val, json.clone()).is_empty()
+			}
+
+			// Parse JSON-Pointer value and compare to the value
+			Self::Equals(left, right) => {
+				tracing::debug!(
+					message = "PAGING-CHECK",
+					left = crate::template::template_string(left, json.clone()),
+					right = crate::template::template_string(right, json.clone())
+				);
+				crate::template::template_string(left, json.clone()) == crate::template::template_string(right, json.clone())
+			}
+
+			// Anything else (should be handled above in the first match clause)
+			_ => true,
+		}
+	}
+}
+
+
 #[cfg(test)]
 mod test {
 	use super::*;
 
-	use ipnetwork::Ipv6Network;
+	use ipnetwork::{Ipv4Network, Ipv6Network};
 	use serde_json::json;
 	use std::net::Ipv6Addr;
 
@@ -877,6 +1328,7 @@ mod test {
 			endpoint: "endpoint".to_string(),
 			port: 6543,
 			service: "service".to_string(),
+			for_message: ".*".to_string(),
 		};
 		assert_eq!(
 			logger.get_endpoint("/path/value"),
@@ -887,6 +1339,7 @@ mod test {
 			endpoint: "http://endpoint".to_string(),
 			port: 6543,
 			service: "service".to_string(),
+			for_message: ".*".to_string(),
 		};
 		assert_eq!(
 			http.get_endpoint("/path/value"),
@@ -1452,5 +1905,278 @@ mod test {
 			assert_eq!(field_name, "name");
 			assert_eq!(db_value, DbValue::IpAddress(ipv4));
 		}
+	}
+
+	#[test]
+	fn test_paging_request_none() {
+		let paging = PagingRequestUntil::None;
+		let result = paging.check(
+			200,
+			String::from("{ \"foo\":\"bar\",\"paging\":{ \"cursor\":\"Paging-Cursor\" } }"),
+		);
+
+		assert_eq!(result, true);
+	}
+
+	#[test]
+	fn test_paging_request_empty() {
+		let paging = PagingRequestUntil::Empty;
+		let result_ok = paging.check(200, String::from(""));
+		let result_nok = paging.check(
+			200,
+			String::from("{ \"foo\":\"bar\",\"paging\":{ \"cursor\":\"Paging-Cursor\" } }"),
+		);
+
+		assert_eq!(result_ok, true);
+		assert_eq!(result_nok, false);
+	}
+
+	#[test]
+	fn test_paging_request_satus() {
+		let paging = PagingRequestUntil::StatusCode(200);
+		let result_ok = paging.check(200, String::from(""));
+		let result_nok = paging.check(
+			404,
+			String::from("{ \"foo\":\"bar\",\"paging\":{ \"cursor\":\"Paging-Cursor\" } }"),
+		);
+
+		assert_eq!(result_ok, true);
+		assert_eq!(result_nok, false);
+	}
+
+	#[test]
+	fn test_paging_request_empty_value() {
+		let paging = PagingRequestUntil::EmptyValue(String::from("{{ $response/paging/cursor }}"));
+		let result_ok1 = paging.check(
+			200,
+			String::from("{ \"foo\":\"bar\",\"paging\":{ \"cursor\":\"\" } }"),
+		);
+		let result_ok2 = paging.check(200, String::from("{ \"foo\":\"bar\",\"paging\":{  } }"));
+		let result_null = paging.check(
+			200,
+			String::from("{ \"foo\":\"bar\",\"paging\":{ \"cursor\":null } }"),
+		);
+		let result_nok = paging.check(
+			200,
+			String::from("{ \"foo\":\"bar\",\"paging\":{ \"cursor\":\"Paging-Cursor\" } }"),
+		);
+
+		assert_eq!(result_ok1, true);
+		assert_eq!(result_ok2, true);
+		assert_eq!(result_null, true);
+		assert_eq!(result_nok, false);
+	}
+
+	#[test]
+	fn test_paging_request_equal_value() {
+		let paging_a = PagingRequestUntil::Equals(
+			String::from("{{ $response/paging/cursor }}"),
+																							String::from("Paging-Cursor"),
+		);
+		let paging_b = PagingRequestUntil::Equals(
+			String::from("Paging-Cursor"),
+																							String::from("{{ $response/paging/cursor }}"),
+		);
+		let paging_c = PagingRequestUntil::Equals(
+			String::from("{{ $response/paging/cursor }}"),
+																							String::from("{{ $response/paging/last }}"),
+		);
+		let paging_d = PagingRequestUntil::Equals(
+			String::from("{{ $response/paging/cursor }}"),
+																							String::from("null"),
+		);
+
+		let result_a_ok = paging_a.check(
+			200,
+			String::from(
+				"{ \"foo\":\"bar\",\"paging\":{ \"cursor\":\"Paging-Cursor\", \"last\":\"Paging-Cursor\" } }",
+			),
+		);
+		let result_a_nok = paging_a.check(200, String::from("{ \"foo\":\"bar\",\"paging\":{ \"cursor\":\"No-Paging-Cursor\", \"last\":\"Paging-Cursor\" } }"));
+		let result_b_ok = paging_b.check(
+			200,
+			String::from(
+				"{ \"foo\":\"bar\",\"paging\":{ \"cursor\":\"Paging-Cursor\", \"last\":\"Paging-Cursor\" } }",
+			),
+		);
+		let result_b_nok = paging_b.check(200, String::from("{ \"foo\":\"bar\",\"paging\":{ \"cursor\":\"No-Paging-Cursor\", \"last\":\"Paging-Cursor\" } }"));
+		let result_c_ok = paging_c.check(
+			200,
+			String::from(
+				"{ \"foo\":\"bar\",\"paging\":{ \"cursor\":\"Paging-Cursor\", \"last\":\"Paging-Cursor\" } }",
+			),
+		);
+		let result_c_nok = paging_c.check(200, String::from("{ \"foo\":\"bar\",\"paging\":{ \"cursor\":\"No-Paging-Cursor\", \"last\":\"Paging-Cursor\" } }"));
+		let result_d_ok = paging_d.check(
+			200,
+			String::from(
+				"{ \"foo\":\"bar\",\"paging\":{ \"cursor\":null, \"last\":\"Paging-Cursor\" } }",
+			),
+		);
+		let result_d_nok = paging_d.check(
+			200,
+			String::from(
+				"{ \"foo\":\"bar\",\"paging\":{ \"cursor\":\"NotNull\", \"last\":\"Paging-Cursor\" } }",
+			),
+		);
+
+		assert_eq!(result_a_ok, true);
+		assert_eq!(result_a_nok, false);
+		assert_eq!(result_b_ok, true);
+		assert_eq!(result_b_nok, false);
+		assert_eq!(result_c_ok, true);
+		assert_eq!(result_c_nok, false);
+		assert_eq!(result_d_ok, true);
+		assert_eq!(result_d_nok, false);
+	}
+
+	#[test]
+	fn endpoint_name_is_read_from_the_config() {
+		let endpoint: Endpoint =
+		serde_json::from_str(r#"{ "name": "SentinelOne Agents", "uri": "http://x" }"#)
+		.unwrap_or_default();
+		assert_eq!(endpoint.name, "SentinelOne Agents");
+		assert_eq!(endpoint.uri, "http://x");
+	}
+
+	#[test]
+	fn endpoint_name_is_required() {
+		assert!(serde_json::from_str::<Endpoint>(r#"{ "uri": "http://x" }"#).is_err());
+		assert!(serde_json::from_str::<Endpoint>(r#"{ "name": "x" }"#).is_err());
+	}
+
+	#[test]
+	fn endpoint_name_may_be_empty_or_special() {
+		for name in ["", "Ünï \"quoted\" # 日本"] {
+			let json = serde_json::json!({ "name": name, "uri": "http://x" });
+			let endpoint: Endpoint = serde_json::from_value(json).unwrap_or_default();
+			assert_eq!(endpoint.name, name);
+		}
+	}
+
+	#[test]
+	fn endpoint_schema_has_a_required_name_first() {
+		let schema: ConfStruct = Endpoint::default().into();
+		assert_eq!(
+			schema
+			.iter()
+			.next()
+			.map(|(name, ty)| (name.as_str(), matches!(ty, ConfType::String(_)))),
+							 Some(("name", true))
+		);
+	}
+
+	fn string_of(conf: &ConfStruct, name: &str) -> Option<&'static str> {
+		match conf.get(name) {
+			Some(ConfType::String(s)) => Some(s),
+			Some(ConfType::Option(inner)) => match inner.as_ref() {
+				ConfType::String(s) => Some(s),
+				_ => None,
+			},
+			_ => None,
+		}
+	}
+
+	#[test]
+	fn endpoint_schema_uses_values() {
+		let conf: ConfStruct = Endpoint {
+			name: "agents".to_string(),
+			uri: "http://example.org".to_string(),
+			body: Some("{}".to_string()),
+			method: Method::POST,
+			auth: Some(Authentication::Bearer("token".to_string())),
+			header: Vec::new(),
+			paging: Some(PagingRequest {
+				timeout: 250,
+				max_pages: 7,
+				..PagingRequest::default()
+			}),
+		}
+		.into();
+
+		assert_eq!(string_of(&conf, "name"), Some("agents"));
+		assert_eq!(string_of(&conf, "uri"), Some("http://example.org"));
+		assert_eq!(string_of(&conf, "body"), Some("{}"));
+		assert!(
+			matches!(conf.get("method"), Some(ConfType::Option(inner)) if matches!(inner.as_ref(), ConfType::Enum(_, "POST")))
+		);
+		assert!(
+			matches!(conf.get("auth"), Some(ConfType::Option(inner)) if matches!(inner.as_ref(), ConfType::Enum(_, "Bearer")))
+		);
+
+		let Some(ConfType::Option(paging)) = conf.get("paging") else {
+			panic!("missing paging")
+		};
+		let ConfType::Struct(paging) = paging.as_ref() else {
+			panic!("paging is no struct")
+		};
+		assert_eq!(
+			paging.get("timeout"),
+							 Some(&ConfType::Option(Box::new(ConfType::UInt(250))))
+		);
+		assert_eq!(
+			paging.get("max_pages"),
+							 Some(&ConfType::Option(Box::new(ConfType::UInt(7))))
+		);
+	}
+
+	#[test]
+	fn endpoint_schema_without_optionals() {
+		let conf: ConfStruct = Endpoint::default().into();
+		assert_eq!(string_of(&conf, "body"), Some(""));
+		assert!(
+			matches!(conf.get("method"), Some(ConfType::Option(inner)) if matches!(inner.as_ref(), ConfType::Enum(_, "GET")))
+		);
+		assert!(
+			matches!(conf.get("auth"), Some(ConfType::Option(inner)) if matches!(inner.as_ref(), ConfType::Enum(_, "None")))
+		);
+	}
+
+	#[test]
+	fn paging_until_names() {
+		assert_eq!(PagingRequestUntil::None.name(), "None");
+		assert_eq!(PagingRequestUntil::StatusCode(200).name(), "StatusCode");
+		assert_eq!(
+			PagingRequestUntil::Equals("a".to_string(), "b".to_string()).name(),
+							 "Equals"
+		);
+
+		let conf: ConfStruct = PagingRequest {
+			until: PagingRequestUntil::Empty,
+			..PagingRequest::default()
+		}
+		.into();
+		assert!(
+			matches!(conf.get("until"), Some(ConfType::Option(inner)) if matches!(inner.as_ref(), ConfType::Enum(_, "Empty")))
+		);
+	}
+
+	#[test]
+	fn param_uses_values() {
+		let conf: ConfStruct = Param {
+			name: "cursor".to_string(),
+			value: "{{ $response/paging/cursor }}".to_string(),
+		}
+		.into();
+		assert_eq!(string_of(&conf, "name"), Some("cursor"));
+		assert_eq!(
+			string_of(&conf, "value"),
+							 Some("{{ $response/paging/cursor }}")
+		);
+	}
+
+	#[test]
+	fn authentication_does_not_expose_secrets() {
+		let auth = Authentication::Header {
+			header: "X-Key".to_string(),
+			value: "secret".to_string(),
+		};
+		assert_eq!(auth.name(), "Header");
+
+		let conf: ConfStruct = auth.into();
+		let Some(ConfType::Struct(header)) = conf.get("Header") else {
+			panic!("missing Header variant")
+		};
+		assert_eq!(string_of(header, "value"), Some(""));
 	}
 }
