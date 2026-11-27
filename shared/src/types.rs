@@ -1267,6 +1267,7 @@ impl PagingRequestUntil {
 	/// # Examples
 	///
 	/// ```
+	/// use shared::types::PagingRequestUntil;
 	/// PagingRequestUntil::None.check(200, String::from("")); // -> false
 	/// PagingRequestUntil::Empty.check(200, String::from("")); // -> true
 	/// PagingRequestUntil::Empty.check(200, String::from("{}")); // -> false
