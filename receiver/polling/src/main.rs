@@ -1,4 +1,3 @@
-pub mod config;
 pub mod types;
 
 use core::time;
@@ -8,7 +7,8 @@ use chrono::{Duration, Utc};
 use cron::Schedule;
 use reqwest::blocking::{RequestBuilder, Response};
 use shared::{
-	self, init_logging, parser::MessageParser, queue::MessageQueue, reqwest::call_api, types::Endpoint, types::Authentication, usage
+	self, init_logging, parser::MessageParser, queue::MessageQueue, reqwest::call_api,
+	types::Endpoint, types::Authentication, usage,
 };
 use tracing::{debug, error, info};
 
@@ -103,4 +103,3 @@ fn call_api_internal(req: RequestBuilder) -> Result<Response, reqwest::Error> {
 fn queue_message_internal(data: String, queue: Arc<shared::queue::MessageQueue<String>>) {
 	queue.push(data);
 }
-

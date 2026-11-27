@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
 use shared::types;
+
 #[cfg(feature = "types")]
-use shared::types::{ConfStruct, ConfType, Endpoint, leak_str};
+use shared::types::{leak_str, ConfStruct, ConfType, Endpoint};
 
 // Default-Wrapper Functions for Serde::Deserialize
 fn default_cron_timer() -> String {
@@ -87,7 +88,6 @@ impl From<Polling> for ConfStruct {
 	}
 }
 
-
 #[cfg(all(test, feature = "types"))]
 mod tests {
 	use super::*;
@@ -117,5 +117,4 @@ mod tests {
 			_ => None,
 		}
 	}
-
 }

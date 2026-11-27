@@ -619,7 +619,8 @@ fn dispatch(action: &str, button: &Element) -> Result<(), String> {
 					attr_selector("data-node", &item)
 				))
 				.ok()
-				.flatten() && let Some(html) = input.dyn_ref::<HtmlElement>()
+				.flatten()
+				&& let Some(html) = input.dyn_ref::<HtmlElement>()
 			{
 				let _ = html.focus();
 			}
