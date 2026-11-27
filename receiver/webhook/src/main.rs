@@ -103,7 +103,7 @@ fn handle_request(
 			.map(|h| h.value.to_string())
 			.map(|h| format!("{}: {}", header_name, h));
 
-		if auth_header.as_ref().is_none() || !expected.check(auth_header.as_ref()) {
+		if !expected.check(auth_header.as_ref()) {
 			let mut resp = Response::from_string("invalid authorization");
 			resp = resp.with_status_code(StatusCode(401));
 			req.respond(resp).ok();

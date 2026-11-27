@@ -109,7 +109,6 @@ fn start_processor(
 			thread::spawn(move || {
 				for endpoint in conf_t.iter() {
 					debug!(message="polling api", method=%endpoint.method, api=%endpoint.name, auth=%endpoint.auth.as_ref().unwrap_or(&Authentication::None));
-					// TODO: pass in json for templating
 					call_api(
 						endpoint,
 						Some(json.clone()),
